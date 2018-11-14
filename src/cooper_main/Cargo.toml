@@ -1,0 +1,12 @@
+[package]
+name = "cooper_main"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+derive_more = "0.13"
+glfw-ffi = { git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git" }
+vk-ffi = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
+vk-ffi-loader = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
