@@ -9,11 +9,10 @@ extern crate derive_more;
 extern crate glfw_ffi as glfw;
 #[macro_use]
 extern crate vk_ffi as vk;
-extern crate vk_ffi_loader;
+extern crate vk_ffi_loader as vkl;
 
 use std::os::raw::c_char;
-
-crate use vk_ffi_loader::v1_0 as vkl;
+use std::sync::Arc;
 
 macro_rules! c_str {
     ($str:expr) => {
@@ -29,15 +28,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 unsafe fn unsafe_main() -> Result<(), Box<dyn std::error::Error>> {
-    window::Window::new(
-        window::Dimensions::new(1600, 900),
-        c_str!("Demo"),
-    )?;
+    let dims = window::Dimensions::new(1600, 900);
+    let window = window::Window::new(dims, c_str!("Demo"))?;
     let vk_config = render::VulkanConfig {
         enable_validation: std::env::var("VULKAN_VALIDATE")
             .map(|s| &s == "1")
             .unwrap_or(false),
     };
-    render::VulkanSys::new(vk_config)?;
+    let sys = Arc::new(render::VulkanSys::new(vk_config)?);
+    let _swapchain = render::VulkanSwapchain::new(sys, &window)?;
     Ok(())
 }

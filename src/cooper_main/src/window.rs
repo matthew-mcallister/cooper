@@ -2,6 +2,7 @@ use std::os::raw::c_char;
 use std::ptr;
 
 use crate::glfw;
+use crate::vk;
 
 // An error caused by the windowing system. GLFW reports errors through
 // callbacks, so the provided message will come from the application and
@@ -24,6 +25,15 @@ impl std::error::Error for Error {}
 crate struct Dimensions {
     crate width: i32,
     crate height: i32,
+}
+
+impl From<Dimensions> for vk::Extent2D {
+    fn from(dims: Dimensions) -> Self {
+        vk::Extent2D {
+            width: dims.width as u32,
+            height: dims.height as u32,
+        }
+    }
 }
 
 static mut GLFW_USE_COUNT: u32 = 0;
@@ -80,6 +90,7 @@ impl Window {
         // TODO: select monitor/fullscreen
     ) -> Result<Self, Error> {
         let sys = System::new()?;
+        glfw::window_hint(glfw::CLIENT_API, glfw::NO_API);
         let inner = glfw::create_window
             (dims.width, dims.height, title, 0 as _, 0 as _);
         let inner = ptr::NonNull::new(inner)
