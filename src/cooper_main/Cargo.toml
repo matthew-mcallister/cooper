@@ -8,5 +8,6 @@ publish = false
 [dependencies]
 derive_more = "0.13"
 glfw-ffi = { git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git" }
+lodepng = "2.4"
 vk-ffi = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
 vk-ffi-loader = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }

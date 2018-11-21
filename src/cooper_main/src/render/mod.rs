@@ -3,9 +3,10 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::glfw;
-use crate::vk;
-use crate::vkl;
+use crate::{glfw, vk, vkl};
+use crate::window::Window;
+
+crate mod memory;
 
 const VALIDATION_LAYER: *const c_char =
     c_str!("VK_LAYER_LUNARG_standard_validation");
@@ -29,6 +30,7 @@ crate struct VulkanSys {
 impl Drop for VulkanSys {
     fn drop(&mut self) {
         unsafe {
+            self.dev.device_wait_idle();
             self.dev.destroy_device(ptr::null());
             self.inst.destroy_instance(ptr::null());
         }
@@ -65,9 +67,9 @@ impl VulkanSys {
             s_type: vk::StructureType::APPLICATION_INFO,
             p_next: ptr::null(),
             p_application_name: c_str!("cooper"),
-            application_version: vk_make_version!(0, 1, 0),
+            application_version: vk::make_version!(0, 1, 0),
             p_engine_name: c_str!("cooper"),
-            engine_version: vk_make_version!(0, 1, 0),
+            engine_version: vk::make_version!(0, 1, 0),
             api_version: vk::API_VERSION_1_0,
         };
         let create_info = vk::InstanceCreateInfo {
@@ -85,7 +87,7 @@ impl VulkanSys {
             .check()?;
         let inst = vkl::InstanceTable::load(inst, get_instance_proc_addr);
 
-        let pdevices = vk_enumerate2!(inst, enumerate_physical_devices)?;
+        let pdevices = vk::enumerate2!(inst, enumerate_physical_devices)?;
         let pdev = pdevices.into_iter().find(|pd| {
             // NB: future hardware may support presentation on a queue
             // family other than the first and this will no longer work
@@ -134,8 +136,10 @@ impl VulkanSys {
 
 crate struct VulkanSwapchain {
     crate sys: Arc<VulkanSys>,
+    crate win: Arc<Window>,
     crate surface: vk::SurfaceKhr,
     crate swapchain: vk::SwapchainKhr,
+    crate images: Vec<vk::Image>,
 }
 
 impl Drop for VulkanSwapchain {
@@ -148,28 +152,27 @@ impl Drop for VulkanSwapchain {
 }
 
 impl VulkanSwapchain {
-    crate unsafe fn new(sys: Arc<VulkanSys>, window: &crate::window::Window) ->
+    crate unsafe fn new(sys: Arc<VulkanSys>, win: Arc<Window>) ->
         Result<Self, Box<dyn Error>>
     {
         let mut surface: vk::SurfaceKhr = vk::null();
         let res = glfw::create_window_surface(
             sys.inst.instance.0 as _,
-            window.inner.as_ptr(),
+            win.inner.as_ptr(),
             0 as *const _,
             &mut surface.0 as _,
         );
         vk::Result(res).check()?;
 
         let mut result = VulkanSwapchain {
-            sys, surface, swapchain: vk::null(),
+            sys, win, surface, swapchain: vk::null(), images: Vec::new(),
         };
-        result.recreate_swapchain()?;
+        result.recreate()?;
 
         Ok(result)
     }
 
-    crate unsafe fn recreate_swapchain(&mut self) -> Result<(), Box<dyn Error>>
-    {
+    crate unsafe fn recreate(&mut self) -> Result<(), Box<dyn Error>> {
         let mut caps: vk::SurfaceCapabilitiesKhr = Default::default();
         self.sys.inst.get_physical_device_surface_capabilities_khr
             (self.sys.pdev, self.surface, &mut caps as _).check()?;
@@ -189,7 +192,7 @@ impl VulkanSwapchain {
         if (0, 0) == caps.current_extent.into()
             { Err("surface has zero extent")?; }
 
-        let formats = vk_enumerate2!(
+        let formats = vk::enumerate2!(
             self.sys.inst,
             get_physical_device_surface_formats_khr,
             self.sys.pdev,
@@ -232,6 +235,101 @@ impl VulkanSwapchain {
             (&create_info as _, ptr::null(), &mut self.swapchain as _)
             .check()?;
 
+        self.images = vk::enumerate2!(
+            self.sys.dev,
+            get_swapchain_images_khr,
+            self.swapchain,
+        )?;
+
         Ok(())
+    }
+}
+
+const MEMORY_COUNT: usize = 1;
+const DUMMY_IMAGE_BYTES: &[u8] = include_bytes!(asset!("notfound.png"));
+
+crate struct Renderer {
+    sys: Arc<VulkanSys>,
+    cmd_pool: vk::CommandPool,
+    allocator: memory::DedicatedMemoryAllocator,
+    memory: [vk::DeviceMemory; MEMORY_COUNT],
+    dummy_img: vk::Image,
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            self.sys.dev.destroy_image(self.dummy_img, ptr::null());
+            for &memory in self.memory.iter()
+                { self.sys.dev.free_memory(memory, ptr::null()); }
+            self.sys.dev.destroy_command_pool(self.cmd_pool, ptr::null());
+        }
+    }
+}
+
+impl Renderer {
+    crate unsafe fn new(sys: Arc<VulkanSys>) -> Result<Self, Box<dyn Error>> {
+        let allocator =
+            memory::DedicatedMemoryAllocator::new(Arc::clone(&sys));
+        let mut out = Renderer {
+            sys,
+            allocator,
+            cmd_pool: vk::null(),
+            memory: [vk::null(); MEMORY_COUNT],
+            dummy_img: vk::null(),
+        };
+
+        // Create command pool
+        let create_info = vk::CommandPoolCreateInfo {
+            s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            queue_family_index: 0,
+        };
+        out.sys.dev.create_command_pool
+            (&create_info as _, ptr::null(), &mut out.cmd_pool as _).check()?;
+
+        // Load image
+        let png = lodepng::decode32(DUMMY_IMAGE_BYTES).unwrap();
+        assert_eq!((png.width, png.height), (64, 64));
+        let data = crate::slice_bytes(&png.buffer);
+        let create_info = vk::ImageCreateInfo {
+            s_type: vk::StructureType::IMAGE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            image_type: vk::ImageType::_2D,
+            format: vk::Format::B8G8R8A8_SRGB,
+            extent: vk::Extent3D::new(png.width as _, png.height as _, 1),
+            mip_levels: 1,
+            array_layers: 1,
+            samples: vk::SampleCountFlags::_1_BIT,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::SAMPLED_BIT,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            queue_family_index_count: 0,
+            p_queue_family_indices: ptr::null(),
+            initial_layout: Default::default(), // ignored
+        };
+        let (img, mem) = memory::upload_image(&out, &create_info, &data)?;
+        out.dummy_img = img;
+        out.memory[0] = mem;
+
+        Ok(out)
+    }
+
+    crate unsafe fn allocate_command_buffer(&self) ->
+        Result<vk::CommandBuffer, vk::Result>
+    {
+        let alloc_info = vk::CommandBufferAllocateInfo {
+            s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
+            p_next: ptr::null(),
+            command_pool: self.cmd_pool,
+            level: vk::CommandBufferLevel::PRIMARY,
+            command_buffer_count: 1,
+        };
+        let mut cmd_buf = vk::null();
+        self.sys.dev.allocate_command_buffers(&alloc_info, &mut cmd_buf as _)
+            .check()?;
+        Ok(cmd_buf)
     }
 }
