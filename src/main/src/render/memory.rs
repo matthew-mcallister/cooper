@@ -244,27 +244,13 @@ crate unsafe fn upload_image(
     let (img, img_mem) = allocator.create_image(&new_create_info, &options)?;
 
     let (mut buf, mut buf_mem) = (vk::null(), vk::null());
-    let mut cmd_buf = vk::null();;
+    let mut cmd_buf = vk::null();
+    let mut fence = vk::null();
     let res: Result<(), Box<dyn Error>> = try {
-        let create_info = vk::BufferCreateInfo {
-            s_type: vk::StructureType::BUFFER_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: Default::default(),
-            size: data.len() as _,
-            usage: vk::BufferUsageFlags::TRANSFER_SRC_BIT,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-        };
-        let options = MemoryAllocateOptions {
-            required_flags: vk::MemoryPropertyFlags::HOST_VISIBLE_BIT,
-        };
-        let (buf_, buf_mem_) =
-            allocator.create_buffer(&create_info, &options)?;
+        let (buf_, buf_mem_) = copy_to_buffer
+                (&renderer, vk::BufferUsageFlags::TRANSFER_SRC_BIT, data)?;
         buf = buf_;
         buf_mem = buf_mem_;
-
-        map_copy_unmap(sys, data, buf_mem)?;
 
         cmd_buf = renderer.allocate_command_buffer()?;
 
@@ -343,8 +329,32 @@ crate unsafe fn upload_image(
         );
 
         sys.dev.end_command_buffer(cmd_buf).check()?;
+
+        let create_info = vk::FenceCreateInfo {
+            s_type: vk::StructureType::FENCE_CREATE_INFO,
+            ..Default::default()
+        };
+        sys.dev.create_fence
+            (&create_info as _, ptr::null(), &mut fence as _)
+            .check()?;
+
+        let submit_info = vk::SubmitInfo {
+            s_type: vk::StructureType::SUBMIT_INFO,
+            command_buffer_count: 1,
+            p_command_buffers: &cmd_buf as _,
+            ..Default::default()
+        };
+        sys.dev.queue_submit(sys.queue, 1, &submit_info as _, fence)
+            .check()?;
+
+        // We wait for the fence here, but in practice we would want to
+        // defer until immediately before rendering.
+        sys.dev.wait_for_fences
+            (1, &fence as _, vk::TRUE, !0)
+            .check()?;
     };
 
+    sys.dev.destroy_fence(fence, ptr::null());
     sys.dev.free_command_buffers(renderer.cmd_pool, 1, &cmd_buf as _);
     sys.dev.destroy_buffer(buf, ptr::null());
     sys.dev.free_memory(buf_mem, ptr::null());

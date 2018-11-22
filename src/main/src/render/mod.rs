@@ -398,7 +398,7 @@ impl Renderer {
         let png = lodepng::decode32(DUMMY_IMAGE_BYTES).unwrap();
         assert_eq!((png.width, png.height), (64, 64));
         let data = crate::slice_bytes(&png.buffer);
-        let format = vk::Format::B8G8R8A8_SRGB;
+        let format = vk::Format::R8G8B8A8_UNORM;
         let create_info = vk::ImageCreateInfo {
             s_type: vk::StructureType::IMAGE_CREATE_INFO,
             p_next: ptr::null(),
