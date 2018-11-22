@@ -132,6 +132,23 @@ impl VulkanSys {
             config, _ws, entry, inst, pdev, dev, queue,
         })
     }
+
+    crate unsafe fn create_shader_module(&self, src: &[u8]) ->
+        Result<vk::ShaderModule, vk::Result>
+    {
+        assert_eq!(src.len() % 4, 0);
+        let create_info = vk::ShaderModuleCreateInfo {
+            s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            code_size: src.len() as _,
+            p_code: src.as_ptr() as _,
+        };
+        let mut sm = vk::null();
+        self.dev.create_shader_module
+            (&create_info, ptr::null(), &mut sm as _).check()?;
+        Ok(sm)
+    }
 }
 
 crate struct VulkanSwapchain {
@@ -139,6 +156,7 @@ crate struct VulkanSwapchain {
     crate win: Arc<Window>,
     crate surface: vk::SurfaceKhr,
     crate swapchain: vk::SwapchainKhr,
+    crate create_info: vk::SwapchainCreateInfoKhr,
     crate images: Vec<vk::Image>,
 }
 
@@ -165,7 +183,8 @@ impl VulkanSwapchain {
         vk::Result(res).check()?;
 
         let mut result = VulkanSwapchain {
-            sys, win, surface, swapchain: vk::null(), images: Vec::new(),
+            sys, win, surface, swapchain: vk::null(),
+            create_info: Default::default(), images: Vec::new(),
         };
         result.recreate()?;
 
@@ -211,7 +230,7 @@ impl VulkanSwapchain {
         if !caps.supported_usage_flags.contains(image_usage)
             { Err("surface image usage requirements unmet")?; }
 
-        let create_info = vk::SwapchainCreateInfoKhr {
+        self.create_info = vk::SwapchainCreateInfoKhr {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
             p_next: ptr::null(),
             flags: Default::default(),
@@ -232,7 +251,7 @@ impl VulkanSwapchain {
             old_swapchain: self.swapchain,
         };
         self.sys.dev.create_swapchain_khr
-            (&create_info as _, ptr::null(), &mut self.swapchain as _)
+            (&self.create_info as _, ptr::null(), &mut self.swapchain as _)
             .check()?;
 
         self.images = vk::enumerate2!(
@@ -248,18 +267,33 @@ impl VulkanSwapchain {
 const MEMORY_COUNT: usize = 1;
 const DUMMY_IMAGE_BYTES: &[u8] = include_bytes!(asset!("notfound.png"));
 
+const SHADER_VERT_BYTES: &[u8] = include_bytes!(asset!("sprite.vert.spv"));
+const SHADER_FRAG_BYTES: &[u8] = include_bytes!(asset!("sprite.frag.spv"));
+
 crate struct Renderer {
     sys: Arc<VulkanSys>,
-    cmd_pool: vk::CommandPool,
+    swapchain: VulkanSwapchain,
     allocator: memory::DedicatedMemoryAllocator,
+    cmd_pool: vk::CommandPool,
     memory: [vk::DeviceMemory; MEMORY_COUNT],
-    dummy_img: vk::Image,
+    dummy_image: vk::Image,
+    sampler: vk::Sampler,
+    set_layout: vk::DescriptorSetLayout,
+    layout: vk::PipelineLayout,
+    render_pass: vk::RenderPass,
+    pipeline: vk::Pipeline,
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.sys.dev.destroy_image(self.dummy_img, ptr::null());
+            self.sys.dev.destroy_pipeline(self.pipeline, ptr::null());
+            self.sys.dev.destroy_render_pass(self.render_pass, ptr::null());
+            self.sys.dev.destroy_pipeline_layout(self.layout, ptr::null());
+            self.sys.dev.destroy_descriptor_set_layout
+                (self.set_layout, ptr::null());
+            self.sys.dev.destroy_sampler(self.sampler, ptr::null());
+            self.sys.dev.destroy_image(self.dummy_image, ptr::null());
             for &memory in self.memory.iter()
                 { self.sys.dev.free_memory(memory, ptr::null()); }
             self.sys.dev.destroy_command_pool(self.cmd_pool, ptr::null());
@@ -268,15 +302,23 @@ impl Drop for Renderer {
 }
 
 impl Renderer {
-    crate unsafe fn new(sys: Arc<VulkanSys>) -> Result<Self, Box<dyn Error>> {
+    crate unsafe fn new(swapchain: VulkanSwapchain) ->
+        Result<Self, Box<dyn Error>>
+    {
         let allocator =
-            memory::DedicatedMemoryAllocator::new(Arc::clone(&sys));
+            memory::DedicatedMemoryAllocator::new(Arc::clone(&swapchain.sys));
         let mut out = Renderer {
-            sys,
+            sys: Arc::clone(&swapchain.sys),
+            swapchain,
             allocator,
             cmd_pool: vk::null(),
             memory: [vk::null(); MEMORY_COUNT],
-            dummy_img: vk::null(),
+            dummy_image: vk::null(),
+            sampler: vk::null(),
+            set_layout: vk::null(),
+            layout: vk::null(),
+            render_pass: vk::null(),
+            pipeline: vk::null(),
         };
 
         // Create command pool
@@ -311,10 +353,212 @@ impl Renderer {
             initial_layout: Default::default(), // ignored
         };
         let (img, mem) = memory::upload_image(&out, &create_info, &data)?;
-        out.dummy_img = img;
+        out.dummy_image = img;
         out.memory[0] = mem;
 
+        out.create_pipeline()?;
+
         Ok(out)
+    }
+
+    // Split off from the rest of the `new` function due to length.
+    unsafe fn create_pipeline(&mut self) -> Result<(), vk::Result> {
+        let (mut vert_mod, mut frag_mod) = (vk::null(), vk::null());
+        let res: Result<(), vk::Result> = try {
+            vert_mod = self.sys.create_shader_module(SHADER_VERT_BYTES)?;
+            frag_mod = self.sys.create_shader_module(SHADER_FRAG_BYTES)?;
+
+            // Descriptors and layout
+            let create_info = vk::SamplerCreateInfo {
+                s_type: vk::StructureType::SAMPLER_CREATE_INFO,
+                ..Default::default()
+            };
+            self.sys.dev.create_sampler
+                (&create_info as _, ptr::null(), &mut self.sampler as _)
+                .check()?;
+
+            let binding = vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+                p_immutable_samplers: &self.sampler as _,
+            };
+            let create_info = vk::DescriptorSetLayoutCreateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                binding_count: 1,
+                p_bindings: &binding as _,
+            };
+            self.sys.dev.create_descriptor_set_layout
+                (&create_info as _, ptr::null(), &mut self.set_layout as _)
+                .check()?;
+
+            let create_info = vk::PipelineLayoutCreateInfo {
+                s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+                set_layout_count: 1,
+                p_set_layouts: &self.set_layout as _,
+                ..Default::default()
+            };
+            self.sys.dev.create_pipeline_layout
+                (&create_info as _, ptr::null(), &mut self.layout as _)
+                .check()?;
+
+            // Render pass
+            let color_attachment = vk::AttachmentDescription {
+                flags: Default::default(),
+                format: self.swapchain.create_info.image_format,
+                samples: vk::SampleCountFlags::_1_BIT,
+                load_op: vk::AttachmentLoadOp::CLEAR,
+                store_op: vk::AttachmentStoreOp::STORE,
+                stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+                stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            };
+            let color_attachment_ref = vk::AttachmentReference {
+                attachment: 0,
+                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            };
+            let subpass = vk::SubpassDescription {
+                pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+                color_attachment_count: 1,
+                p_color_attachments: &color_attachment_ref as _,
+                ..Default::default()
+            };
+            let create_info = vk::RenderPassCreateInfo {
+                s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                attachment_count: 1,
+                p_attachments: &color_attachment as _,
+                subpass_count: 1,
+                p_subpasses: &subpass as _,
+                dependency_count: 0,
+                p_dependencies: ptr::null(),
+            };
+            self.sys.dev.create_render_pass
+                (&create_info as _, ptr::null(), &mut self.render_pass as _)
+                .check()?;
+
+            // Fixed functions
+            let shader_stages = [
+                vk::PipelineShaderStageCreateInfo {
+                    s_type:
+                        vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: Default::default(),
+                    stage: vk::ShaderStageFlags::VERTEX_BIT,
+                    module: vert_mod,
+                    p_name: c_str!("main"),
+                    p_specialization_info: ptr::null(),
+                },
+                vk::PipelineShaderStageCreateInfo {
+                    s_type:
+                        vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: Default::default(),
+                    stage: vk::ShaderStageFlags::FRAGMENT_BIT,
+                    module: frag_mod,
+                    p_name: c_str!("main"),
+                    p_specialization_info: ptr::null(),
+                },
+            ];
+            let vertex_input = vk::PipelineVertexInputStateCreateInfo {
+                s_type:
+                    vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                ..Default::default()
+            };
+            let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
+                s_type: vk::StructureType::
+                    PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+                ..Default::default()
+            };
+            let extent = self.swapchain.create_info.image_extent;
+            let viewport = vk::Viewport {
+                x: 0.0, y: 0.0,
+                width: extent.width as _, height: extent.height as _,
+                min_depth: 0.0, max_depth: 1.0,
+            };
+            let scissors = vk::Rect2D::new(Default::default(), extent);
+            let viewport_state = vk::PipelineViewportStateCreateInfo {
+                s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                viewport_count: 1,
+                p_viewports: &viewport as _,
+                scissor_count: 1,
+                p_scissors: &scissors as _,
+                ..Default::default()
+            };
+            let rasterization = vk::PipelineRasterizationStateCreateInfo {
+                s_type: vk::StructureType::
+                    PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                polygon_mode: vk::PolygonMode::FILL,
+                cull_mode: vk::CullModeFlags::BACK_BIT,
+                line_width: 1.0,
+                ..Default::default()
+            };
+            let multisample = vk::PipelineMultisampleStateCreateInfo {
+                s_type:
+                    vk::StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                rasterization_samples: vk::SampleCountFlags::_1_BIT,
+                ..Default::default()
+            };
+            let alpha_blend = vk::PipelineColorBlendAttachmentState {
+                blend_enable: vk::TRUE,
+                src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                color_blend_op: vk::BlendOp::ADD,
+                src_alpha_blend_factor: vk::BlendFactor::ONE,
+                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+                alpha_blend_op: vk::BlendOp::ADD,
+                color_write_mask: vk::ColorComponentFlags::R_BIT
+                    | vk::ColorComponentFlags::G_BIT
+                    | vk::ColorComponentFlags::B_BIT
+                    | vk::ColorComponentFlags::A_BIT,
+            };
+            let color_blend = vk::PipelineColorBlendStateCreateInfo {
+                s_type:
+                    vk::StructureType::PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                attachment_count: 1,
+                p_attachments: &alpha_blend as _,
+                ..Default::default()
+            };
+
+            // Final creation
+            let create_info = vk::GraphicsPipelineCreateInfo {
+                s_type: vk::StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                stage_count: 2,
+                p_stages: &shader_stages as _,
+                p_vertex_input_state: &vertex_input as _,
+                p_input_assembly_state: &input_assembly as _,
+                p_tessellation_state: ptr::null(),
+                p_viewport_state: &viewport_state as _,
+                p_rasterization_state: &rasterization as _,
+                p_multisample_state: &multisample as _,
+                p_depth_stencil_state: ptr::null(),
+                p_color_blend_state: &color_blend as _,
+                p_dynamic_state: ptr::null(),
+                layout: self.layout,
+                render_pass: self.render_pass,
+                subpass: 0,
+                base_pipeline_handle: vk::null(),
+                base_pipeline_index: -1,
+            };
+            self.sys.dev.create_graphics_pipelines(
+                vk::null(),
+                1,
+                &create_info as _,
+                ptr::null(),
+                &mut self.pipeline as _,
+            );
+        };
+        self.sys.dev.destroy_shader_module(frag_mod, ptr::null());
+        self.sys.dev.destroy_shader_module(vert_mod, ptr::null());
+        res
     }
 
     crate unsafe fn allocate_command_buffer(&self) ->

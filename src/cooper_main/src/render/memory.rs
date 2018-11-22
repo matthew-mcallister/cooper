@@ -67,7 +67,7 @@ impl MemoryTypeChooser {
             }
         };
         let res = self.types()
-            .filter(|ty| ty.index | requirements.memory_type_bits > 0)
+            .filter(|ty| (1 << ty.index) & requirements.memory_type_bits > 0)
             .filter(|ty| ty.flags().contains(options.required_flags))
             .filter(|ty| ty.heap().size >= requirements.size)
             .max_by(compare_types)?
@@ -181,11 +181,40 @@ crate unsafe fn map_copy_unmap(
         offset: 0,
         size: vk::WHOLE_SIZE,
     };
-    // TODO: Don't do this if memory is coherent
+    // TODO: Skip flush if memory is coherent
     let res = sys.dev.flush_mapped_memory_ranges(1, &range as _);
     sys.dev.unmap_memory(memory);
     res.check()?;
     Ok(())
+}
+
+crate unsafe fn copy_to_buffer(
+    renderer: &Renderer,
+    usage: vk::BufferUsageFlags,
+    src: &[u8],
+) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
+    let create_info = vk::BufferCreateInfo {
+        s_type: vk::StructureType::BUFFER_CREATE_INFO,
+        p_next: ptr::null(),
+        flags: Default::default(),
+        size: src.len() as _,
+        usage,
+        sharing_mode: vk::SharingMode::EXCLUSIVE,
+        queue_family_index_count: 0,
+        p_queue_family_indices: ptr::null(),
+    };
+    let options = MemoryAllocateOptions {
+        required_flags: vk::MemoryPropertyFlags::HOST_VISIBLE_BIT,
+    };
+    let (buf, mem) = renderer.allocator.create_buffer(&create_info, &options)?;
+    if let Err(e) = map_copy_unmap(&renderer.sys, src, mem) {
+        renderer.sys.dev.destroy_buffer(buf, ptr::null());
+        renderer.sys.dev.free_memory(mem, ptr::null());
+        Err(e)?;
+        unreachable!();
+    } else {
+        Ok((buf, mem))
+    }
 }
 
 // # Usage notes
@@ -322,7 +351,8 @@ crate unsafe fn upload_image(
     if let Err(e) = res {
         sys.dev.destroy_image(img, ptr::null());
         sys.dev.free_memory(img_mem, ptr::null());
-        return Err(e);
+        Err(e)?;
+        unreachable!();
     } else {
         Ok((img, img_mem))
     }
