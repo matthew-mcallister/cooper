@@ -60,8 +60,13 @@ unsafe fn unsafe_main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(false),
     };
     let sys = Arc::new(render::VulkanSys::new(vk_config)?);
-    let swapchain = render::VulkanSwapchain::new(sys, window)?;
-    let _renderer = render::Renderer::new(swapchain)?;
+    let swapchain = render::VulkanSwapchain::new(sys, Arc::clone(&window))?;
+    let renderer = render::Renderer::new(swapchain)?;
+
+    while glfw::window_should_close(window.inner.as_ptr()) != glfw::TRUE {
+        renderer.do_frame()?;
+        glfw::poll_events();
+    }
 
     Ok(())
 }

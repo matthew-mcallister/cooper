@@ -30,7 +30,6 @@ crate struct VulkanSys {
 impl Drop for VulkanSys {
     fn drop(&mut self) {
         unsafe {
-            self.dev.device_wait_idle();
             self.dev.destroy_device(ptr::null());
             self.inst.destroy_instance(ptr::null());
         }
@@ -190,6 +189,18 @@ impl VulkanSwapchain {
             create_info: Default::default(), images: Vec::new(),
             image_views: Vec::new(),
         };
+
+        // TODO: This design was a faux pas; the surface actually must
+        // be created *before* a physical device is chosen.
+        let mut supported = Default::default();
+        result.sys.inst.get_physical_device_surface_support_khr
+            (result.sys.pdev, 0, result.surface, &mut supported as _)
+            .check()?;
+        if supported == vk::FALSE {
+            Err("physical device not supported by surface")?;
+            unreachable!();
+        }
+
         result.recreate()?;
 
         Ok(result)
@@ -315,11 +326,17 @@ crate struct Renderer {
     desc_pool: vk::DescriptorPool,
     desc_set: vk::DescriptorSet,
     draw_cmd_buffers: Vec<vk::CommandBuffer>,
+    acquire_semaphore: vk::Semaphore,
+    draw_semaphore: vk::Semaphore,
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.sys.dev.device_wait_idle();
+            self.sys.dev.destroy_semaphore
+                (self.acquire_semaphore, ptr::null());
+            self.sys.dev.destroy_semaphore(self.draw_semaphore, ptr::null());
             self.sys.dev.destroy_descriptor_pool(self.desc_pool, ptr::null());
             for &framebuffer in self.framebuffers.iter() {
                 self.sys.dev.destroy_framebuffer(framebuffer, ptr::null());
@@ -363,6 +380,8 @@ impl Renderer {
             desc_pool: vk::null(),
             desc_set: vk::null(),
             draw_cmd_buffers: Vec::new(),
+            acquire_semaphore: vk::null(),
+            draw_semaphore: vk::null(),
         };
 
         // Create command pool
@@ -496,6 +515,7 @@ impl Renderer {
             let cmd_buffer = out.allocate_command_buffer()?;
             let begin_info = vk::CommandBufferBeginInfo {
                 s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE_BIT,
                 ..Default::default()
             };
             out.sys.dev.begin_command_buffer(cmd_buffer, &begin_info as _)
@@ -536,6 +556,17 @@ impl Renderer {
 
             out.draw_cmd_buffers.push(cmd_buffer);
         }
+
+        let create_info = vk::SemaphoreCreateInfo {
+            s_type: vk::StructureType::SEMAPHORE_CREATE_INFO,
+            ..Default::default()
+        };
+        out.sys.dev.create_semaphore
+            (&create_info as _, ptr::null(), &mut out.acquire_semaphore as _)
+            .check()?;
+        out.sys.dev.create_semaphore
+            (&create_info as _, ptr::null(), &mut out.draw_semaphore as _)
+            .check()?;
 
         Ok(out)
     }
@@ -606,6 +637,18 @@ impl Renderer {
                 p_color_attachments: &color_attachment_ref as _,
                 ..Default::default()
             };
+            // Dependency on swapchain image acquisition
+            let dependency = vk::SubpassDependency {
+                src_subpass: vk::SUBPASS_EXTERNAL,
+                dst_subpass: 0,
+                src_stage_mask:
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
+                dst_stage_mask:
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
+                src_access_mask: vk::AccessFlags::empty(),
+                dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE_BIT,
+                dependency_flags: Default::default(),
+            };
             let create_info = vk::RenderPassCreateInfo {
                 s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
                 p_next: ptr::null(),
@@ -614,8 +657,8 @@ impl Renderer {
                 p_attachments: &color_attachment as _,
                 subpass_count: 1,
                 p_subpasses: &subpass as _,
-                dependency_count: 0,
-                p_dependencies: ptr::null(),
+                dependency_count: 1,
+                p_dependencies: &dependency as _,
             };
             self.sys.dev.create_render_pass
                 (&create_info as _, ptr::null(), &mut self.render_pass as _)
@@ -675,6 +718,7 @@ impl Renderer {
                     PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::BACK_BIT,
+                front_face: vk::FrontFace::COUNTER_CLOCKWISE,
                 line_width: 1.0,
                 ..Default::default()
             };
@@ -754,5 +798,45 @@ impl Renderer {
         self.sys.dev.allocate_command_buffers(&alloc_info, &mut cmd_buf as _)
             .check()?;
         Ok(cmd_buf)
+    }
+
+    crate unsafe fn do_frame(&self) -> Result<(), vk::Result> {
+        let mut idx: u32 = 0;
+        self.sys.dev.acquire_next_image_khr(
+            self.swapchain.swapchain,
+            !0,
+            self.acquire_semaphore,
+            vk::null(),
+            &mut idx as _,
+        ).check()?;
+
+        let wait_stages = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT;
+        let submit_info = vk::SubmitInfo {
+            s_type: vk::StructureType::SUBMIT_INFO,
+            p_next: ptr::null(),
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &self.acquire_semaphore as _,
+            p_wait_dst_stage_mask: &wait_stages as _,
+            command_buffer_count: 1,
+            p_command_buffers: &self.draw_cmd_buffers[idx as usize],
+            signal_semaphore_count: 1,
+            p_signal_semaphores: &self.draw_semaphore as _,
+        };
+        self.sys.dev.queue_submit
+            (self.sys.queue, 1, &submit_info as _, vk::null());
+
+        let present_info = vk::PresentInfoKhr {
+            s_type: vk::StructureType::PRESENT_INFO_KHR,
+            p_next: ptr::null(),
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &self.draw_semaphore as _,
+            swapchain_count: 1,
+            p_swapchains: &self.swapchain.swapchain as _,
+            p_image_indices: &idx as _,
+            p_results: ptr::null_mut(),
+        };
+        self.sys.dev.queue_present_khr(self.sys.queue, &present_info as _)
+            .check()?;
+        Ok(())
     }
 }
