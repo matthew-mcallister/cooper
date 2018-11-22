@@ -11,3 +11,7 @@ glfw-ffi = { git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git" }
 lodepng = "2.4"
 vk-ffi = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
 vk-ffi-loader = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
+
+[[bin]]
+name = "cooper"
+path = "src/main.rs"
