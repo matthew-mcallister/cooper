@@ -158,11 +158,14 @@ crate struct VulkanSwapchain {
     crate swapchain: vk::SwapchainKhr,
     crate create_info: vk::SwapchainCreateInfoKhr,
     crate images: Vec<vk::Image>,
+    crate image_views: Vec<vk::ImageView>,
 }
 
 impl Drop for VulkanSwapchain {
     fn drop(&mut self) {
         unsafe {
+            for &view in self.image_views.iter()
+                { self.sys.dev.destroy_image_view(view, ptr::null()); }
             self.sys.dev.destroy_swapchain_khr(self.swapchain, ptr::null());
             self.sys.inst.destroy_surface_khr(self.surface, ptr::null());
         }
@@ -185,6 +188,7 @@ impl VulkanSwapchain {
         let mut result = VulkanSwapchain {
             sys, win, surface, swapchain: vk::null(),
             create_info: Default::default(), images: Vec::new(),
+            image_views: Vec::new(),
         };
         result.recreate()?;
 
@@ -260,6 +264,30 @@ impl VulkanSwapchain {
             self.swapchain,
         )?;
 
+        for &image in self.images.iter() {
+            let create_info = vk::ImageViewCreateInfo {
+                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                image,
+                view_type: vk::ImageViewType::_2D,
+                format,
+                components: Default::default(),
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+            };
+            let mut image_view = vk::null();
+            self.sys.dev.create_image_view
+                (&create_info as _, ptr::null(), &mut image_view as _)
+                .check()?;
+            self.image_views.push(image_view);
+        }
+
         Ok(())
     }
 }
@@ -277,22 +305,33 @@ crate struct Renderer {
     cmd_pool: vk::CommandPool,
     memory: [vk::DeviceMemory; MEMORY_COUNT],
     dummy_image: vk::Image,
+    dummy_image_view: vk::ImageView,
     sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
     layout: vk::PipelineLayout,
     render_pass: vk::RenderPass,
     pipeline: vk::Pipeline,
+    framebuffers: Vec<vk::Framebuffer>,
+    desc_pool: vk::DescriptorPool,
+    desc_set: vk::DescriptorSet,
+    draw_cmd_buffers: Vec<vk::CommandBuffer>,
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.sys.dev.destroy_descriptor_pool(self.desc_pool, ptr::null());
+            for &framebuffer in self.framebuffers.iter() {
+                self.sys.dev.destroy_framebuffer(framebuffer, ptr::null());
+            }
             self.sys.dev.destroy_pipeline(self.pipeline, ptr::null());
             self.sys.dev.destroy_render_pass(self.render_pass, ptr::null());
             self.sys.dev.destroy_pipeline_layout(self.layout, ptr::null());
             self.sys.dev.destroy_descriptor_set_layout
                 (self.set_layout, ptr::null());
             self.sys.dev.destroy_sampler(self.sampler, ptr::null());
+            self.sys.dev.destroy_image_view
+                (self.dummy_image_view, ptr::null());
             self.sys.dev.destroy_image(self.dummy_image, ptr::null());
             for &memory in self.memory.iter()
                 { self.sys.dev.free_memory(memory, ptr::null()); }
@@ -314,11 +353,16 @@ impl Renderer {
             cmd_pool: vk::null(),
             memory: [vk::null(); MEMORY_COUNT],
             dummy_image: vk::null(),
+            dummy_image_view: vk::null(),
             sampler: vk::null(),
             set_layout: vk::null(),
             layout: vk::null(),
             render_pass: vk::null(),
             pipeline: vk::null(),
+            framebuffers: Vec::new(),
+            desc_pool: vk::null(),
+            desc_set: vk::null(),
+            draw_cmd_buffers: Vec::new(),
         };
 
         // Create command pool
@@ -335,12 +379,13 @@ impl Renderer {
         let png = lodepng::decode32(DUMMY_IMAGE_BYTES).unwrap();
         assert_eq!((png.width, png.height), (64, 64));
         let data = crate::slice_bytes(&png.buffer);
+        let format = vk::Format::B8G8R8A8_SRGB;
         let create_info = vk::ImageCreateInfo {
             s_type: vk::StructureType::IMAGE_CREATE_INFO,
             p_next: ptr::null(),
             flags: Default::default(),
             image_type: vk::ImageType::_2D,
-            format: vk::Format::B8G8R8A8_SRGB,
+            format,
             extent: vk::Extent3D::new(png.width as _, png.height as _, 1),
             mip_levels: 1,
             array_layers: 1,
@@ -356,7 +401,141 @@ impl Renderer {
         out.dummy_image = img;
         out.memory[0] = mem;
 
+        let create_info = vk::ImageViewCreateInfo {
+            s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            image: out.dummy_image,
+            view_type: vk::ImageViewType::_2D,
+            format,
+            components: Default::default(),
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+        };
+        out.sys.dev.create_image_view
+            (&create_info as _, ptr::null(), &mut out.dummy_image_view as _)
+            .check()?;
+
+        // Create pipeline
         out.create_pipeline()?;
+
+        // Create framebuffers
+        let swapchain_extent = out.swapchain.create_info.image_extent;
+        for image_view in out.swapchain.image_views.iter() {
+            let create_info = vk::FramebufferCreateInfo {
+                s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: Default::default(),
+                render_pass: out.render_pass,
+                attachment_count: 1,
+                p_attachments: image_view as _,
+                width: swapchain_extent.width,
+                height: swapchain_extent.height,
+                layers: 1,
+            };
+            let mut framebuffer = vk::null();
+            out.sys.dev.create_framebuffer
+                (&create_info as _, ptr::null(), &mut framebuffer as _)
+                .check()?;
+            out.framebuffers.push(framebuffer);
+        }
+
+        // Create descriptor set
+        let pool_size = vk::DescriptorPoolSize {
+            type_: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+        };
+        let create_info = vk::DescriptorPoolCreateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            max_sets: 1,
+            pool_size_count: 1,
+            p_pool_sizes: &pool_size as _,
+        };
+        out.sys.dev.create_descriptor_pool
+            (&create_info as _, ptr::null(), &mut out.desc_pool as _)
+            .check()?;
+
+        let alloc_info = vk::DescriptorSetAllocateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+            p_next: ptr::null(),
+            descriptor_pool: out.desc_pool,
+            descriptor_set_count: 1,
+            p_set_layouts: &out.set_layout as _,
+        };
+        out.sys.dev.allocate_descriptor_sets
+            (&alloc_info as _, &mut out.desc_set as _).check()?;
+
+        let image_info = vk::DescriptorImageInfo {
+            sampler: vk::null(),
+            image_view: out.dummy_image_view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        };
+        let write = vk::WriteDescriptorSet {
+            s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+            p_next: ptr::null(),
+            dst_set: out.desc_set,
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            p_image_info: &image_info as _,
+            p_buffer_info: ptr::null(),
+            p_texel_buffer_view: ptr::null(),
+        };
+        out.sys.dev.update_descriptor_sets(1, &write as _, 0, ptr::null());
+
+        // Record command buffers
+        for &framebuffer in out.framebuffers.iter() {
+            let cmd_buffer = out.allocate_command_buffer()?;
+            let begin_info = vk::CommandBufferBeginInfo {
+                s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                ..Default::default()
+            };
+            out.sys.dev.begin_command_buffer(cmd_buffer, &begin_info as _)
+                .check()?;
+
+            let clear_value = vk::ClearValue {
+                color: vk::ClearColorValue { float32: [0.0, 0.0, 0.0, 1.0] },
+            };
+            let begin_info = vk::RenderPassBeginInfo {
+                s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
+                p_next: ptr::null(),
+                render_pass: out.render_pass,
+                framebuffer,
+                render_area: vk::Rect2D::new
+                    (Default::default(), swapchain_extent),
+                clear_value_count: 1,
+                p_clear_values: &clear_value as _,
+            };
+            out.sys.dev.cmd_begin_render_pass
+                (cmd_buffer, &begin_info as _, vk::SubpassContents::INLINE);
+
+            out.sys.dev.cmd_bind_pipeline
+                (cmd_buffer, vk::PipelineBindPoint::GRAPHICS, out.pipeline);
+            out.sys.dev.cmd_bind_descriptor_sets(
+                cmd_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                out.layout,
+                0,
+                1,
+                &out.desc_set as _,
+                0,
+                ptr::null(),
+            );
+            out.sys.dev.cmd_draw(cmd_buffer, 6, 1, 0, 0);
+
+            out.sys.dev.cmd_end_render_pass(cmd_buffer);
+            out.sys.dev.end_command_buffer(cmd_buffer).check()?;
+
+            out.draw_cmd_buffers.push(cmd_buffer);
+        }
 
         Ok(out)
     }
