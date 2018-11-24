@@ -367,11 +367,17 @@ impl Swapchain {
     }
 }
 
-const MEMORY_COUNT: usize = 1;
+const MEMORY_COUNT: usize = 2;
 const DUMMY_IMAGE_BYTES: &[u8] = include_bytes!(asset!("notfound.png"));
 
 const SHADER_VERT_BYTES: &[u8] = include_bytes!(asset!("sprite.vert.spv"));
 const SHADER_FRAG_BYTES: &[u8] = include_bytes!(asset!("sprite.frag.spv"));
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+crate struct SpriteInstance {
+    pos: [f32; 2],
+    height: f32,
+}
 
 crate struct Renderer {
     dt: Arc<vkl::DeviceTable>,
@@ -381,6 +387,8 @@ crate struct Renderer {
     memory: [vk::DeviceMemory; MEMORY_COUNT],
     dummy_image: vk::Image,
     dummy_image_view: vk::ImageView,
+    instance_buf: vk::Buffer,
+    num_instances: u32,
     sampler: vk::Sampler,
     set_layout: vk::DescriptorSetLayout,
     layout: vk::PipelineLayout,
@@ -409,6 +417,7 @@ impl Drop for Renderer {
             self.dt.destroy_descriptor_set_layout
                 (self.set_layout, ptr::null());
             self.dt.destroy_sampler(self.sampler, ptr::null());
+            self.dt.destroy_buffer(self.instance_buf, ptr::null());
             self.dt.destroy_image_view(self.dummy_image_view, ptr::null());
             self.dt.destroy_image(self.dummy_image, ptr::null());
             for &memory in self.memory.iter()
@@ -434,6 +443,8 @@ impl Renderer {
             memory: [vk::null(); MEMORY_COUNT],
             dummy_image: vk::null(),
             dummy_image_view: vk::null(),
+            instance_buf: vk::null(),
+            num_instances: 0,
             sampler: vk::null(),
             set_layout: vk::null(),
             layout: vk::null(),
@@ -487,6 +498,19 @@ impl Renderer {
         let (img, mem) = memory::upload_image(&self, &create_info, &data)?;
         self.dummy_image = img;
         self.memory[0] = mem;
+
+        let instances = [
+            SpriteInstance { pos: [-0.75, -0.75], height: 0.5 },
+            SpriteInstance { pos: [0.25, -0.75], height: 0.5 },
+            SpriteInstance { pos: [-0.75, 0.25], height: 0.5 },
+            SpriteInstance { pos: [0.25, 0.25], height: 0.5 },
+        ];
+        let data = crate::slice_bytes(&instances);
+        let usage = vk::BufferUsageFlags::VERTEX_BUFFER_BIT;
+        let (buf, mem) = self.allocator.copy_to_buffer(usage, &data)?;
+        self.instance_buf = buf;
+        self.memory[1] = mem;
+        self.num_instances = instances.len() as _;
 
         let create_info = vk::ImageViewCreateInfo {
             s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
@@ -607,6 +631,8 @@ impl Renderer {
 
             self.dt.cmd_bind_pipeline
                 (cmd_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
+            self.dt.cmd_bind_vertex_buffers
+                (cmd_buffer, 0, 1, &self.instance_buf as _, &0);
             self.dt.cmd_bind_descriptor_sets(
                 cmd_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -617,7 +643,9 @@ impl Renderer {
                 0,
                 ptr::null(),
             );
-            self.dt.cmd_draw(cmd_buffer, 6, 1, 0, 0);
+            const VERTEX_COUNT: u32 = 6;
+            self.dt.cmd_draw
+                (cmd_buffer, VERTEX_COUNT, self.num_instances, 0, 0);
 
             self.dt.cmd_end_render_pass(cmd_buffer);
             self.dt.end_command_buffer(cmd_buffer).check()?;
@@ -728,10 +756,33 @@ impl Renderer {
             .check()?;
 
         // Fixed functions
+        let vertex_binding = vk::VertexInputBindingDescription {
+            binding: 0,
+            stride: std::mem::size_of::<SpriteInstance>() as _,
+            input_rate: vk::VertexInputRate::INSTANCE,
+        };
+        let vertex_attrs = [
+            vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 0,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: 0,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 1,
+                binding: 0,
+                format: vk::Format::R32_SFLOAT,
+                offset: std::mem::size_of::<[f32; 2]>() as _,
+            },
+        ];
         let vertex_input = vk::PipelineVertexInputStateCreateInfo {
-            s_type:
-                vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            ..Default::default()
+            s_type: vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            vertex_binding_description_count: 1,
+            p_vertex_binding_descriptions: &vertex_binding as _,
+            vertex_attribute_description_count: vertex_attrs.len() as _,
+            p_vertex_attribute_descriptions: vertex_attrs.as_ptr(),
         };
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
             s_type: vk::StructureType::
