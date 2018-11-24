@@ -12,26 +12,22 @@ const VALIDATION_LAYER: *const c_char =
     c_str!("VK_LAYER_LUNARG_standard_validation");
 
 #[derive(Clone, Debug)]
-crate struct VulkanConfig {
+crate struct Config {
     crate enable_validation: bool,
 }
 
-// Stores the products of initializing Vulkan
-crate struct VulkanSys {
-    crate config: VulkanConfig,
+crate struct Init {
+    crate _config: Config,
+    // Keeps GLFW initialized
     crate _ws: crate::window::System,
-    crate entry: vkl::Entry,
-    crate inst: vkl::InstanceTable,
-    crate pdev: vk::PhysicalDevice,
-    crate dev: vkl::DeviceTable,
-    crate queue: vk::Queue,
+    crate _entry: vkl::Entry,
+    crate table: Arc<vkl::InstanceTable>,
 }
 
-impl Drop for VulkanSys {
+impl Drop for Init {
     fn drop(&mut self) {
         unsafe {
-            self.dev.destroy_device(ptr::null());
-            self.inst.destroy_instance(ptr::null());
+            self.table.destroy_instance(ptr::null());
         }
     }
 }
@@ -40,8 +36,8 @@ fn get_required_device_extensions() -> &'static [*const c_char] {
     &[vk::KHR_SWAPCHAIN_EXTENSION_NAME as *const _ as _]
 }
 
-impl VulkanSys {
-    crate unsafe fn new(config: VulkanConfig) -> Result<Self, Box<dyn Error>> {
+impl Init {
+    crate unsafe fn new(config: Config) -> Result<Self, Box<dyn Error>> {
         let _ws = crate::window::System::new()?;
 
         if glfw::vulkan_supported() != glfw::TRUE {
@@ -59,8 +55,7 @@ impl VulkanSys {
             else { &[][..] };
 
         let mut num_exts: u32 = 0;
-        let exts =
-            glfw::get_required_instance_extensions(&mut num_exts as _);
+        let exts = glfw::get_required_instance_extensions(&mut num_exts as _);
 
         let app_info = vk::ApplicationInfo {
             s_type: vk::StructureType::APPLICATION_INFO,
@@ -84,15 +79,96 @@ impl VulkanSys {
         let mut inst = vk::null();
         entry.create_instance(&create_info as _, ptr::null(), &mut inst as _)
             .check()?;
-        let inst = vkl::InstanceTable::load(inst, get_instance_proc_addr);
+        let table = vkl::InstanceTable::load(inst, get_instance_proc_addr);
+        let table = Arc::new(table);
 
-        let pdevices = vk::enumerate2!(inst, enumerate_physical_devices)?;
-        let pdev = pdevices.into_iter().find(|pd| {
-            // NB: future hardware may support presentation on a queue
-            // family other than the first and this will no longer work
-            glfw::TRUE == glfw::get_physical_device_presentation_support
-                (inst.instance.0 as _, pd.0 as _, 0)
-        }).ok_or("no presentable graphics device")?;
+        Ok(Init { _config: config, _ws, _entry: entry, table })
+    }
+}
+
+crate struct Surface {
+    crate init: Arc<Init>,
+    crate _win: Arc<Window>,
+    crate inner: vk::SurfaceKhr,
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        unsafe {
+            self.init.table.destroy_surface_khr(self.inner, ptr::null());
+        }
+    }
+}
+
+impl Surface {
+    crate unsafe fn new(init: Arc<Init>, win: Arc<Window>) ->
+        Result<Self, vk::Result>
+    {
+        let mut inner: vk::SurfaceKhr = vk::null();
+        let res = glfw::create_window_surface(
+            init.table.instance.0 as _,
+            win.inner.as_ptr(),
+            0 as *const _,
+            &mut inner.0 as _,
+        );
+        vk::Result(res).check()?;
+
+        Ok(Surface { init, _win: win, inner })
+    }
+}
+
+crate struct RenderDevice {
+    crate surface: Arc<Surface>,
+    crate pdev: vk::PhysicalDevice,
+    crate table: Arc<vkl::DeviceTable>,
+    crate queue: vk::Queue,
+}
+
+impl Drop for RenderDevice {
+    fn drop(&mut self) {
+        unsafe { self.table.destroy_device(ptr::null()); }
+    }
+}
+
+impl RenderDevice {
+    crate fn it(&self) -> &Arc<vkl::InstanceTable> {
+        &self.surface.init.table
+    }
+
+    crate unsafe fn new(surface: Arc<Surface>) -> Result<Self, Box<dyn Error>>
+    {
+        let it = &surface.init.table;
+        let instance = it.instance;
+
+        let pdevices = vk::enumerate2!(it, enumerate_physical_devices)?;
+        let (pdev, qf, _) = pdevices.into_iter()
+            .flat_map(|pd| {
+                let qf_props = vk::enumerate2!(
+                    @void it,
+                    get_physical_device_queue_family_properties,
+                    pd,
+                );
+                qf_props.into_iter()
+                    .enumerate()
+                    .map(move |(idx, props)| (pd, idx as u32, props))
+            })
+            .find(|&(pd, idx, props)| {
+                let required_bits = vk::QueueFlags::GRAPHICS_BIT
+                    | vk::QueueFlags::COMPUTE_BIT
+                    | vk::QueueFlags::TRANSFER_BIT;
+                if !props.queue_flags.contains(required_bits) { return false; }
+
+                let present_supp =
+                    glfw::get_physical_device_presentation_support
+                        (instance.0 as _, pd.0 as _, idx);
+                if present_supp != glfw::TRUE { return false; }
+
+                let mut surface_supp = 0;
+                it.get_physical_device_surface_support_khr
+                    (pd, idx, surface.inner, &mut surface_supp as _)
+                    .check().unwrap();
+                surface_supp == vk::TRUE
+            }).ok_or("no presentable graphics device")?;
 
         let queue_create_info = vk::DeviceQueueCreateInfo {
             s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
@@ -117,19 +193,19 @@ impl VulkanSys {
             p_enabled_features: &features as _,
         };
         let mut dev = vk::null();
-        inst.create_device(pdev, &create_info as _, ptr::null(), &mut dev as _)
+        it.create_device(pdev, &create_info as _, ptr::null(), &mut dev as _)
             .check()?;
 
-        let get_device_proc_addr = std::mem::transmute(get_instance_proc_addr
-            (inst.instance, c_str!("vkGetDeviceProcAddr")).unwrap());
-        let dev = vkl::DeviceTable::load(dev, get_device_proc_addr);
+        let get_device_proc_addr = std::mem::transmute({
+            it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr")).unwrap()
+        });
+        let table = vkl::DeviceTable::load(dev, get_device_proc_addr);
+        let table = Arc::new(table);
 
         let mut queue = vk::null();
-        dev.get_device_queue(0, 0, &mut queue as _);
+        table.get_device_queue(qf, 0, &mut queue as _);
 
-        Ok(VulkanSys {
-            config, _ws, entry, inst, pdev, dev, queue,
-        })
+        Ok(RenderDevice { surface, pdev, table, queue })
     }
 
     crate unsafe fn create_shader_module(&self, src: &[u8]) ->
@@ -144,72 +220,60 @@ impl VulkanSys {
             p_code: src.as_ptr() as _,
         };
         let mut sm = vk::null();
-        self.dev.create_shader_module
+        self.table.create_shader_module
             (&create_info, ptr::null(), &mut sm as _).check()?;
         Ok(sm)
     }
 }
 
-crate struct VulkanSwapchain {
-    crate sys: Arc<VulkanSys>,
-    crate win: Arc<Window>,
-    crate surface: vk::SurfaceKhr,
-    crate swapchain: vk::SwapchainKhr,
+crate struct Swapchain {
+    crate rdev: Arc<RenderDevice>,
+    crate dt: Arc<vkl::DeviceTable>,
+    crate inner: vk::SwapchainKhr,
     crate create_info: vk::SwapchainCreateInfoKhr,
     crate images: Vec<vk::Image>,
     crate image_views: Vec<vk::ImageView>,
 }
 
-impl Drop for VulkanSwapchain {
+impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe {
             for &view in self.image_views.iter()
-                { self.sys.dev.destroy_image_view(view, ptr::null()); }
-            self.sys.dev.destroy_swapchain_khr(self.swapchain, ptr::null());
-            self.sys.inst.destroy_surface_khr(self.surface, ptr::null());
+                { self.dt.destroy_image_view(view, ptr::null()); }
+            self.dt.destroy_swapchain_khr(self.inner, ptr::null());
         }
     }
 }
 
-impl VulkanSwapchain {
-    crate unsafe fn new(sys: Arc<VulkanSys>, win: Arc<Window>) ->
+impl Swapchain {
+    crate fn surface(&self) -> &Surface {
+        &self.rdev.surface
+    }
+
+    crate unsafe fn new(rdev: Arc<RenderDevice>) ->
         Result<Self, Box<dyn Error>>
     {
-        let mut surface: vk::SurfaceKhr = vk::null();
-        let res = glfw::create_window_surface(
-            sys.inst.instance.0 as _,
-            win.inner.as_ptr(),
-            0 as *const _,
-            &mut surface.0 as _,
-        );
-        vk::Result(res).check()?;
-
-        let mut result = VulkanSwapchain {
-            sys, win, surface, swapchain: vk::null(),
-            create_info: Default::default(), images: Vec::new(),
+        let mut result = Swapchain {
+            dt: Arc::clone(&rdev.table),
+            rdev,
+            inner: vk::null(),
+            create_info: Default::default(),
+            images: Vec::new(),
             image_views: Vec::new(),
         };
-
-        // TODO: This design was a faux pas; the surface actually must
-        // be created *before* a physical device is chosen.
-        let mut supported = Default::default();
-        result.sys.inst.get_physical_device_surface_support_khr
-            (result.sys.pdev, 0, result.surface, &mut supported as _)
-            .check()?;
-        if supported == vk::FALSE {
-            Err("physical device not supported by surface")?;
-            unreachable!();
-        }
-
         result.recreate()?;
 
         Ok(result)
     }
 
     crate unsafe fn recreate(&mut self) -> Result<(), Box<dyn Error>> {
+        let it = self.rdev.it();
+        let pdev = self.rdev.pdev;
+
         let mut caps: vk::SurfaceCapabilitiesKhr = Default::default();
-        self.sys.inst.get_physical_device_surface_capabilities_khr
-            (self.sys.pdev, self.surface, &mut caps as _).check()?;
+        it.get_physical_device_surface_capabilities_khr
+            (pdev, self.surface().inner, &mut caps as _)
+            .check()?;
 
         let min_image_count = if caps.max_image_count > 0 {
             u32::min(caps.min_image_count + 1, caps.max_image_count)
@@ -227,10 +291,10 @@ impl VulkanSwapchain {
             { Err("surface has zero extent")?; }
 
         let formats = vk::enumerate2!(
-            self.sys.inst,
+            self.rdev.it(),
             get_physical_device_surface_formats_khr,
-            self.sys.pdev,
-            self.surface,
+            pdev,
+            self.surface().inner,
         )?;
         // The first option seems to be best for most common drivers
         let vk::SurfaceFormatKhr { format, color_space } = formats[0];
@@ -249,7 +313,7 @@ impl VulkanSwapchain {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
             p_next: ptr::null(),
             flags: Default::default(),
-            surface: self.surface,
+            surface: self.surface().inner,
             min_image_count,
             image_format: format,
             image_color_space: color_space,
@@ -263,16 +327,16 @@ impl VulkanSwapchain {
             composite_alpha,
             present_mode: vk::PresentModeKhr::FIFO_KHR,
             clipped: vk::TRUE,
-            old_swapchain: self.swapchain,
+            old_swapchain: self.inner,
         };
-        self.sys.dev.create_swapchain_khr
-            (&self.create_info as _, ptr::null(), &mut self.swapchain as _)
+        self.dt.create_swapchain_khr
+            (&self.create_info as _, ptr::null(), &mut self.inner as _)
             .check()?;
 
         self.images = vk::enumerate2!(
-            self.sys.dev,
+            self.dt,
             get_swapchain_images_khr,
-            self.swapchain,
+            self.inner,
         )?;
 
         for &image in self.images.iter() {
@@ -293,7 +357,7 @@ impl VulkanSwapchain {
                 },
             };
             let mut image_view = vk::null();
-            self.sys.dev.create_image_view
+            self.dt.create_image_view
                 (&create_info as _, ptr::null(), &mut image_view as _)
                 .check()?;
             self.image_views.push(image_view);
@@ -310,8 +374,8 @@ const SHADER_VERT_BYTES: &[u8] = include_bytes!(asset!("sprite.vert.spv"));
 const SHADER_FRAG_BYTES: &[u8] = include_bytes!(asset!("sprite.frag.spv"));
 
 crate struct Renderer {
-    sys: Arc<VulkanSys>,
-    swapchain: VulkanSwapchain,
+    dt: Arc<vkl::DeviceTable>,
+    swapchain: Swapchain,
     allocator: memory::DedicatedMemoryAllocator,
     cmd_pool: vk::CommandPool,
     memory: [vk::DeviceMemory; MEMORY_COUNT],
@@ -333,38 +397,37 @@ crate struct Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.sys.dev.device_wait_idle();
-            self.sys.dev.destroy_semaphore
-                (self.acquire_semaphore, ptr::null());
-            self.sys.dev.destroy_semaphore(self.draw_semaphore, ptr::null());
-            self.sys.dev.destroy_descriptor_pool(self.desc_pool, ptr::null());
-            for &framebuffer in self.framebuffers.iter() {
-                self.sys.dev.destroy_framebuffer(framebuffer, ptr::null());
-            }
-            self.sys.dev.destroy_pipeline(self.pipeline, ptr::null());
-            self.sys.dev.destroy_render_pass(self.render_pass, ptr::null());
-            self.sys.dev.destroy_pipeline_layout(self.layout, ptr::null());
-            self.sys.dev.destroy_descriptor_set_layout
+            self.dt.device_wait_idle();
+            self.dt.destroy_semaphore(self.acquire_semaphore, ptr::null());
+            self.dt.destroy_semaphore(self.draw_semaphore, ptr::null());
+            self.dt.destroy_descriptor_pool(self.desc_pool, ptr::null());
+            for &framebuffer in self.framebuffers.iter()
+                { self.dt.destroy_framebuffer(framebuffer, ptr::null()); }
+            self.dt.destroy_pipeline(self.pipeline, ptr::null());
+            self.dt.destroy_render_pass(self.render_pass, ptr::null());
+            self.dt.destroy_pipeline_layout(self.layout, ptr::null());
+            self.dt.destroy_descriptor_set_layout
                 (self.set_layout, ptr::null());
-            self.sys.dev.destroy_sampler(self.sampler, ptr::null());
-            self.sys.dev.destroy_image_view
-                (self.dummy_image_view, ptr::null());
-            self.sys.dev.destroy_image(self.dummy_image, ptr::null());
+            self.dt.destroy_sampler(self.sampler, ptr::null());
+            self.dt.destroy_image_view(self.dummy_image_view, ptr::null());
+            self.dt.destroy_image(self.dummy_image, ptr::null());
             for &memory in self.memory.iter()
-                { self.sys.dev.free_memory(memory, ptr::null()); }
-            self.sys.dev.destroy_command_pool(self.cmd_pool, ptr::null());
+                { self.dt.free_memory(memory, ptr::null()); }
+            self.dt.destroy_command_pool(self.cmd_pool, ptr::null());
         }
     }
 }
 
 impl Renderer {
-    crate unsafe fn new(swapchain: VulkanSwapchain) ->
-        Result<Self, Box<dyn Error>>
-    {
+    crate fn queue(&self) -> vk::Queue {
+        self.swapchain.rdev.queue
+    }
+
+    crate unsafe fn new(swapchain: Swapchain) -> Result<Self, Box<dyn Error>> {
         let allocator =
-            memory::DedicatedMemoryAllocator::new(Arc::clone(&swapchain.sys));
-        let mut out = Renderer {
-            sys: Arc::clone(&swapchain.sys),
+            memory::DedicatedMemoryAllocator::new(Arc::clone(&swapchain.rdev));
+        let mut result = Renderer {
+            dt: Arc::clone(&swapchain.dt),
             swapchain,
             allocator,
             cmd_pool: vk::null(),
@@ -383,7 +446,12 @@ impl Renderer {
             acquire_semaphore: vk::null(),
             draw_semaphore: vk::null(),
         };
+        result.init()?;
 
+        Ok(result)
+    }
+
+    unsafe fn init(&mut self) -> Result<(), Box<dyn Error>> {
         // Create command pool
         let create_info = vk::CommandPoolCreateInfo {
             s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
@@ -391,8 +459,8 @@ impl Renderer {
             flags: Default::default(),
             queue_family_index: 0,
         };
-        out.sys.dev.create_command_pool
-            (&create_info as _, ptr::null(), &mut out.cmd_pool as _).check()?;
+        self.dt.create_command_pool
+            (&create_info as _, ptr::null(), &mut self.cmd_pool as _).check()?;
 
         // Load image
         let png = lodepng::decode32(DUMMY_IMAGE_BYTES).unwrap();
@@ -416,15 +484,15 @@ impl Renderer {
             p_queue_family_indices: ptr::null(),
             initial_layout: Default::default(), // ignored
         };
-        let (img, mem) = memory::upload_image(&out, &create_info, &data)?;
-        out.dummy_image = img;
-        out.memory[0] = mem;
+        let (img, mem) = memory::upload_image(&self, &create_info, &data)?;
+        self.dummy_image = img;
+        self.memory[0] = mem;
 
         let create_info = vk::ImageViewCreateInfo {
             s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
             p_next: ptr::null(),
             flags: Default::default(),
-            image: out.dummy_image,
+            image: self.dummy_image,
             view_type: vk::ImageViewType::_2D,
             format,
             components: Default::default(),
@@ -436,21 +504,21 @@ impl Renderer {
                 layer_count: 1,
             },
         };
-        out.sys.dev.create_image_view
-            (&create_info as _, ptr::null(), &mut out.dummy_image_view as _)
+        self.dt.create_image_view
+            (&create_info as _, ptr::null(), &mut self.dummy_image_view as _)
             .check()?;
 
         // Create pipeline
-        out.create_pipeline()?;
+        self.create_pipeline()?;
 
         // Create framebuffers
-        let swapchain_extent = out.swapchain.create_info.image_extent;
-        for image_view in out.swapchain.image_views.iter() {
+        let swapchain_extent = self.swapchain.create_info.image_extent;
+        for image_view in self.swapchain.image_views.iter() {
             let create_info = vk::FramebufferCreateInfo {
                 s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
                 p_next: ptr::null(),
                 flags: Default::default(),
-                render_pass: out.render_pass,
+                render_pass: self.render_pass,
                 attachment_count: 1,
                 p_attachments: image_view as _,
                 width: swapchain_extent.width,
@@ -458,10 +526,10 @@ impl Renderer {
                 layers: 1,
             };
             let mut framebuffer = vk::null();
-            out.sys.dev.create_framebuffer
+            self.dt.create_framebuffer
                 (&create_info as _, ptr::null(), &mut framebuffer as _)
                 .check()?;
-            out.framebuffers.push(framebuffer);
+            self.framebuffers.push(framebuffer);
         }
 
         // Create descriptor set
@@ -477,29 +545,29 @@ impl Renderer {
             pool_size_count: 1,
             p_pool_sizes: &pool_size as _,
         };
-        out.sys.dev.create_descriptor_pool
-            (&create_info as _, ptr::null(), &mut out.desc_pool as _)
+        self.dt.create_descriptor_pool
+            (&create_info as _, ptr::null(), &mut self.desc_pool as _)
             .check()?;
 
         let alloc_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
             p_next: ptr::null(),
-            descriptor_pool: out.desc_pool,
+            descriptor_pool: self.desc_pool,
             descriptor_set_count: 1,
-            p_set_layouts: &out.set_layout as _,
+            p_set_layouts: &self.set_layout as _,
         };
-        out.sys.dev.allocate_descriptor_sets
-            (&alloc_info as _, &mut out.desc_set as _).check()?;
+        self.dt.allocate_descriptor_sets
+            (&alloc_info as _, &mut self.desc_set as _).check()?;
 
         let image_info = vk::DescriptorImageInfo {
             sampler: vk::null(),
-            image_view: out.dummy_image_view,
+            image_view: self.dummy_image_view,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         };
         let write = vk::WriteDescriptorSet {
             s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
             p_next: ptr::null(),
-            dst_set: out.desc_set,
+            dst_set: self.desc_set,
             dst_binding: 0,
             dst_array_element: 0,
             descriptor_count: 1,
@@ -508,17 +576,17 @@ impl Renderer {
             p_buffer_info: ptr::null(),
             p_texel_buffer_view: ptr::null(),
         };
-        out.sys.dev.update_descriptor_sets(1, &write as _, 0, ptr::null());
+        self.dt.update_descriptor_sets(1, &write as _, 0, ptr::null());
 
         // Record command buffers
-        for &framebuffer in out.framebuffers.iter() {
-            let cmd_buffer = out.allocate_command_buffer()?;
+        for &framebuffer in self.framebuffers.iter() {
+            let cmd_buffer = self.allocate_command_buffer()?;
             let begin_info = vk::CommandBufferBeginInfo {
                 s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
                 flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE_BIT,
                 ..Default::default()
             };
-            out.sys.dev.begin_command_buffer(cmd_buffer, &begin_info as _)
+            self.dt.begin_command_buffer(cmd_buffer, &begin_info as _)
                 .check()?;
 
             let clear_value = vk::ClearValue {
@@ -527,144 +595,209 @@ impl Renderer {
             let begin_info = vk::RenderPassBeginInfo {
                 s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
                 p_next: ptr::null(),
-                render_pass: out.render_pass,
+                render_pass: self.render_pass,
                 framebuffer,
                 render_area: vk::Rect2D::new
                     (Default::default(), swapchain_extent),
                 clear_value_count: 1,
                 p_clear_values: &clear_value as _,
             };
-            out.sys.dev.cmd_begin_render_pass
+            self.dt.cmd_begin_render_pass
                 (cmd_buffer, &begin_info as _, vk::SubpassContents::INLINE);
 
-            out.sys.dev.cmd_bind_pipeline
-                (cmd_buffer, vk::PipelineBindPoint::GRAPHICS, out.pipeline);
-            out.sys.dev.cmd_bind_descriptor_sets(
+            self.dt.cmd_bind_pipeline
+                (cmd_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
+            self.dt.cmd_bind_descriptor_sets(
                 cmd_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                out.layout,
+                self.layout,
                 0,
                 1,
-                &out.desc_set as _,
+                &self.desc_set as _,
                 0,
                 ptr::null(),
             );
-            out.sys.dev.cmd_draw(cmd_buffer, 6, 1, 0, 0);
+            self.dt.cmd_draw(cmd_buffer, 6, 1, 0, 0);
 
-            out.sys.dev.cmd_end_render_pass(cmd_buffer);
-            out.sys.dev.end_command_buffer(cmd_buffer).check()?;
+            self.dt.cmd_end_render_pass(cmd_buffer);
+            self.dt.end_command_buffer(cmd_buffer).check()?;
 
-            out.draw_cmd_buffers.push(cmd_buffer);
+            self.draw_cmd_buffers.push(cmd_buffer);
         }
 
         let create_info = vk::SemaphoreCreateInfo {
             s_type: vk::StructureType::SEMAPHORE_CREATE_INFO,
             ..Default::default()
         };
-        out.sys.dev.create_semaphore
-            (&create_info as _, ptr::null(), &mut out.acquire_semaphore as _)
+        self.dt.create_semaphore
+            (&create_info as _, ptr::null(), &mut self.acquire_semaphore as _)
             .check()?;
-        out.sys.dev.create_semaphore
-            (&create_info as _, ptr::null(), &mut out.draw_semaphore as _)
+        self.dt.create_semaphore
+            (&create_info as _, ptr::null(), &mut self.draw_semaphore as _)
             .check()?;
 
-        Ok(out)
+        Ok(())
     }
 
     // Split off from the rest of the `new` function due to length.
     unsafe fn create_pipeline(&mut self) -> Result<(), vk::Result> {
+        // Descriptors and layout
+        let create_info = vk::SamplerCreateInfo {
+            s_type: vk::StructureType::SAMPLER_CREATE_INFO,
+            ..Default::default()
+        };
+        self.dt.create_sampler
+            (&create_info as _, ptr::null(), &mut self.sampler as _)
+            .check()?;
+
+        let binding = vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+            p_immutable_samplers: &self.sampler as _,
+        };
+        let create_info = vk::DescriptorSetLayoutCreateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            binding_count: 1,
+            p_bindings: &binding as _,
+        };
+        self.dt.create_descriptor_set_layout
+            (&create_info as _, ptr::null(), &mut self.set_layout as _)
+            .check()?;
+
+        let create_info = vk::PipelineLayoutCreateInfo {
+            s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+            set_layout_count: 1,
+            p_set_layouts: &self.set_layout as _,
+            ..Default::default()
+        };
+        self.dt.create_pipeline_layout
+            (&create_info as _, ptr::null(), &mut self.layout as _)
+            .check()?;
+
+        // Render pass
+        let color_attachment = vk::AttachmentDescription {
+            flags: Default::default(),
+            format: self.swapchain.create_info.image_format,
+            samples: vk::SampleCountFlags::_1_BIT,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+        };
+        let color_attachment_ref = vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        };
+        let subpass = vk::SubpassDescription {
+            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+            color_attachment_count: 1,
+            p_color_attachments: &color_attachment_ref as _,
+            ..Default::default()
+        };
+        // Dependency on swapchain image acquisition
+        let dependency = vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask:
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
+            dst_stage_mask:
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE_BIT,
+            dependency_flags: Default::default(),
+        };
+        let create_info = vk::RenderPassCreateInfo {
+            s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            attachment_count: 1,
+            p_attachments: &color_attachment as _,
+            subpass_count: 1,
+            p_subpasses: &subpass as _,
+            dependency_count: 1,
+            p_dependencies: &dependency as _,
+        };
+        self.dt.create_render_pass
+            (&create_info as _, ptr::null(), &mut self.render_pass as _)
+            .check()?;
+
+        // Fixed functions
+        let vertex_input = vk::PipelineVertexInputStateCreateInfo {
+            s_type:
+                vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            ..Default::default()
+        };
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
+            s_type: vk::StructureType::
+                PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            ..Default::default()
+        };
+        let extent = self.swapchain.create_info.image_extent;
+        let viewport = vk::Viewport {
+            x: 0.0, y: 0.0,
+            width: extent.width as _, height: extent.height as _,
+            min_depth: 0.0, max_depth: 1.0,
+        };
+        let scissors = vk::Rect2D::new(Default::default(), extent);
+        let viewport_state = vk::PipelineViewportStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            viewport_count: 1,
+            p_viewports: &viewport as _,
+            scissor_count: 1,
+            p_scissors: &scissors as _,
+            ..Default::default()
+        };
+        let rasterization = vk::PipelineRasterizationStateCreateInfo {
+            s_type: vk::StructureType::
+                PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            polygon_mode: vk::PolygonMode::FILL,
+            cull_mode: vk::CullModeFlags::BACK_BIT,
+            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            line_width: 1.0,
+            ..Default::default()
+        };
+        let multisample = vk::PipelineMultisampleStateCreateInfo {
+            s_type:
+                vk::StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            rasterization_samples: vk::SampleCountFlags::_1_BIT,
+            ..Default::default()
+        };
+        let alpha_blend = vk::PipelineColorBlendAttachmentState {
+            blend_enable: vk::TRUE,
+            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
+            color_write_mask: vk::ColorComponentFlags::R_BIT
+                | vk::ColorComponentFlags::G_BIT
+                | vk::ColorComponentFlags::B_BIT
+                | vk::ColorComponentFlags::A_BIT,
+        };
+        let color_blend = vk::PipelineColorBlendStateCreateInfo {
+            s_type:
+                vk::StructureType::PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            attachment_count: 1,
+            p_attachments: &alpha_blend as _,
+            ..Default::default()
+        };
+
+        // Shader module and pipeline creation
         let (mut vert_mod, mut frag_mod) = (vk::null(), vk::null());
         let res: Result<(), vk::Result> = try {
-            vert_mod = self.sys.create_shader_module(SHADER_VERT_BYTES)?;
-            frag_mod = self.sys.create_shader_module(SHADER_FRAG_BYTES)?;
+            vert_mod =
+                self.swapchain.rdev.create_shader_module(SHADER_VERT_BYTES)?;
+            frag_mod =
+                self.swapchain.rdev.create_shader_module(SHADER_FRAG_BYTES)?;
 
-            // Descriptors and layout
-            let create_info = vk::SamplerCreateInfo {
-                s_type: vk::StructureType::SAMPLER_CREATE_INFO,
-                ..Default::default()
-            };
-            self.sys.dev.create_sampler
-                (&create_info as _, ptr::null(), &mut self.sampler as _)
-                .check()?;
-
-            let binding = vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-                p_immutable_samplers: &self.sampler as _,
-            };
-            let create_info = vk::DescriptorSetLayoutCreateInfo {
-                s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                p_next: ptr::null(),
-                flags: Default::default(),
-                binding_count: 1,
-                p_bindings: &binding as _,
-            };
-            self.sys.dev.create_descriptor_set_layout
-                (&create_info as _, ptr::null(), &mut self.set_layout as _)
-                .check()?;
-
-            let create_info = vk::PipelineLayoutCreateInfo {
-                s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-                set_layout_count: 1,
-                p_set_layouts: &self.set_layout as _,
-                ..Default::default()
-            };
-            self.sys.dev.create_pipeline_layout
-                (&create_info as _, ptr::null(), &mut self.layout as _)
-                .check()?;
-
-            // Render pass
-            let color_attachment = vk::AttachmentDescription {
-                flags: Default::default(),
-                format: self.swapchain.create_info.image_format,
-                samples: vk::SampleCountFlags::_1_BIT,
-                load_op: vk::AttachmentLoadOp::CLEAR,
-                store_op: vk::AttachmentStoreOp::STORE,
-                stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
-                stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            };
-            let color_attachment_ref = vk::AttachmentReference {
-                attachment: 0,
-                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            };
-            let subpass = vk::SubpassDescription {
-                pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-                color_attachment_count: 1,
-                p_color_attachments: &color_attachment_ref as _,
-                ..Default::default()
-            };
-            // Dependency on swapchain image acquisition
-            let dependency = vk::SubpassDependency {
-                src_subpass: vk::SUBPASS_EXTERNAL,
-                dst_subpass: 0,
-                src_stage_mask:
-                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_stage_mask:
-                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
-                src_access_mask: vk::AccessFlags::empty(),
-                dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE_BIT,
-                dependency_flags: Default::default(),
-            };
-            let create_info = vk::RenderPassCreateInfo {
-                s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
-                p_next: ptr::null(),
-                flags: Default::default(),
-                attachment_count: 1,
-                p_attachments: &color_attachment as _,
-                subpass_count: 1,
-                p_subpasses: &subpass as _,
-                dependency_count: 1,
-                p_dependencies: &dependency as _,
-            };
-            self.sys.dev.create_render_pass
-                (&create_info as _, ptr::null(), &mut self.render_pass as _)
-                .check()?;
-
-            // Fixed functions
             let shader_stages = [
                 vk::PipelineShaderStageCreateInfo {
                     s_type:
@@ -687,69 +820,7 @@ impl Renderer {
                     p_specialization_info: ptr::null(),
                 },
             ];
-            let vertex_input = vk::PipelineVertexInputStateCreateInfo {
-                s_type:
-                    vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                ..Default::default()
-            };
-            let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
-                s_type: vk::StructureType::
-                    PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-                ..Default::default()
-            };
-            let extent = self.swapchain.create_info.image_extent;
-            let viewport = vk::Viewport {
-                x: 0.0, y: 0.0,
-                width: extent.width as _, height: extent.height as _,
-                min_depth: 0.0, max_depth: 1.0,
-            };
-            let scissors = vk::Rect2D::new(Default::default(), extent);
-            let viewport_state = vk::PipelineViewportStateCreateInfo {
-                s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-                viewport_count: 1,
-                p_viewports: &viewport as _,
-                scissor_count: 1,
-                p_scissors: &scissors as _,
-                ..Default::default()
-            };
-            let rasterization = vk::PipelineRasterizationStateCreateInfo {
-                s_type: vk::StructureType::
-                    PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::BACK_BIT,
-                front_face: vk::FrontFace::COUNTER_CLOCKWISE,
-                line_width: 1.0,
-                ..Default::default()
-            };
-            let multisample = vk::PipelineMultisampleStateCreateInfo {
-                s_type:
-                    vk::StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                rasterization_samples: vk::SampleCountFlags::_1_BIT,
-                ..Default::default()
-            };
-            let alpha_blend = vk::PipelineColorBlendAttachmentState {
-                blend_enable: vk::TRUE,
-                src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                color_blend_op: vk::BlendOp::ADD,
-                src_alpha_blend_factor: vk::BlendFactor::ONE,
-                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                alpha_blend_op: vk::BlendOp::ADD,
-                color_write_mask: vk::ColorComponentFlags::R_BIT
-                    | vk::ColorComponentFlags::G_BIT
-                    | vk::ColorComponentFlags::B_BIT
-                    | vk::ColorComponentFlags::A_BIT,
-            };
-            let color_blend = vk::PipelineColorBlendStateCreateInfo {
-                s_type:
-                    vk::StructureType::PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                attachment_count: 1,
-                p_attachments: &alpha_blend as _,
-                ..Default::default()
-            };
 
-            // Final creation
             let create_info = vk::GraphicsPipelineCreateInfo {
                 s_type: vk::StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
                 p_next: ptr::null(),
@@ -771,7 +842,7 @@ impl Renderer {
                 base_pipeline_handle: vk::null(),
                 base_pipeline_index: -1,
             };
-            self.sys.dev.create_graphics_pipelines(
+            self.dt.create_graphics_pipelines(
                 vk::null(),
                 1,
                 &create_info as _,
@@ -779,8 +850,8 @@ impl Renderer {
                 &mut self.pipeline as _,
             );
         };
-        self.sys.dev.destroy_shader_module(frag_mod, ptr::null());
-        self.sys.dev.destroy_shader_module(vert_mod, ptr::null());
+        self.dt.destroy_shader_module(frag_mod, ptr::null());
+        self.dt.destroy_shader_module(vert_mod, ptr::null());
         res
     }
 
@@ -795,15 +866,15 @@ impl Renderer {
             command_buffer_count: 1,
         };
         let mut cmd_buf = vk::null();
-        self.sys.dev.allocate_command_buffers(&alloc_info, &mut cmd_buf as _)
+        self.dt.allocate_command_buffers(&alloc_info, &mut cmd_buf as _)
             .check()?;
         Ok(cmd_buf)
     }
 
     crate unsafe fn do_frame(&self) -> Result<(), vk::Result> {
         let mut idx: u32 = 0;
-        self.sys.dev.acquire_next_image_khr(
-            self.swapchain.swapchain,
+        self.dt.acquire_next_image_khr(
+            self.swapchain.inner,
             !0,
             self.acquire_semaphore,
             vk::null(),
@@ -822,8 +893,7 @@ impl Renderer {
             signal_semaphore_count: 1,
             p_signal_semaphores: &self.draw_semaphore as _,
         };
-        self.sys.dev.queue_submit
-            (self.sys.queue, 1, &submit_info as _, vk::null());
+        self.dt.queue_submit(self.queue(), 1, &submit_info as _, vk::null());
 
         let present_info = vk::PresentInfoKhr {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
@@ -831,12 +901,11 @@ impl Renderer {
             wait_semaphore_count: 1,
             p_wait_semaphores: &self.draw_semaphore as _,
             swapchain_count: 1,
-            p_swapchains: &self.swapchain.swapchain as _,
+            p_swapchains: &self.swapchain.inner as _,
             p_image_indices: &idx as _,
             p_results: ptr::null_mut(),
         };
-        self.sys.dev.queue_present_khr(self.sys.queue, &present_info as _)
-            .check()?;
+        self.dt.queue_present_khr(self.queue(), &present_info as _).check()?;
         Ok(())
     }
 }

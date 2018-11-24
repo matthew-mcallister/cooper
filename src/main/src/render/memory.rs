@@ -3,8 +3,8 @@ use std::error::Error;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::vk;
-use super::{VulkanSys, Renderer};
+use crate::{vk, vkl};
+use super::{RenderDevice, Renderer};
 
 #[derive(Clone, Copy)]
 struct MemoryType<'a> {
@@ -39,10 +39,10 @@ crate struct MemoryTypeChooser {
 }
 
 impl MemoryTypeChooser {
-    crate unsafe fn new(sys: &VulkanSys) -> Self {
+    crate unsafe fn new(rdev: &RenderDevice) -> Self {
         let mut props = Default::default();
-        sys.inst.get_physical_device_memory_properties
-            (sys.pdev, &mut props as _);
+        rdev.it().get_physical_device_memory_properties
+            (rdev.pdev, &mut props as _);
         MemoryTypeChooser { props }
     }
 
@@ -80,14 +80,18 @@ impl MemoryTypeChooser {
 // `vkAllocateMemory`. In a future improvement, it will automatically
 // use `VK_KHR_dedicated_allocation` if enabled.
 crate struct DedicatedMemoryAllocator {
-    sys: Arc<VulkanSys>,
+    rdev: Arc<RenderDevice>,
     chooser: MemoryTypeChooser,
 }
 
 impl DedicatedMemoryAllocator {
-    crate unsafe fn new(sys: Arc<VulkanSys>) -> Self {
-        let chooser = MemoryTypeChooser::new(&sys);
-        DedicatedMemoryAllocator { sys, chooser }
+    crate fn dt(&self) -> &vkl::DeviceTable {
+        &self.rdev.table
+    }
+
+    crate unsafe fn new(rdev: Arc<RenderDevice>) -> Self {
+        let chooser = MemoryTypeChooser::new(&rdev);
+        DedicatedMemoryAllocator { rdev, chooser }
     }
 
     crate unsafe fn allocate(
@@ -104,7 +108,7 @@ impl DedicatedMemoryAllocator {
             memory_type_index: idx,
         };
         let mut memory = vk::null();
-        self.sys.dev.allocate_memory
+        self.dt().allocate_memory
             (&alloc_info as _, ptr::null(), &mut memory as _).check()?;
         Ok(memory)
     }
@@ -117,18 +121,18 @@ impl DedicatedMemoryAllocator {
         let mut buf = vk::null();
         let mut memory = vk::null();
         let res: Result<(), Box<dyn Error>> = try {
-            self.sys.dev.create_buffer
+            self.dt().create_buffer
                 (create_info as _, ptr::null(), &mut buf as _).check()?;
 
             let mut reqs = Default::default();
-            self.sys.dev.get_buffer_memory_requirements(buf, &mut reqs as _);
+            self.dt().get_buffer_memory_requirements(buf, &mut reqs as _);
             memory = self.allocate(reqs, options)?;
 
-            self.sys.dev.bind_buffer_memory(buf, memory, 0).check()?;
+            self.dt().bind_buffer_memory(buf, memory, 0).check()?;
         };
         if let Err(e) = res {
-            self.sys.dev.free_memory(memory, ptr::null());
-            self.sys.dev.destroy_buffer(buf, ptr::null());
+            self.dt().free_memory(memory, ptr::null());
+            self.dt().destroy_buffer(buf, ptr::null());
             Err(e)?;
         }
         Ok((buf, memory))
@@ -142,31 +146,60 @@ impl DedicatedMemoryAllocator {
         let mut image = vk::null();
         let mut memory = vk::null();
         let res: Result<(), Box<dyn Error>> = try {
-            self.sys.dev.create_image
+            self.dt().create_image
                 (create_info as _, ptr::null(), &mut image as _).check()?;
 
             let mut reqs = Default::default();
-            self.sys.dev.get_image_memory_requirements(image, &mut reqs as _);
+            self.dt().get_image_memory_requirements(image, &mut reqs as _);
             memory = self.allocate(reqs, options)?;
 
-            self.sys.dev.bind_image_memory(image, memory, 0).check()?;
+            self.dt().bind_image_memory(image, memory, 0).check()?;
         };
         if let Err(e) = res {
-            self.sys.dev.free_memory(memory, ptr::null());
-            self.sys.dev.destroy_image(image, ptr::null());
+            self.dt().free_memory(memory, ptr::null());
+            self.dt().destroy_image(image, ptr::null());
             Err(e)?;
         }
         Ok((image, memory))
     }
+
+    crate unsafe fn copy_to_buffer(
+        &self,
+        usage: vk::BufferUsageFlags,
+        src: &[u8],
+    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
+        let create_info = vk::BufferCreateInfo {
+            s_type: vk::StructureType::BUFFER_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: Default::default(),
+            size: src.len() as _,
+            usage,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            queue_family_index_count: 0,
+            p_queue_family_indices: ptr::null(),
+        };
+        let options = MemoryAllocateOptions {
+            required_flags: vk::MemoryPropertyFlags::HOST_VISIBLE_BIT,
+        };
+        let (buf, mem) = self.create_buffer(&create_info, &options)?;
+        if let Err(e) = map_copy_unmap(&self.rdev, src, mem) {
+            self.dt().destroy_buffer(buf, ptr::null());
+            self.dt().free_memory(mem, ptr::null());
+            Err(e)?;
+            unreachable!();
+        } else {
+            Ok((buf, mem))
+        }
+    }
 }
 
 crate unsafe fn map_copy_unmap(
-    sys: &VulkanSys,
+    rdev: &RenderDevice,
     src: &[u8],
     memory: vk::DeviceMemory,
 ) -> Result<(), vk::Result> {
     let mut dst = ptr::null_mut();
-    sys.dev.map_memory(
+    rdev.table.map_memory(
         memory,
         0,
         vk::WHOLE_SIZE,
@@ -182,39 +215,10 @@ crate unsafe fn map_copy_unmap(
         size: vk::WHOLE_SIZE,
     };
     // TODO: Skip flush if memory is coherent
-    let res = sys.dev.flush_mapped_memory_ranges(1, &range as _);
-    sys.dev.unmap_memory(memory);
+    let res = rdev.table.flush_mapped_memory_ranges(1, &range as _);
+    rdev.table.unmap_memory(memory);
     res.check()?;
     Ok(())
-}
-
-crate unsafe fn copy_to_buffer(
-    renderer: &Renderer,
-    usage: vk::BufferUsageFlags,
-    src: &[u8],
-) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
-    let create_info = vk::BufferCreateInfo {
-        s_type: vk::StructureType::BUFFER_CREATE_INFO,
-        p_next: ptr::null(),
-        flags: Default::default(),
-        size: src.len() as _,
-        usage,
-        sharing_mode: vk::SharingMode::EXCLUSIVE,
-        queue_family_index_count: 0,
-        p_queue_family_indices: ptr::null(),
-    };
-    let options = MemoryAllocateOptions {
-        required_flags: vk::MemoryPropertyFlags::HOST_VISIBLE_BIT,
-    };
-    let (buf, mem) = renderer.allocator.create_buffer(&create_info, &options)?;
-    if let Err(e) = map_copy_unmap(&renderer.sys, src, mem) {
-        renderer.sys.dev.destroy_buffer(buf, ptr::null());
-        renderer.sys.dev.free_memory(mem, ptr::null());
-        Err(e)?;
-        unreachable!();
-    } else {
-        Ok((buf, mem))
-    }
 }
 
 // # Usage notes
@@ -230,8 +234,8 @@ crate unsafe fn upload_image(
     // NB: Could replace with impl Read + Seek
     data: &[u8],
 ) -> Result<(vk::Image, vk::DeviceMemory), Box<dyn Error>> {
-    let sys = &renderer.sys;
-    let allocator = &renderer.allocator;
+    let rnd = renderer;
+    let allocator = &rnd.allocator;
 
     let new_create_info = vk::ImageCreateInfo {
         usage: img_create_info.usage | vk::ImageUsageFlags::TRANSFER_DST_BIT,
@@ -247,14 +251,14 @@ crate unsafe fn upload_image(
     let mut cmd_buf = vk::null();
     let mut fence = vk::null();
     let res: Result<(), Box<dyn Error>> = try {
-        let (buf_, buf_mem_) = copy_to_buffer
-                (&renderer, vk::BufferUsageFlags::TRANSFER_SRC_BIT, data)?;
+        let (buf_, buf_mem_) = allocator.copy_to_buffer
+            (vk::BufferUsageFlags::TRANSFER_SRC_BIT, data)?;
         buf = buf_;
         buf_mem = buf_mem_;
 
         cmd_buf = renderer.allocate_command_buffer()?;
 
-        sys.dev.begin_command_buffer(cmd_buf, &vk::CommandBufferBeginInfo {
+        rnd.dt.begin_command_buffer(cmd_buf, &vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
             p_next: ptr::null(),
             flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT_BIT,
@@ -279,7 +283,7 @@ crate unsafe fn upload_image(
                 layer_count: 1,
             },
         };
-        sys.dev.cmd_pipeline_barrier(
+        rnd.dt.cmd_pipeline_barrier(
             cmd_buf,
             vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
             vk::PipelineStageFlags::TRANSFER_BIT,
@@ -302,7 +306,7 @@ crate unsafe fn upload_image(
             image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
             image_extent: img_create_info.extent,
         };
-        sys.dev.cmd_copy_buffer_to_image(
+        rnd.dt.cmd_copy_buffer_to_image(
             cmd_buf,
             buf,
             img,
@@ -318,7 +322,7 @@ crate unsafe fn upload_image(
             new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             ..barrier
         };
-        sys.dev.cmd_pipeline_barrier(
+        rnd.dt.cmd_pipeline_barrier(
             cmd_buf,
             vk::PipelineStageFlags::TRANSFER_BIT,
             vk::PipelineStageFlags::FRAGMENT_SHADER_BIT,
@@ -328,13 +332,13 @@ crate unsafe fn upload_image(
             1, &barrier as _,
         );
 
-        sys.dev.end_command_buffer(cmd_buf).check()?;
+        rnd.dt.end_command_buffer(cmd_buf).check()?;
 
         let create_info = vk::FenceCreateInfo {
             s_type: vk::StructureType::FENCE_CREATE_INFO,
             ..Default::default()
         };
-        sys.dev.create_fence
+        rnd.dt.create_fence
             (&create_info as _, ptr::null(), &mut fence as _)
             .check()?;
 
@@ -344,23 +348,23 @@ crate unsafe fn upload_image(
             p_command_buffers: &cmd_buf as _,
             ..Default::default()
         };
-        sys.dev.queue_submit(sys.queue, 1, &submit_info as _, fence)
+        rnd.dt.queue_submit(rnd.queue(), 1, &submit_info as _, fence)
             .check()?;
 
         // We wait for the fence here, but in practice we would want to
         // defer until immediately before rendering.
-        sys.dev.wait_for_fences
+        rnd.dt.wait_for_fences
             (1, &fence as _, vk::TRUE, !0)
             .check()?;
     };
 
-    sys.dev.destroy_fence(fence, ptr::null());
-    sys.dev.free_command_buffers(renderer.cmd_pool, 1, &cmd_buf as _);
-    sys.dev.destroy_buffer(buf, ptr::null());
-    sys.dev.free_memory(buf_mem, ptr::null());
+    rnd.dt.destroy_fence(fence, ptr::null());
+    rnd.dt.free_command_buffers(renderer.cmd_pool, 1, &cmd_buf as _);
+    rnd.dt.destroy_buffer(buf, ptr::null());
+    rnd.dt.free_memory(buf_mem, ptr::null());
     if let Err(e) = res {
-        sys.dev.destroy_image(img, ptr::null());
-        sys.dev.free_memory(img_mem, ptr::null());
+        rnd.dt.destroy_image(img, ptr::null());
+        rnd.dt.free_memory(img_mem, ptr::null());
         Err(e)?;
         unreachable!();
     } else {

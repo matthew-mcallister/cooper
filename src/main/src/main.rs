@@ -26,7 +26,7 @@ macro_rules! asset {
     }
 }
 
-fn as_bytes<T: Sized>(src: &T) -> &[u8] {
+fn _as_bytes<T: Sized>(src: &T) -> &[u8] {
     unsafe {
         std::slice::from_raw_parts(
             src as *const _ as _,
@@ -54,13 +54,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 unsafe fn unsafe_main() -> Result<(), Box<dyn std::error::Error>> {
     let dims = window::Dimensions::new(1600, 900);
     let window = Arc::new(window::Window::new(dims, c_str!("Demo"))?);
-    let vk_config = render::VulkanConfig {
+    let rconfig = render::Config {
         enable_validation: std::env::var("VULKAN_VALIDATE")
             .map(|s| &s == "1")
             .unwrap_or(false),
     };
-    let sys = Arc::new(render::VulkanSys::new(vk_config)?);
-    let swapchain = render::VulkanSwapchain::new(sys, Arc::clone(&window))?;
+    let init = Arc::new(render::Init::new(rconfig)?);
+    let surface = Arc::new(render::Surface::new(init, Arc::clone(&window))?);
+    let rdev = Arc::new(render::RenderDevice::new(surface)?);
+    let swapchain = render::Swapchain::new(rdev)?;
     let renderer = render::Renderer::new(swapchain)?;
 
     while glfw::window_should_close(window.inner.as_ptr()) != glfw::TRUE {
