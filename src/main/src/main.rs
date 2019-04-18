@@ -1,73 +1,43 @@
 #![feature(crate_visibility_modifier)]
 #![feature(non_exhaustive)]
-#![feature(optin_builtin_traits)]
 #![feature(try_blocks)]
-#![feature(uniform_paths)]
-
-#[macro_use]
-extern crate derive_more;
-extern crate glfw_ffi as glfw;
-extern crate lodepng;
-extern crate vk_ffi as vk;
-extern crate vk_ffi_loader as vkl;
-
-use std::os::raw::c_char;
+use std::error::Error;
 use std::sync::Arc;
 
 macro_rules! c_str {
     ($str:expr) => {
-        concat!($str, "\0") as *const str as *const [c_char] as *const c_char
+        concat!($str, "\0") as *const str as *const std::os::raw::c_char
     }
 }
 
-macro_rules! asset {
-    ($str:expr) => {
-        concat!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"), $str)
-    }
-}
-
-fn _as_bytes<T: Sized>(src: &T) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(
-            src as *const _ as _,
-            std::mem::size_of::<T>(),
-        )
-    }
-}
-
-fn slice_bytes<T: Sized>(src: &[T]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(
-            src.as_ptr() as _,
-            src.len() * std::mem::size_of::<T>(),
-        )
-    }
-}
-
-crate mod render;
-crate mod window;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     unsafe { unsafe_main() }
 }
 
-unsafe fn unsafe_main() -> Result<(), Box<dyn std::error::Error>> {
-    let dims = window::Dimensions::new(1600, 900);
-    let window = Arc::new(window::Window::new(dims, c_str!("Demo"))?);
+unsafe fn unsafe_main() -> Result<(), Box<dyn Error>> {
+    let wconfig = window::Config {
+        title: c_str!("Demo"),
+        dims: window::Dimensions::new(1600, 900),
+    };
+    let wsys = window::System::new()?;
+    let window = Arc::new(window::Window::new(wsys.clone(), wconfig)?);
+
     let rconfig = render::Config {
         enable_validation: std::env::var("VULKAN_VALIDATE")
             .map(|s| &s == "1")
             .unwrap_or(false),
     };
-    let init = Arc::new(render::Init::new(rconfig)?);
-    let surface = Arc::new(render::Surface::new(init, Arc::clone(&window))?);
-    let rdev = Arc::new(render::RenderDevice::new(surface)?);
-    let swapchain = render::Swapchain::new(rdev)?;
-    let renderer = render::Renderer::new(swapchain)?;
+    let instance = Arc::new(render::Instance::new(rconfig)?);
+    let surface =
+        Arc::new(render::Surface::new(instance, Arc::clone(&window))?);
+    let device = Arc::new(render::Device::new(&surface)?);
+    let swapchain = render::Swapchain::new(surface, device)?;
 
-    while glfw::window_should_close(window.inner.as_ptr()) != glfw::TRUE {
-        renderer.do_frame()?;
-        glfw::poll_events();
+    render::do_test(&swapchain)?;
+
+    while !window.should_close() {
+        //do_frame();
+        wsys.poll_events();
     }
 
     Ok(())

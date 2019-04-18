@@ -1,10 +1,12 @@
+//! This module defines memory allocators. It is not responsible for
+//! populating memory or binding buffers, as that is the resource
+//! manager's job.
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::{vk, vkl};
-use super::{RenderDevice, Renderer};
+use super::Device;
 
 #[derive(Clone, Copy)]
 struct MemoryType<'a> {

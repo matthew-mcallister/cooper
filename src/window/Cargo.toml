@@ -1,0 +1,17 @@
+[package]
+name = "cooper-window"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+derive_more = "0.14"
+
+[dependencies.glfw]
+git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git"
+package = "glfw-ffi"
+
+[dependencies.vk]
+git = "https://gitlab.com/matthew-mcallister/vk-ffi.git"
+package = "vk-ffi"

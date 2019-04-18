@@ -1,16 +1,16 @@
 [package]
-name = "cooper_main"
+name = "cooper-main"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
 
 [dependencies]
-derive_more = "0.13"
-glfw-ffi = { git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git" }
-lodepng = "2.4"
-vk-ffi = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
-vk-ffi-loader = { git = "https://gitlab.com/matthew-mcallister/vk-ffi.git" }
+derivative = "1.0"
+derive_more = "0.14"
+memoffset = "0.3"
+render = { path = "../render", package = "cooper-render" }
+window = { path = "../window", package = "cooper-window" }
 
 [[bin]]
 name = "cooper"
