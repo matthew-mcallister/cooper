@@ -1,3 +1,4 @@
+//! TODO: Consider testing with LunarG device simulator
 #![feature(crate_visibility_modifier)]
 #![feature(try_blocks)]
 macro_rules! c_str {
@@ -16,12 +17,14 @@ mod descriptor;
 mod fixed;
 mod geom;
 mod init;
+mod memory;
 mod pipeline;
 
 crate use descriptor::*;
 crate use fixed::*;
 crate use geom::*;
 pub use init::*;
+crate use memory::*;
 crate use pipeline::*;
 
 fn bool32(b: bool) -> vk::Bool32 {
