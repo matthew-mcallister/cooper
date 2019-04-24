@@ -2,23 +2,18 @@
 //! path. This includes descriptor set layouts, shaders, render passes,
 //! and more. Each of these objects is named so it can be referred to
 //! elsewhere in the engine.
-
-// TODO: Use enum instead of strings for names
-
-use std::collections::HashMap;
 use std::ptr;
 use std::sync::Arc;
 
+use fnv::FnvHashSet;
 use maplit::hashmap;
 
 use crate::*;
 
+// TODO: Use enum instead of strings for names
+
 crate type BlockName = &'static str;
 crate type BlockNameOwned = String;
-
-crate trait VkObject {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable);
-}
 
 crate trait Collection {
     type Object;
@@ -34,7 +29,7 @@ crate trait Collection {
 #[derive(Debug)]
 crate struct HashCollection<T: VkObject> {
     dt: Arc<vkl::DeviceTable>,
-    objects: HashMap<BlockNameOwned, T>,
+    objects: FnvHashMap<BlockNameOwned, T>,
 }
 
 impl<T: VkObject> HashCollection<T> {
@@ -82,17 +77,6 @@ macro_rules! create {
 }
 
 #[derive(Debug)]
-crate struct SamplerObj {
-    crate obj: vk::Sampler,
-}
-
-impl VkObject for SamplerObj {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable) {
-        dt.destroy_sampler(self.obj, ptr::null());
-    }
-}
-
-#[derive(Debug)]
 crate struct SetLayoutObj {
     crate obj: vk::DescriptorSetLayout,
     crate counts: DescriptorCounts,
@@ -107,7 +91,7 @@ impl VkObject for SetLayoutObj {
 #[derive(Debug)]
 crate struct RenderPassObj {
     crate obj: vk::RenderPass,
-    crate subpasses: HashMap<String, u32>,
+    crate subpasses: FnvHashMap<String, u32>,
 }
 
 impl VkObject for RenderPassObj {
@@ -143,30 +127,9 @@ impl VkObject for PipelineLayoutObj {
     }
 }
 
-crate fn stock_samplers(swapchain: &Swapchain) -> HashCollection<SamplerObj> {
-    let dt = &swapchain.dt;
-    let mut collection = HashCollection::new(Arc::clone(dt));
-
-    let info = vk::SamplerCreateInfo {
-        mag_filter: vk::Filter::LINEAR,
-        min_filter: vk::Filter::LINEAR,
-        mipmap_mode: vk::SamplerMipmapMode::LINEAR,
-        address_mode_u: vk::SamplerAddressMode::REPEAT,
-        address_mode_v: vk::SamplerAddressMode::REPEAT,
-        address_mode_w: vk::SamplerAddressMode::REPEAT,
-        // TODO: anisotropic filtering
-        ..Default::default()
-    };
-    let obj = create!(dt, create_sampler, info).unwrap();
-    collection.add("std_mip", SamplerObj { obj });
-
-    collection
-}
-
-crate fn stock_set_layouts(
-    swapchain: &Swapchain,
-    samplers: &HashCollection<SamplerObj>,
-) -> HashCollection<SetLayoutObj> {
+crate fn stock_set_layouts(swapchain: &Swapchain) ->
+    HashCollection<SetLayoutObj>
+{
     let dt = &swapchain.dt;
     let mut collection = HashCollection::new(Arc::clone(dt));
 
@@ -195,8 +158,6 @@ crate fn stock_set_layouts(
     let counts = DescriptorCounts::from_bindings(&bindings);
     collection.add("scene_globals", SetLayoutObj { obj, counts });
 
-    let sampler = samplers.get("std_mip").obj;
-    let im_samplers = [sampler; 3];
     let bindings = [
         vk::DescriptorSetLayoutBinding {
             binding: 0,
@@ -204,7 +165,6 @@ crate fn stock_set_layouts(
             // albedo + metal/roughness + normal
             descriptor_count: 3,
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-            p_immutable_samplers: &im_samplers as _,
         },
     ];
     let info = create_info!(bindings);

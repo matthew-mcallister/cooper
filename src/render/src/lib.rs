@@ -19,6 +19,7 @@ mod geom;
 mod init;
 mod memory;
 mod pipeline;
+mod resource;
 
 crate use descriptor::*;
 crate use fixed::*;
@@ -26,9 +27,14 @@ crate use geom::*;
 pub use init::*;
 crate use memory::*;
 crate use pipeline::*;
+crate use resource::*;
 
 fn bool32(b: bool) -> vk::Bool32 {
     if b { vk::TRUE } else { vk::FALSE }
+}
+
+crate trait VkObject {
+    unsafe fn destroy(self, dt: &vkl::DeviceTable);
 }
 
 pub unsafe fn do_test(swapchain: &Swapchain) -> Result<(), vk::Result> {

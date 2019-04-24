@@ -9,6 +9,7 @@ publish = false
 alloc = { path = "../alloc", package = "cooper-alloc" }
 derivative = "1.0"
 derive_more = "0.14"
+fnv = "1.0"
 maplit = "1.0"
 memoffset = "0.3"
 window = { path = "../window", package = "cooper-window" }

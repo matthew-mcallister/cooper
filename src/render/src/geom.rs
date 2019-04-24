@@ -17,7 +17,7 @@ pub struct VertexPnxt {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct VertexPnxtj {
-    pub pnx: VertexPnxt,
+    pub pnxt: VertexPnxt,
     pub joints: [u8; 4],
     pub weights: [u8; 4],
 }
