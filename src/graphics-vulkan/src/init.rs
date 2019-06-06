@@ -5,8 +5,6 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-use derivative::Derivative;
-
 const VALIDATION_LAYER: *const c_char =
     c_str!("VK_LAYER_LUNARG_standard_validation");
 
@@ -37,9 +35,7 @@ impl Instance {
     pub unsafe fn new(config: Config) -> Result<Self, Box<dyn Error>> {
         let wsys = window::System::new()?;
 
-        if !wsys.vulkan_supported() {
-            Err("Vulkan not supported")?;
-        }
+        if !wsys.vulkan_supported() { Err("Vulkan not supported")?; }
 
         let get_instance_proc_addr = wsys.pfn_get_instance_proc_addr();
         let entry = vkl::Entry::load(get_instance_proc_addr);
@@ -142,12 +138,6 @@ impl Device {
                     | vk::QueueFlags::TRANSFER_BIT;
                 if !props.queue_flags.contains(required_bits) { return false; }
 
-                if !surface.win.sys()
-                    .queue_family_supports_present(instance, pd, idx)
-                {
-                    return false;
-                }
-
                 let mut surface_supp = 0;
                 it.get_physical_device_surface_support_khr
                     (pd, idx, surface.inner, &mut surface_supp as _)
@@ -198,35 +188,15 @@ impl Device {
             queue,
         })
     }
-
-    #[allow(dead_code)]
-    pub unsafe fn create_shader_module(&self, src: &[u8]) ->
-        Result<vk::ShaderModule, vk::Result>
-    {
-        assert_eq!(src.len() % 4, 0);
-        let create_info = vk::ShaderModuleCreateInfo {
-            s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: Default::default(),
-            code_size: src.len() as _,
-            p_code: src.as_ptr() as _,
-        };
-        let mut sm = vk::null();
-        self.table.create_shader_module
-            (&create_info, ptr::null(), &mut sm as _).check()?;
-        Ok(sm)
-    }
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub struct Swapchain {
     crate surface: Arc<Surface>,
     crate dev: Arc<Device>,
     crate dt: Arc<vkl::DeviceTable>,
     crate inner: vk::SwapchainKHR,
-    #[derivative(Debug = "ignore")]
-    crate create_info: Box<vk::SwapchainCreateInfoKHR>,
+    crate extent: vk::Rect2D,
     crate images: Vec<vk::Image>,
     crate image_views: Vec<vk::ImageView>,
 }
@@ -246,7 +216,6 @@ impl Swapchain {
             dt: Arc::clone(&dev.table),
             dev,
             inner: vk::null(),
-            create_info: Default::default(),
             images: Vec::new(),
             image_views: Vec::new(),
         };
@@ -276,16 +245,31 @@ impl Swapchain {
             u32::min(caps.min_image_count + 1, caps.max_image_count)
         } else { caps.min_image_count + 1 };
 
+        // TODO: Is this a compatibility concern?
+        let format = vk::SurfaceFormatKHR {
+            format: vk::Format::B8G8R8A8_SRGB,
+            color_space: vk::ColorSpace::SRGB_NONLINEAR_KHR,
+        };
+        let formats = vk::enumerate2!(
+            self.dev.instance.table,
+            get_physical_device_surface_formats_khr,
+            pdev,
+            self.surface.inner,
+        )?;
+        if !formats.contains(format) { Err("surface format not supported")?; }
+
         // The spec says that, on Wayland (and probably other platforms,
         // maybe embedded), the surface extent may be determined by the
         // swapchain extent rather than the other way around.
-        if (0xffffffff, 0xffffffff) == caps.current_extent.into()
+        if (0xffff_ffff, 0xffff_ffff) == caps.current_extent.into()
             { Err("surface extent undefined")?; }
 
         // TODO: The spec says that you are unable to create a swapchain
         // when this happens. Which platforms do this?
         if (0, 0) == caps.current_extent.into()
             { Err("surface has zero extent")?; }
+
+        self.extent = caps.current_extent;
 
         let composite_alpha = vk::CompositeAlphaFlagsKHR::OPAQUE_BIT_KHR;
         if !caps.supported_composite_alpha.intersects(composite_alpha)
@@ -297,16 +281,7 @@ impl Swapchain {
         if !caps.supported_usage_flags.contains(image_usage)
             { Err("swapchain image usage not supported")?; }
 
-        let formats = vk::enumerate2!(
-            self.dev.instance.table,
-            get_physical_device_surface_formats_khr,
-            pdev,
-            self.surface.inner,
-        )?;
-        // The first option seems to be best for most common drivers
-        let vk::SurfaceFormatKHR { format, color_space } = formats[0];
-
-        self.create_info = Box::new(vk::SwapchainCreateInfoKHR {
+        let create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
             p_next: ptr::null(),
             flags: Default::default(),
@@ -325,16 +300,13 @@ impl Swapchain {
             present_mode: vk::PresentModeKHR::FIFO_KHR,
             clipped: vk::TRUE,
             old_swapchain: self.inner,
-        });
+        };
         self.dt.create_swapchain_khr
-            (&*self.create_info as _, ptr::null(), &mut self.inner as _)
+            (&create_info as _, ptr::null(), &mut self.inner as _)
             .check()?;
 
-        self.images = vk::enumerate2!(
-            self.dt,
-            get_swapchain_images_khr,
-            self.inner,
-        )?;
+        self.images = vk::enumerate2!
+            (self.dt, get_swapchain_images_khr, self.inner)?;
 
         for &image in self.images.iter() {
             let create_info = vk::ImageViewCreateInfo {

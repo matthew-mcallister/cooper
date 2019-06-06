@@ -27,16 +27,14 @@ unsafe fn unsafe_main() -> Result<(), Box<dyn Error>> {
             .map(|s| &s == "1")
             .unwrap_or(false),
     };
-    let instance = Arc::new(render::Instance::new(rconfig)?);
-    let surface =
-        Arc::new(render::Surface::new(instance, Arc::clone(&window))?);
-    let device = Arc::new(render::Device::new(&surface)?);
-    let swapchain = render::Swapchain::new(surface, device)?;
+    let mut renderer = render::System::new(rconfig, Arc::clone(&window))?;
 
-    render::do_test(&swapchain)?;
+    let mut resources = renderer.resource_graph();
+
+    let mut objects = renderer.create_objects();
 
     while !window.should_close() {
-        //do_frame();
+        renderer.do_frame();
         wsys.poll_events();
     }
 

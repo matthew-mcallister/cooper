@@ -1,5 +1,5 @@
 [package]
-name = "cooper-render"
+name = "cooper-graphics-vulkan"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
@@ -9,9 +9,11 @@ publish = false
 alloc = { path = "../alloc", package = "cooper-alloc" }
 derivative = "1.0"
 derive_more = "0.14"
+enum-map = "0.5"
 fnv = "1.0"
 maplit = "1.0"
 memoffset = "0.3"
+slab = "0.4"
 window = { path = "../window", package = "cooper-window" }
 
 [dependencies.glfw]

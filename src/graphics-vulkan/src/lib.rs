@@ -1,6 +1,7 @@
 //! TODO: Consider testing with LunarG device simulator
 #![feature(crate_visibility_modifier)]
 #![feature(try_blocks)]
+
 macro_rules! c_str {
     ($str:expr) => {
         concat!($str, "\0") as *const str as *const std::os::raw::c_char;
@@ -10,6 +11,16 @@ macro_rules! c_str {
 macro_rules! insert_nodup {
     ($map:expr, $key:expr, $val:expr) => {
         assert!(!$map.insert($key, $val).is_some());
+    }
+}
+
+macro_rules! impl_debug_union {
+    ($name:ident) => {
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, concat!(stringify!($name), " {{ *union* }}"))
+            }
+        }
     }
 }
 
@@ -33,8 +44,11 @@ fn bool32(b: bool) -> vk::Bool32 {
     if b { vk::TRUE } else { vk::FALSE }
 }
 
-crate trait VkObject {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable);
+#[inline]
+fn align_to(alignment: vk::DeviceSize, offset: vk::DeviceSize) ->
+    vk::DeviceSize
+{
+    ((offset + alignment - 1) / alignment) * alignment
 }
 
 pub unsafe fn do_test(swapchain: &Swapchain) -> Result<(), vk::Result> {

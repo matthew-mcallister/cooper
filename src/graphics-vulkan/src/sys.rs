@@ -1,68 +1,87 @@
-//! This module defines much of the fixed functionality of the rendering
-//! path. This includes descriptor set layouts, shaders, render passes,
-//! and more. Each of these objects is named so it can be referred to
-//! elsewhere in the engine.
+//! This module defines the top-level structure of the renderer.
 use std::ptr;
-use std::sync::Arc;
 
-use fnv::FnvHashSet;
-use maplit::hashmap;
+use enum_map::Enum
+use fnv::FnvHashMap;
+use map_lit::*;
 
 use crate::*;
 
-// TODO: Use enum instead of strings for names
-
-crate type BlockName = &'static str;
-crate type BlockNameOwned = String;
-
-crate trait Collection {
-    type Object;
-
-    fn add(&mut self, key: impl Into<BlockNameOwned>, obj: Self::Object);
-
-    fn get(&self, key: &str) -> &Self::Object;
-
-    unsafe fn destroy(&mut self, key: &str);
-}
-
-// TODO: Use FNV hasher
+/// The top-level interface to the renderer.
+// TODO: Break up into sub-objects?
 #[derive(Debug)]
-crate struct HashCollection<T: VkObject> {
-    dt: Arc<vkl::DeviceTable>,
-    objects: FnvHashMap<BlockNameOwned, T>,
+pub struct System {
+    // These shouldn't change after initialization.
+    crate dt: Arc<vkl::DeviceTable>,
+    crate device: Arc<Device>,
+    crate shaders: FnvHashMap<&'static str, ShaderObj>,
+    crate set_layouts: FnvHashMap<&'static str, SetLayoutObj>,
+    crate pipe_layouts: FnvHashMap<&'static str, PipelineLayoutObj>,
+    crate render_passes: EnumMap<RenderPassName, RenderPassObj>,
+    // These need to be rebuilt if the swapchain is altered.
+    crate swapchain: Swapchain,
+    crate cur_frame: usize,
+    crate frames: Vec<EnumMap<RenderPassName, vk::FrameBuffer>>,
+    crate pipelines: PipelineMap,
+    // These are directly manipulated by the library consumer
+    crate samplers: SamplerStorage,
+    crate resources: ResourceStorage,
+    crate param_sets: ParameterStorage,
 }
 
-impl<T: VkObject> HashCollection<T> {
-    crate fn new(dt: Arc<vkl::DeviceTable>) -> Self {
-        HashCollection {
-            dt,
-            objects: HashMap::new(),
-        }
-    }
-}
-
-impl<T: VkObject> Drop for HashCollection<T> {
+impl Drop for System {
     fn drop(&mut self) {
-        for (_, obj) in self.objects.drain() {
-            unsafe { obj.destroy(&self.dt) }
+        for frame in self.frames.iter() {
+            for &framebuffer in frame.values() {
+                self.dt.destroy_framebuffer(framebuffer, ptr::null());
+            }
         }
+        for obj in self.render_passes.values()
+            { self.dt.destroy_render_pass(obj.obj, ptr::null()); }
+        for obj in self.pipe_layouts.values()
+            { self.dt.destroy_pipeline_layout(obj.obj, ptr::null()); }
+        for obj in self.set_layouts.values()
+            { self.dt.destroy_descriptor_set_layout(obj.obj, ptr::null()); }
+        for obj in self.shaders.values()
+            { self.dt.destroy_shader_module(obj.obj, ptr::null()); }
     }
 }
 
-impl<T: VkObject> Collection for HashCollection<T> {
-    type Object = T;
+#[derive(Clone, Copy, Debug, Enum, Eq, Ord, Hash, PartialEq, PartialOrd)]
+crate enum RenderPassName {
+    Forward,
+}
 
-    fn add(&mut self, key: impl Into<BlockNameOwned>, obj: Self::Object) {
-        insert_nodup!(self.objects, key.into(), obj);
-    }
+#[derive(Debug)]
+crate struct SetLayoutObj {
+    crate obj: vk::DescriptorSetLayout,
+    crate counts: DescriptorCounts,
+}
 
-    fn get(&self, key: &str) -> &Self::Object {
-        &self.objects[key]
-    }
+#[derive(Debug)]
+crate struct ShaderObj {
+    crate obj: vk::ShaderModule,
+    crate stage: vk::ShaderStageFlags,
+    /// Used for debugging
+    crate set_layouts: Vec<(u32, BlockName)>,
+}
 
-    unsafe fn destroy(&mut self, key: &str) {
-        let obj = self.objects.remove(key).unwrap();
-        obj.destroy(&self.dt);
+#[derive(Debug)]
+crate struct PipelineLayoutObj {
+    crate obj: vk::PipelineLayout,
+    /// Used for debugging
+    crate set_layouts: Vec<BlockName>,
+}
+
+#[derive(Debug)]
+crate struct RenderPassObj {
+    crate obj: vk::RenderPass,
+    crate subpasses: FnvHashMap<String, u32>,
+}
+
+impl System {
+    crate fn cur_frame(&self) -> &EnumMap<RenderPassName, vk::FrameBuffer> {
+        self.frames[self.cur_frame]
     }
 }
 
@@ -76,62 +95,10 @@ macro_rules! create {
     }
 }
 
-#[derive(Debug)]
-crate struct SetLayoutObj {
-    crate obj: vk::DescriptorSetLayout,
-    crate counts: DescriptorCounts,
-}
-
-impl VkObject for SetLayoutObj {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable) {
-        dt.destroy_descriptor_set_layout(self.obj, ptr::null());
-    }
-}
-
-#[derive(Debug)]
-crate struct RenderPassObj {
-    crate obj: vk::RenderPass,
-    crate subpasses: FnvHashMap<String, u32>,
-}
-
-impl VkObject for RenderPassObj {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable) {
-        dt.destroy_render_pass(self.obj, ptr::null());
-    }
-}
-
-#[derive(Debug)]
-crate struct ShaderObj {
-    crate obj: vk::ShaderModule,
-    crate stage: vk::ShaderStageFlags,
-    /// Used for debugging
-    crate set_layouts: Vec<(u32, BlockName)>,
-}
-
-impl VkObject for ShaderObj {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable) {
-        dt.destroy_shader_module(self.obj, ptr::null());
-    }
-}
-
-#[derive(Debug)]
-crate struct PipelineLayoutObj {
-    crate obj: vk::PipelineLayout,
-    /// Used for debugging
-    crate set_layouts: Vec<BlockName>,
-}
-
-impl VkObject for PipelineLayoutObj {
-    unsafe fn destroy(self, dt: &vkl::DeviceTable) {
-        dt.destroy_pipeline_layout(self.obj, ptr::null());
-    }
-}
-
-crate fn stock_set_layouts(swapchain: &Swapchain) ->
-    HashCollection<SetLayoutObj>
+crate fn create_set_layouts(dt: &DeviceTable) ->
+    HashMap<&'static str, SetLayoutObj>
 {
-    let dt = &swapchain.dt;
-    let mut collection = HashCollection::new(Arc::clone(dt));
+    let mut collection = HashMap::new();
 
     macro_rules! create_info {
         ($bindings:expr) => {{
@@ -143,20 +110,6 @@ crate fn stock_set_layouts(swapchain: &Swapchain) ->
             }
         }}
     }
-
-    let bindings = [
-        vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-            ..Default::default()
-        },
-    ];
-    let info = create_info!(bindings);
-    let obj = create!(dt, create_descriptor_set_layout, info).unwrap();
-    let counts = DescriptorCounts::from_bindings(&bindings);
-    collection.add("scene_globals", SetLayoutObj { obj, counts });
 
     let bindings = [
         vk::DescriptorSetLayoutBinding {
@@ -177,27 +130,27 @@ crate fn stock_set_layouts(swapchain: &Swapchain) ->
             binding: 0,
             descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
+            stage_flags: vk::ShaderStageFlags::VERTEX_BIT |
+                vk::ShaderStageFlags::FRAGMENT_BIT,
             ..Default::default()
         },
     ];
     let info = create_info!(bindings);
     let obj = create!(dt, create_descriptor_set_layout, info).unwrap();
     let counts = DescriptorCounts::from_bindings(&bindings);
-    collection.add("object_data", SetLayoutObj { obj, counts });
+    collection.insert("object_data", SetLayoutObj { obj, counts });
 
     collection
 }
 
-crate fn stock_render_passes(swapchain: &Swapchain) ->
-    HashCollection<RenderPassObj>
+crate fn create_render_passes(dt: &DeviceTable) ->
+    HashMap<&'static str, RenderPassObj>
 {
-    let dt = &swapchain.dt;
-    let mut collection = HashCollection::new(Arc::clone(dt));
+    let mut collection = HashMap::new(Arc::clone(dt));
 
     let attachments = &[
         vk::AttachmentDescription {
-            format: swapchain.create_info.image_format,
+            format: vk::Format::B8G8R8A8_SRGB,
             samples: vk::SampleCountFlags::_1_BIT,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
@@ -240,8 +193,8 @@ crate fn stock_render_passes(swapchain: &Swapchain) ->
         // TODO: lighting-only pass?
     ];
     let subpass_map = hashmap! {
-        "depth".to_string() => 0,
-        "lighting".to_string() => 1,
+        "depth" => 0,
+        "lighting" => 1,
     };
 
     let dependencies = [
@@ -270,14 +223,16 @@ crate fn stock_render_passes(swapchain: &Swapchain) ->
         ..Default::default()
     };
     let obj = create!(dt, create_render_pass, info).unwrap();
-    collection.add("forward", RenderPassObj { obj, subpasses: subpass_map });
+    collection.insert(
+        RenderPassName::Forward,
+        RenderPassObj { obj, subpasses: subpass_map },
+    );
 
     collection
 }
 
-crate fn stock_shaders(swapchain: &Swapchain) -> HashCollection<ShaderObj> {
-    let dt = &swapchain.dt;
-    let mut collection = HashCollection::new(Arc::clone(dt));
+crate fn create_shaders(dt: &DeviceTable) -> HashMap<&'static str, ShaderObj> {
+    let mut collection = HashMap::new(Arc::clone(dt));
 
     macro_rules! shader_source {
         ($name:expr) => {
@@ -300,7 +255,7 @@ crate fn stock_shaders(swapchain: &Swapchain) -> HashCollection<ShaderObj> {
                 ..Default::default()
             };
             let obj = create!($dt, create_shader_module, info).unwrap();
-            collection.add($name, ShaderObj {
+            collection.insert($name, ShaderObj {
                 obj,
                 stage: vk::ShaderStageFlags::$stage,
                 set_layouts: vec! $set_layouts,
@@ -308,24 +263,22 @@ crate fn stock_shaders(swapchain: &Swapchain) -> HashCollection<ShaderObj> {
         }
     }
 
-    shader!(dt, "depth_vert", VERTEX_BIT, [(2, "object_data")]);
-    shader!(dt, "static_pbr_vert", VERTEX_BIT,
-        [(0, "scene_globals"), (2, "object_data")]);
-    shader!(dt, "pbr_frag", FRAGMENT_BIT, [(1, "pbr_material")]);
+    shader!(dt, "depth_vert", VERTEX_BIT, [(1, "object_data")]);
+    shader!(dt, "static_pbr_vert", VERTEX_BIT, [(1, "object_data")]);
+    shader!(dt, "pbr_frag", FRAGMENT_BIT, [(0, "pbr_material")]);
 
     collection
 }
 
-crate fn stock_pipeline_layouts(
-    swapchain: &Swapchain,
-    set_layouts: &HashCollection<SetLayoutObj>,
-) -> HashCollection<PipelineLayoutObj> {
-    let dt = &swapchain.dt;
-    let mut collection = HashCollection::new(Arc::clone(dt));
+crate fn create_pipeline_layouts(
+    dt: &DeviceTable,
+    set_layouts: &HashMap<String, SetLayoutObj>,
+) -> HashMap<&'static str, PipelineLayoutObj> {
+    let mut collection = HashMap::new(Arc::clone(dt));
 
     let defs: &[(&'static str, &[&'static str])] = &[
-        ("scene_globals", &["scene_globals"]),
-        ("pbr", &["scene_globals", "pbr_material", "object_data"]),
+        ("depth", &["object_data"]),
+        ("pbr", &["pbr_material", "object_data"]),
     ];
     for &(name, layout_names) in defs {
         let layouts: Vec<_> =
@@ -341,7 +294,7 @@ crate fn stock_pipeline_layouts(
                 (&create_info as _, ptr::null(), &mut obj as _)
                 .check().unwrap();
         }
-        collection.add(name, PipelineLayoutObj {
+        collection.insert(name, PipelineLayoutObj {
             obj,
             set_layouts: layout_names.to_owned(),
         });

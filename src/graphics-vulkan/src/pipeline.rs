@@ -10,13 +10,16 @@ use crate::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum PipelineGeometry {
-    Static,
+    Rigid,
+    Jointed,
+    //Deforming,
 }
 
 impl PipelineGeometry {
     crate fn vertex_attrs(self) -> VertexAttrs {
         match self {
             PipelineGeometry::Static => VertexAttrs::PosNormTex0Tan,
+            PipelineGeometry::Jointed => VertexAttrs::PosNormTex0TanJointss,
         }
     }
 }
@@ -30,7 +33,7 @@ crate enum AlphaMode {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum PipelineOutput {
-    DepthPrepass,
+    Depth,
     Lighting {
         // TODO: Switch to a string wrapper (around say [u8; 31]).
         frag_shader: &'static str,
@@ -49,7 +52,8 @@ crate struct PipelineDesc {
 fn vertex_size(attrs: VertexAttrs) -> usize {
     match attrs {
         VertexAttrs::PosNormTex0Tan => std::mem::size_of::<VertexPnxt>(),
-        VertexAttrs::PosNormTex0TanJoint => std::mem::size_of::<VertexPnxtj>(),
+        VertexAttrs::PosNormTex0TanJoints =>
+            std::mem::size_of::<VertexPnxtj>(),
     }
 }
 
@@ -96,7 +100,7 @@ fn vertex_attr_desc(attrs: VertexAttrs) ->
     match attrs {
         VertexAttrs::PosNormTex0Tan =>
             vec![pos, normal, tex_coord_0, tan],
-        VertexAttrs::PosNormTex0TanJoint =>
+        VertexAttrs::PosNormTex0TanJoints =>
             vec![pos, normal, tex_coord_0, tan, joint_index, joint_weight],
     }
 }
@@ -118,7 +122,6 @@ impl Drop for PipelineMap {
 }
 
 impl PipelineMap {
-    // TODO: This lookup could conceivably be performed at compile time
     fn get(&self, desc: &PipelineDesc) -> vk::Pipeline {
         self.pipelines[desc]
     }
@@ -147,14 +150,14 @@ unsafe fn add_pipeline(builder: &mut PipelineBuilder<'_>, desc: &PipelineDesc)
     let render_pass = builder.render_passes.get("forward");
 
     // TODO: frag shader can be chosen freely, but vertex/tess shaders
-    // is determined by choice of frag shader
+    // determined by choice of frag shader
     assert_eq!(desc.geometry, PipelineGeometry::Static);
     let subpass;
     let sh_stages: &'static [&'static str];
     match desc.output {
-        PipelineOutput::DepthPrepass => {
+        PipelineOutput::Depth => {
             subpass = "depth";
-            sh_stages = &["depth_vert"];
+            sh_stages = &["static_depth_vert"];
         },
         PipelineOutput::Lighting { frag_shader, .. } => {
             assert_eq!(frag_shader, "pbr_frag");
@@ -242,7 +245,7 @@ unsafe fn add_pipeline(builder: &mut PipelineBuilder<'_>, desc: &PipelineDesc)
     let output = &desc.output;
     let (depth_write_enable, rasterizer_discard_enable);
     match output {
-        PipelineOutput::DepthPrepass => {
+        PipelineOutput::Depth => {
             depth_write_enable = vk::TRUE;
             rasterizer_discard_enable = vk::TRUE;
         },
@@ -269,7 +272,7 @@ unsafe fn add_pipeline(builder: &mut PipelineBuilder<'_>, desc: &PipelineDesc)
         }
     );
     let p_color_blend_state = match output {
-        PipelineOutput::DepthPrepass => ptr::null(),
+        PipelineOutput::Depth => ptr::null(),
         PipelineOutput::Lighting { alpha_mode, .. } => {
             assert!(alpha_mode.is_none()); // TODO
             let attachments: *mut [vk::PipelineColorBlendAttachmentState] =
@@ -299,6 +302,7 @@ unsafe fn add_pipeline(builder: &mut PipelineBuilder<'_>, desc: &PipelineDesc)
     });
 }
 
+// TODO: Just generate these on-demand and cache the results.
 unsafe fn build_pipelines(builder: &PipelineBuilder<'_>) ->
     Result<Vec<vk::Pipeline>, vk::Result>
 {
@@ -319,7 +323,7 @@ fn pipeline_descs() -> &'static [PipelineDesc] {
     &[
         PipelineDesc {
             geometry: PipelineGeometry::Static,
-            output: PipelineOutput::DepthPrepass,
+            output: PipelineOutput::Depth,
         },
         PipelineDesc {
             geometry: PipelineGeometry::Static,

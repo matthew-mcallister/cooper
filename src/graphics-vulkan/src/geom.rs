@@ -2,7 +2,7 @@
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VertexAttrs {
     PosNormTex0Tan,
-    PosNormTex0TanJoint,
+    PosNormTex0TanJoints,
 }
 
 #[repr(C)]

@@ -8,31 +8,27 @@ use std::sync::Arc;
 
 use crate::*;
 
-#[inline]
-fn align_to(alignment: vk::DeviceSize, offset: vk::DeviceSize) ->
-    vk::DeviceSize
-{
-    ((offset + alignment - 1) / alignment) * alignment
-}
-
-/// This struct includes information about an allocation that is
-/// relevant to users of that memory. It doesn't include
-/// allocator-specific metadata.
+/// This struct includes the information about an allocation that is
+/// relevant to users of that memory. It includes a size and location
+/// within device memory as well as an optional pointer to a region of
+/// host address space mapped to said memory. It doesn't include
+/// allocator-specific metadata and can't be used to correctly free an
+/// allocation.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate struct AllocInfo {
-    crate memory: vk::DeviceMemory,
-    crate offset: vk::DeviceSize,
-    crate size: vk::DeviceSize,
-    crate ptr: *mut c_void,
+pub struct DeviceSlice {
+    pub memory: vk::DeviceMemory,
+    pub offset: vk::DeviceSize,
+    pub size: vk::DeviceSize,
+    pub ptr: *mut c_void,
 }
 
-impl Default for AllocInfo {
+impl Default for DeviceSlice {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
     }
 }
 
-impl AllocInfo {
+impl DeviceSlice {
     crate fn end(&self) -> vk::DeviceSize {
         self.offset + self.size
     }
@@ -44,10 +40,10 @@ crate fn compatible_type(type_bits: u32, type_index: u32) -> bool {
 }
 
 /// Finds a desirable memory type that meets requirements. This
-/// method follows the guidelines in the spec stating that
-/// implementations are to sort memory types in order of performance, so
-/// the first memory type with the required properties is probably the
-/// best for general use.
+/// method follows the guidelines in the Vulkan spec stating that
+/// implementations are to sort memory types in order of "performance",
+/// so the first memory type with the required properties is probably
+/// the best for general use.
 crate fn find_type_index(
     props: &vk::PhysicalDeviceMemoryProperties,
     type_bits: u32,
@@ -64,7 +60,7 @@ crate fn find_type_index(
 /// The result of allocating memory through an allocator.
 #[derive(Clone, Copy, Debug)]
 crate struct CommonAlloc {
-    info: AllocInfo,
+    info: DeviceSlice,
     // Allocator-specific data (e.g. array indices and flags).
     data_0: u32,
     data_1: u32,
@@ -72,8 +68,55 @@ crate struct CommonAlloc {
 
 impl CommonAlloc {
     /// Returns relevant info for the user of the memory.
-    crate fn info(&self) -> &AllocInfo {
+    crate fn info(&self) -> &DeviceSlice {
         &self.info
+    }
+}
+
+// TODO: dedicated allocations (mid-priority)
+crate trait DeviceAllocator {
+    fn dt(&self) -> &vkl::DeviceTable;
+
+    /// Allocates a chunk of device memory without knowledge of its
+    /// future contents.
+    unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) -> CommonAlloc;
+
+    /// Frees an allocation, if possible.
+    unsafe fn free(&mut self, alloc: &CommonAlloc) {
+
+    /// Creates a buffer and immediately binds it to memory.
+    unsafe fn create_buffer(
+        &mut self,
+        create_info: &vk::BufferCreateInfo,
+    ) -> (vk::Buffer, CommonAlloc) {
+        let mut buf = vk::null();
+        self.dt().create_buffer(create_info as _, ptr::null(), &mut buf as _);
+
+        let mut reqs = Default::default();
+        self.dt().get_buffer_memory_requirements(buf, &mut reqs as _);
+        let alloc = self.allocate(reqs);
+
+        self.dt()
+            .bind_buffer_memory(buf, alloc.info.memory, alloc.info.offset);
+
+        (buf, alloc)
+    }
+
+    /// Creates an image and immediately binds it to memory.
+    unsafe fn create_image(&mut self, create_info: &vk::ImageCreateInfo)
+        -> (vk::Image, CommonAlloc)
+    {
+        let mut image = vk::null();
+        self.dt().create_image(create_info as _, ptr::null(), &mut image as _);
+
+        let mut reqs = Default::default();
+        self.dt().get_image_memory_requirements(image, &mut reqs as _);
+        let alloc = self.allocate(reqs);
+
+        self.dt()
+            .bind_image_memory(image, alloc.info.memory, alloc.info.offset);
+
+        (image, alloc)
     }
 }
 
@@ -193,7 +236,7 @@ impl MemoryPool {
         let ptr = if !chunk.ptr.is_null() { chunk.ptr.add(range.start as _) }
             else { 0usize as _ };
         CommonAlloc {
-            info: AllocInfo {
+            info: DeviceSlice {
                 memory: chunk.memory,
                 offset: range.start,
                 size: range.end - range.start,
@@ -204,10 +247,16 @@ impl MemoryPool {
         }
     }
 
-    crate unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) ->
+
+impl DeviceAllocator for MemoryPool {
+    #[inline]
+    fn dt(&self) -> &vkl::DeviceTable {
+        &self.dt
+    }
+
+    unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) ->
         CommonAlloc
     {
-        // TODO: dedicated allocations (mid-priority)
         assert!(compatible_type(reqs.memory_type_bits, self.type_index));
         // I don't know what this accomplishes besides reducing padding.
         let size = align_to(reqs.alignment, reqs.size);
@@ -223,7 +272,6 @@ impl MemoryPool {
 
         // Didn't find a block; allocate a new chunk and put the
         // allocation there.
-        // TODO: optimize growth formula
         let grow_size = self.chunks.last().unwrap().size;
         self.grow(std::cmp::max(grow_size, size));
 
@@ -233,7 +281,7 @@ impl MemoryPool {
 
     /// Frees an allocation of memory. If any resource is still bound to
     /// that memory, it may alias a future allocation at that site.
-    crate unsafe fn free(&mut self, alloc: &CommonAlloc) {
+    unsafe fn free(&mut self, alloc: &CommonAlloc) {
         let chunk = alloc.data_0 as usize;
         assert!(chunk < self.chunks.len());
         let info = alloc.info;
@@ -274,55 +322,4 @@ impl MemoryPool {
             },
         }
     }
-
-    // TODO: reserve this for ResourceAllocator, as this class is meant
-    // to be low level
-    /// Creates a buffer and immediately binds it to memory.
-    crate unsafe fn create_buffer(
-        &mut self,
-        create_info: &vk::BufferCreateInfo,
-    ) -> (vk::Buffer, CommonAlloc) {
-        let mut buf = vk::null();
-        self.dt.create_buffer(create_info as _, ptr::null(), &mut buf as _)
-            .check().unwrap();
-
-        let mut reqs = Default::default();
-        self.dt.get_buffer_memory_requirements(buf, &mut reqs as _);
-        let alloc = self.allocate(reqs);
-
-        self.dt.bind_buffer_memory(buf, alloc.info.memory, alloc.info.offset)
-            .check().unwrap();
-
-        (buf, alloc)
-    }
-
-    /// Creates an image and immediately binds it to memory.
-    crate unsafe fn create_image(&mut self, create_info: &vk::ImageCreateInfo)
-        -> (vk::Image, CommonAlloc)
-    {
-        let mut image = vk::null();
-        self.dt.create_image(create_info as _, ptr::null(), &mut image as _)
-            .check().unwrap();
-
-        let mut reqs = Default::default();
-        self.dt.get_image_memory_requirements(image, &mut reqs as _);
-        let alloc = self.allocate(reqs);
-
-        self.dt.bind_image_memory(image, alloc.info.memory, alloc.info.offset)
-            .check().unwrap();
-
-        (image, alloc)
-    }
-}
-
-/// A flexible allocator that can create and free buffers and images
-/// dynamically. It is mostly intended to provide storage for static
-/// data in device-local memory, e.g. vertex buffers and textures.
-// TODO: implement this
-#[derive(Debug)]
-crate struct ResourceAllocator {
-    // Buffer-image granularity is funky, so we sidestep the issue by
-    // allocating linear and non-linear resources from separate pools.
-    linear_pool: MemoryPool,
-    nonlinear_pool: MemoryPool,
 }
