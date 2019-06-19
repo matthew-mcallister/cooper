@@ -50,14 +50,3 @@ fn align_to(alignment: vk::DeviceSize, offset: vk::DeviceSize) ->
 {
     ((offset + alignment - 1) / alignment) * alignment
 }
-
-pub unsafe fn do_test(swapchain: &Swapchain) -> Result<(), vk::Result> {
-    let samplers = stock_samplers(swapchain);
-    let set_layouts = stock_set_layouts(swapchain, &samplers);
-    let render_passes = stock_render_passes(swapchain);
-    let shaders = stock_shaders(swapchain);
-    let pipeline_layouts = stock_pipeline_layouts(swapchain, &set_layouts);
-    let _pipelines = create_pipeline_map
-        (swapchain, &render_passes, &shaders, &pipeline_layouts);
-    Ok(())
-}

@@ -27,7 +27,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Clone, Constructor, Copy, Debug)]
+#[derive(Clone, Constructor, Copy, Debug, From, Into)]
 pub struct Dimensions {
     pub width: i32,
     pub height: i32,
@@ -69,7 +69,7 @@ impl System {
         unsafe { glfw::vulkan_supported() == glfw::TRUE }
     }
 
-    pub fn required_extensions(&self) -> &[*const c_char] {
+    pub fn required_instance_extensions(&self) -> &[*const c_char] {
         let mut count: u32 = 0;
         unsafe {
             let ptr = glfw::get_required_instance_extensions(&mut count as _);
@@ -170,6 +170,12 @@ impl Window {
     pub fn should_close(&self) -> bool {
         unsafe {
             glfw::window_should_close(self.inner.as_ptr()) == glfw::TRUE
+        }
+    }
+
+    pub fn set_title(&self, title: *const c_char) {
+        unsafe {
+            glfw::set_window_title(self.inner.as_ptr(), title);
         }
     }
 }

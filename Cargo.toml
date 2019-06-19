@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "src/alloc",
+    "src/demos",
     "src/main",
 ]

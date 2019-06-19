@@ -15,27 +15,17 @@ pub struct Config {
 
 #[derive(Debug)]
 pub struct Instance {
-    crate _config: Config,
+    // Keeps libvulkan loaded
+    crate _wsys: window::System,
     crate table: Arc<vkl::InstanceTable>,
 }
 
-impl Drop for Instance {
-    fn drop(&mut self) {
-        unsafe {
-            self.table.destroy_instance(ptr::null());
-        }
-    }
-}
-
-fn get_required_device_extensions() -> &'static [*const c_char] {
-    &[vk::KHR_SWAPCHAIN_EXTENSION_NAME as *const _ as _]
-}
-
 impl Instance {
-    pub unsafe fn new(config: Config) -> Result<Self, Box<dyn Error>> {
+    pub unsafe fn new(config: Config) -> Result<Self, vk::Result> {
         let wsys = window::System::new()?;
-
-        if !wsys.vulkan_supported() { Err("Vulkan not supported")?; }
+        if !wsys.vulkan_supported() {
+            Err(vk::Result::ERROR_INITIALIZATION_FAILED)?;
+        }
 
         let get_instance_proc_addr = wsys.pfn_get_instance_proc_addr();
         let entry = vkl::Entry::load(get_instance_proc_addr);
@@ -43,26 +33,25 @@ impl Instance {
         let layers =
             if config.enable_validation { &[VALIDATION_LAYER][..] }
             else { &[][..] };
-        let exts = wsys.required_extensions();
+        let exts =
+            if config.enable_wsi { wsys.required_extensions() }
+            else { &[][..] };
 
         let app_info = vk::ApplicationInfo {
-            s_type: vk::StructureType::APPLICATION_INFO,
-            p_next: ptr::null(),
-            p_application_name: c_str!("cooper"),
+            p_application_name: config.app_name,
             application_version: vk::make_version!(0, 1, 0),
             p_engine_name: c_str!("cooper"),
             engine_version: vk::make_version!(0, 1, 0),
-            api_version: vk::API_VERSION_1_0,
+            api_version: vk::API_VERSION_1_1,
+            ..Default::default()
         };
         let create_info = vk::InstanceCreateInfo {
-            s_type: vk::StructureType::INSTANCE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: Default::default(),
             p_application_info: &app_info as _,
             enabled_layer_count: layers.len() as _,
             pp_enabled_layer_names: layers.as_ptr(),
             enabled_extension_count: exts.len() as _,
             pp_enabled_extension_names: exts.as_ptr(),
+            ..Default::default()
         };
         let mut inst = vk::null();
         entry.create_instance(&create_info as _, ptr::null(), &mut inst as _)
@@ -70,38 +59,28 @@ impl Instance {
         let table = vkl::InstanceTable::load(inst, get_instance_proc_addr);
         let table = Arc::new(table);
 
-        Ok(Instance { _config: config, table })
+        Ok(Instance { _wsys: wsys, table })
     }
 }
 
 #[derive(Debug)]
 pub struct Surface {
-    crate instance: Arc<Instance>,
     crate win: Arc<window::Window>,
     crate inner: vk::SurfaceKHR,
 }
 
-impl Drop for Surface {
-    fn drop(&mut self) {
-        unsafe {
-            self.instance.table.destroy_surface_khr(self.inner, ptr::null());
-        }
-    }
-}
-
 impl Surface {
-    pub fn new(instance: Arc<Instance>, win: Arc<window::Window>) ->
+    pub unsafe fn new(instance: &Instance, win: Arc<window::Window>) ->
         Result<Self, vk::Result>
     {
         let inner: vk::SurfaceKHR =
-            unsafe { win.create_surface(instance.table.instance)? };
+            win.create_surface(instance.table.instance)?;
         Ok(Surface { instance, win, inner })
     }
 }
 
 #[derive(Debug)]
 pub struct Device {
-    crate instance: Arc<Instance>,
     crate pdev: vk::PhysicalDevice,
     crate table: Arc<vkl::DeviceTable>,
     crate queue_family: u32,
