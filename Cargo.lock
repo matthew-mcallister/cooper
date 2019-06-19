@@ -350,12 +350,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "vk-ffi"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#048c54ca065ea63f5be2590a14ed4864e06ca909"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#e43b3428111ce89fe97c7da179d27d78336874c7"
 
 [[package]]
 name = "vk-ffi-loader"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#048c54ca065ea63f5be2590a14ed4864e06ca909"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#e43b3428111ce89fe97c7da179d27d78336874c7"
 dependencies = [
  "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]

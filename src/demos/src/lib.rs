@@ -29,3 +29,10 @@ mod init;
 
 pub use graphics::*;
 pub use init::*;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Timestamps {
+    pub old: u64,
+    pub new: u64,
+}

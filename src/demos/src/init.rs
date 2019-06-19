@@ -5,6 +5,8 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
+use crate::Timestamps;
+
 #[derive(Debug, Default)]
 pub struct InstanceConfig {
     pub disable_window_exts: bool,
@@ -57,6 +59,10 @@ impl Instance {
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
         Ok(Arc::new(Instance { wsys, entry, table }))
+    }
+
+    pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
+        vk::enumerate2!(self.table, enumerate_physical_devices).unwrap()
     }
 
     pub unsafe fn get_queue_family_properties(&self, pdev: vk::PhysicalDevice)
@@ -114,8 +120,7 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
     let instance = &*surface.instance;
     let surface = surface.inner;
 
-    let pdevices =
-        vk::enumerate2!(instance.table, enumerate_physical_devices).unwrap();
+    let pdevices = instance.get_physical_devices();
     for pd in pdevices.into_iter() {
         let qf = 0u32;
         let props = instance.get_queue_family_properties(pd)[qf as usize];
@@ -148,6 +153,7 @@ pub struct DeviceConfig {
 pub struct Device {
     pub instance: Arc<Instance>,
     pub pdev: vk::PhysicalDevice,
+    pub props: Box<vk::PhysicalDeviceProperties>,
     pub table: Arc<vkl::DeviceTable>,
 }
 
@@ -199,9 +205,12 @@ impl Device {
         let table =
             Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
+        let props = instance.get_properties(pdev);
+
         Ok(Arc::new(Device {
             instance: Arc::clone(instance),
             pdev,
+            props,
             table,
         }))
     }
@@ -210,6 +219,11 @@ impl Device {
         let mut queue = vk::null();
         self.table.get_device_queue(qf, idx, &mut queue as _);
         queue
+    }
+
+    pub fn timestamps_to_ns(&self, ts: Timestamps) -> f32 {
+        let timestamp_period = self.props.limits.timestamp_period;
+        ((ts.new - ts.old) as f64 * timestamp_period as f64) as f32
     }
 }
 

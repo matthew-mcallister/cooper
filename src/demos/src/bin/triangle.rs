@@ -24,7 +24,7 @@ const FRAG_SHADER_SRC: &'static [u8] =
 
 const FRAME_HISTORY_SIZE: usize = 60;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Debug)]
 struct SwapchainFrame {
     run_yet: bool,
     image: vk::Image,
@@ -32,7 +32,7 @@ struct SwapchainFrame {
     framebuffer: vk::Framebuffer,
     commands: vk::CommandBuffer,
     fence: vk::Fence,
-    query_pool: vk::QueryPool,
+    timer: demos::DeviceTimer,
 }
 
 unsafe fn create_swapchain_frames(
@@ -58,14 +58,7 @@ unsafe fn create_swapchain_frames(
         let view = demos::create_swapchain_image_view(gfx, swapchain, image);
         let framebuffer = demos::create_swapchain_framebuffer
             (gfx, swapchain, render_pass, view);
-
-        let create_info = vk::QueryPoolCreateInfo {
-            query_type: vk::QueryType::TIMESTAMP,
-            query_count: 2,
-            ..Default::default()
-        };
-        let query_pool = gfx.create_query_pool(&create_info);
-
+        let timer = demos::DeviceTimer::new(gfx);
         frames.push(SwapchainFrame {
             run_yet: false,
             image,
@@ -73,7 +66,7 @@ unsafe fn create_swapchain_frames(
             framebuffer,
             commands: command_buffers[idx],
             fence: gfx.create_fence(true),
-            query_pool,
+            timer,
         });
     }
 
@@ -104,9 +97,6 @@ unsafe fn unsafe_main() {
     let surface = demos::Surface::new(&instance, config).unwrap();
 
     let pdev = demos::device_for_surface(&surface).unwrap();
-    let device_props = instance.get_properties(pdev);
-
-    let timestamp_period = device_props.limits.timestamp_period;
 
     let config = Default::default();
     let device = demos::Device::new(&instance, pdev, config).unwrap();
@@ -234,13 +224,7 @@ unsafe fn unsafe_main() {
         let begin_info = Default::default();
         dt.begin_command_buffer(cb, &begin_info as _);
 
-        dt.cmd_reset_query_pool(cb, frame.query_pool, 0, 2);
-        dt.cmd_write_timestamp(
-            cb,
-            vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
-            frame.query_pool,
-            0,
-        );
+        frame.timer.start(cb);
 
         let begin_info = vk::RenderPassBeginInfo {
             render_pass,
@@ -255,12 +239,7 @@ unsafe fn unsafe_main() {
 
         dt.cmd_end_render_pass(cb);
 
-        dt.cmd_write_timestamp(
-            cb,
-            vk::PipelineStageFlags::BOTTOM_OF_PIPE_BIT,
-            frame.query_pool,
-            1,
-        );
+        frame.timer.end(cb);
 
         dt.end_command_buffer(cb);
     }
@@ -292,30 +271,12 @@ unsafe fn unsafe_main() {
             (1, &frame.fence as _, vk::FALSE, u64::max_value()));
         dt.reset_fences(1, &frame.fence as _).check().unwrap();
 
-        // Retrieve frame time
-        if frame.run_yet {
-            #[repr(C)]
-            #[derive(Clone, Copy, Debug, Default)]
-            struct Timestamps {
-                old: u64,
-                new: u64,
-            }
-            let mut timestamps: Timestamps = Default::default();
-            let data_size = std::mem::size_of::<Timestamps>();
-            let stride = std::mem::size_of::<u64>();
-            assert_success!(dt.get_query_pool_results(
-                frame.query_pool,                   // queryPool
-                0,                                  // firstQuery
-                2,                                  // queryCount
-                data_size,                          // dataSize
-                &mut timestamps as *mut _ as _,     // pData
-                stride as _,                        // stride
-                vk::QueryResultFlags::_64_BIT,      // flags
-            ));
-
-            // Update framerate
-            let timestamp_diff = (timestamps.new - timestamps.old) as f32;
-            let frame_ns = timestamp_diff * timestamp_period;
+        // Retrieve previous frame statistics
+        if !frame.run_yet {
+            frame.run_yet = true;
+        } else {
+            let ts = frame.timer.get_query_results().unwrap();
+            let frame_ns = gfx.device.timestamps_to_ns(ts);
             frame_times_ns[frame_num % FRAME_HISTORY_SIZE] = frame_ns;
 
             frame_num += 1;
@@ -327,8 +288,6 @@ unsafe fn unsafe_main() {
                 let title = make_title(fps);
                 window.set_title(title.as_ptr());
             }
-        } else {
-            frame.run_yet = true;
         }
 
         // Begin new frame

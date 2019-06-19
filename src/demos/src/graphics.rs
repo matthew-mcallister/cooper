@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::Arc;
 
-use crate::{Device, Swapchain};
+use crate::{Device, Swapchain, Timestamps};
 
 #[derive(Debug)]
 pub struct GfxState {
@@ -245,4 +245,61 @@ pub unsafe fn create_swapchain_framebuffer(
         ..Default::default()
     };
     gfx.create_framebuffer(&create_info as _)
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DeviceTimer {
+    pub device: Arc<Device>,
+    pub query_pool: vk::QueryPool,
+}
+
+impl DeviceTimer {
+    pub unsafe fn new(gfx: &mut GfxState) -> Self {
+        let create_info = vk::QueryPoolCreateInfo {
+            query_type: vk::QueryType::TIMESTAMP,
+            query_count: 2,
+            ..Default::default()
+        };
+        let query_pool = gfx.create_query_pool(&create_info);
+        DeviceTimer {
+            device: Arc::clone(&gfx.device),
+            query_pool,
+        }
+    }
+
+    pub unsafe fn get_query_results(&self) -> Result<Timestamps, vk::Result> {
+        let mut ts: Timestamps = Default::default();
+        let data_size = std::mem::size_of::<Timestamps>();
+        let stride = std::mem::size_of::<u64>();
+        self.device.table.get_query_pool_results(
+            self.query_pool,                // queryPool
+            0,                              // firstQuery
+            2,                              // queryCount
+            data_size,                      // dataSize
+            &mut ts as *mut _ as _,         // pData
+            stride as _,                    // stride
+            vk::QueryResultFlags::_64_BIT,  // flags
+        ).check_success()?;
+        Ok(ts)
+    }
+
+    pub unsafe fn start(&self, cb: vk::CommandBuffer) {
+        self.device.table.cmd_reset_query_pool(cb, self.query_pool, 0, 2);
+        self.device.table.cmd_write_timestamp(
+            cb,
+            vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
+            self.query_pool,
+            0,
+        );
+    }
+
+    pub unsafe fn end(&self, cb: vk::CommandBuffer) {
+        self.device.table.cmd_write_timestamp(
+            cb,
+            vk::PipelineStageFlags::BOTTOM_OF_PIPE_BIT,
+            self.query_pool,
+            1,
+        );
+    }
 }
