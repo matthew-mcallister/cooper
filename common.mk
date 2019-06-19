@@ -1,0 +1,3 @@
+.RECIPEPREFIX := >
+
+SHADERC := glslc

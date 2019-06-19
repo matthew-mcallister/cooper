@@ -1,0 +1,17 @@
+[package]
+name = "demos"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+window = { path = "../window", package = "cooper-window" }
+
+[dependencies.vk]
+git = "https://gitlab.com/matthew-mcallister/vk-ffi"
+package = "vk-ffi"
+
+[dependencies.vkl]
+git = "https://gitlab.com/matthew-mcallister/vk-ffi"
+package = "vk-ffi-loader"
