@@ -1,6 +1,6 @@
 //! This module implements a fairly thin wrapper around GLFW.
 #![feature(optin_builtin_traits)]
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int};
 use std::ptr;
 
 use derive_more::*;
@@ -9,6 +9,11 @@ macro_rules! c_str {
     ($str:expr) => {
         concat!($str, "\0") as *const str as *const std::os::raw::c_char
     }
+}
+
+#[inline(always)]
+fn bool2int(b: bool) -> c_int {
+    if b { glfw::TRUE } else { glfw::FALSE }
 }
 
 /// An error caused by the windowing system. GLFW reports errors through
@@ -29,8 +34,8 @@ impl std::error::Error for Error {}
 
 #[derive(Clone, Constructor, Copy, Debug, From, Into)]
 pub struct Dimensions {
-    pub width: i32,
-    pub height: i32,
+    pub width: c_int,
+    pub height: c_int,
 }
 
 impl From<Dimensions> for vk::Extent2D {
@@ -46,6 +51,12 @@ impl From<Dimensions> for vk::Extent2D {
 pub struct Config {
     pub title: *const c_char,
     pub dims: Dimensions,
+    pub hints: Hints,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Hints {
+    pub resizable: bool,
 }
 
 static mut GLFW_USE_COUNT: u32 = 0;
@@ -140,8 +151,8 @@ impl Window {
     pub fn sys(&self) -> &System { &self.sys }
 
     pub unsafe fn new(sys: System, config: Config) -> Result<Self, Error> {
-        // TODO: select monitor/fullscreen
         glfw::window_hint(glfw::CLIENT_API, glfw::NO_API);
+        glfw::window_hint(glfw::RESIZABLE, bool2int(config.hints.resizable));
         let inner = glfw::create_window(
             config.dims.width,
             config.dims.height,

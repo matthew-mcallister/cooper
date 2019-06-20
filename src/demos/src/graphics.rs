@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::{Device, Swapchain, Timestamps};
 
 #[derive(Debug)]
-pub struct GfxState {
+pub struct GfxObjects {
     pub device: Arc<Device>,
     pub command_pools: Vec<vk::CommandPool>,
     pub pipelines: Vec<vk::Pipeline>,
@@ -20,7 +20,7 @@ pub struct GfxState {
 
 macro_rules! impl_drop {
     ($(($field:ident, $destructor:ident),)*) => {
-        impl Drop for GfxState {
+        impl Drop for GfxObjects {
             fn drop(&mut self) {
                 unsafe {
                     self.device.table.device_wait_idle();
@@ -48,9 +48,9 @@ impl_drop! {
     (query_pools, destroy_query_pool),
 }
 
-impl GfxState {
+impl GfxObjects {
     pub fn new(device: &Arc<Device>) -> Box<Self> {
-        let res = GfxState {
+        let res = GfxObjects {
             device: Arc::clone(device),
             command_pools: Vec::new(),
             pipelines: Vec::new(),
@@ -208,7 +208,7 @@ impl GfxState {
 }
 
 pub unsafe fn create_swapchain_image_view(
-    gfx: &mut GfxState,
+    gfx: &mut GfxObjects,
     swapchain: &Swapchain,
     image: vk::Image,
 ) -> vk::ImageView {
@@ -229,7 +229,7 @@ pub unsafe fn create_swapchain_image_view(
 }
 
 pub unsafe fn create_swapchain_framebuffer(
-    gfx: &mut GfxState,
+    gfx: &mut GfxObjects,
     swapchain: &Swapchain,
     render_pass: vk::RenderPass,
     view: vk::ImageView,
@@ -255,7 +255,7 @@ pub struct DeviceTimer {
 }
 
 impl DeviceTimer {
-    pub unsafe fn new(gfx: &mut GfxState) -> Self {
+    pub unsafe fn new(gfx: &mut GfxObjects) -> Self {
         let create_info = vk::QueryPoolCreateInfo {
             query_type: vk::QueryType::TIMESTAMP,
             query_count: 2,

@@ -17,13 +17,6 @@ macro_rules! include_shader {
     }
 }
 
-#[macro_export]
-macro_rules! assert_success {
-    ($expr:expr) => {
-        assert_eq!($expr, vk::Result::SUCCESS);
-    }
-}
-
 mod graphics;
 mod init;
 
