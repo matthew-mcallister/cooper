@@ -1,5 +1,4 @@
-//! Shared init code used by demos and benchmarks.
-// TODO: Print human-readable errors
+// TODO: User-friendly errors
 use std::error::Error;
 use std::os::raw::c_char;
 use std::ptr;
