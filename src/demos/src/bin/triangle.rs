@@ -1,9 +1,11 @@
-//! Displays a triangle inside a window.
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-use demos::c_str;
+use demos::{
+    Device, Instance, InstanceConfig, ObjectTracker, Surface, Swapchain, c_str,
+    include_shader,
+};
 
 const TITLE_BASE: &'static str = "Triangle demo\0";
 
@@ -17,218 +19,104 @@ fn app_title() -> *const c_char {
     TITLE_BASE.as_ptr() as _
 }
 
-const VERT_SHADER_SRC: &'static [u8] =
-    demos::include_shader!("triangle_vert.spv");
-const FRAG_SHADER_SRC: &'static [u8] =
-    demos::include_shader!("triangle_frag.spv");
+const VERT_SHADER_SRC: &'static [u8] = include_shader!("triangle_vert.spv");
+const FRAG_SHADER_SRC: &'static [u8] = include_shader!("triangle_frag.spv");
 
-const FRAME_HISTORY_SIZE: usize = 64;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Timestamps {
+    pub old: u64,
+    pub new: u64,
+}
+
+impl Timestamps {
+    pub fn to_ns(self, device: &Device) -> f32 {
+        let timestamp_period = device.props.limits.timestamp_period;
+        ((self.new - self.old) as f64 * timestamp_period as f64) as f32
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct FrameTimer {
+    pub device: Arc<Device>,
+    pub query_pool: vk::QueryPool,
+}
+
+impl FrameTimer {
+    pub unsafe fn new(objs: &mut ObjectTracker) -> Self {
+        let create_info = vk::QueryPoolCreateInfo {
+            query_type: vk::QueryType::TIMESTAMP,
+            query_count: 2,
+            ..Default::default()
+        };
+        let query_pool = objs.create_query_pool(&create_info);
+        FrameTimer {
+            device: Arc::clone(&objs.device),
+            query_pool,
+        }
+    }
+
+    pub unsafe fn get_query_results(&self) -> Timestamps {
+        let mut ts: Timestamps = Default::default();
+        let data_size = std::mem::size_of::<Timestamps>();
+        let stride = std::mem::size_of::<u64>();
+        self.device.table.get_query_pool_results(
+            self.query_pool,                // queryPool
+            0,                              // firstQuery
+            2,                              // queryCount
+            data_size,                      // dataSize
+            &mut ts as *mut _ as _,         // pData
+            stride as _,                    // stride
+            vk::QueryResultFlags::_64_BIT,  // flags
+        ).check_success().unwrap();
+        ts
+    }
+
+    pub unsafe fn start(&self, cb: vk::CommandBuffer) {
+        self.device.table.cmd_reset_query_pool(cb, self.query_pool, 0, 2);
+        self.device.table.cmd_write_timestamp(
+            cb,
+            vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
+            self.query_pool,
+            0,
+        );
+    }
+
+    pub unsafe fn end(&self, cb: vk::CommandBuffer) {
+        self.device.table.cmd_write_timestamp(
+            cb,
+            vk::PipelineStageFlags::BOTTOM_OF_PIPE_BIT,
+            self.query_pool,
+            1,
+        );
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 struct Framebuffer {
     image: vk::Image,
     view: vk::ImageView,
-    framebuffer: vk::Framebuffer,
+    inner: vk::Framebuffer,
 }
 
 #[derive(Debug)]
-struct Frame {
-    framebuffer: u32,
-    commands: vk::CommandBuffer,
-    fence: vk::Fence,
-    timer: demos::DeviceTimer,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct FrameLog {
-    time_ns: f32,
-}
-
-const NUM_FRAMES: usize = 2;
-
-struct RenderState {
-    device: Arc<demos::Device>,
-    swapchain: Arc<demos::Swapchain>,
+struct RenderPath {
+    swapchain: Arc<Swapchain>,
+    objs: Box<ObjectTracker>,
     framebuffers: Vec<Framebuffer>,
-    history: [FrameLog; FRAME_HISTORY_SIZE],
-    frames: [Frame; NUM_FRAMES],
-    frame_counter: u64,
+    render_pass: vk::RenderPass,
+    pipeline: vk::Pipeline,
 }
 
-impl std::fmt::Debug for RenderState {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RenderState {{ ... }}")
-    }
-}
-
-impl RenderState {
-    unsafe fn new(
-        gfx: &mut demos::GfxObjects,
-        swapchain: &Arc<demos::Swapchain>,
-        render_pass: vk::RenderPass,
-    ) -> Self {
-        let framebuffers: Vec<_> = swapchain.images.iter().map(|&image| {
-            let view =
-                demos::create_swapchain_image_view(gfx, swapchain, image);
-            let framebuffer = demos::create_swapchain_framebuffer
-                (gfx, swapchain, render_pass, view);
-            Framebuffer {
-                image,
-                view,
-                framebuffer,
-            }
-        }).collect();
-
-        // TODO: Command pools per frame (and per thread)
-        // You can reset the whole command pool that way
-        let create_info = vk::CommandPoolCreateInfo {
-            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER_BIT,
-            queue_family_index: 0,
-            ..Default::default()
-        };
-        let command_pool = gfx.create_command_pool(&create_info);
-
-        let alloc_info = vk::CommandBufferAllocateInfo {
-            command_pool,
-            command_buffer_count: NUM_FRAMES as _,
-            ..Default::default()
-        };
-        let mut command_buffers = vec![vk::null(); NUM_FRAMES];
-        gfx.alloc_command_buffers(&alloc_info, &mut command_buffers[..]);
-
-        let mut frames = Vec::with_capacity(NUM_FRAMES);
-        for commands in command_buffers {
-            let timer = demos::DeviceTimer::new(gfx);
-            let fence = gfx.create_fence(true);
-            frames.push(Frame {
-                framebuffer: 0,
-                commands,
-                fence,
-                timer,
-            });
-        }
-
-        RenderState {
-            device: Arc::clone(&gfx.device),
-            swapchain: Arc::clone(swapchain),
-            framebuffers,
-            history: [Default::default(); FRAME_HISTORY_SIZE],
-            frames: [frames.pop().unwrap(), frames.pop().unwrap()],
-            frame_counter: 0,
-        }
-    }
-
-    fn cur_frame(&self) -> &Frame {
-        &self.frames[(self.frame_counter % 2) as usize]
-    }
-
-    fn cur_frame_mut(&mut self) -> &mut Frame {
-        &mut self.frames[(self.frame_counter % 2) as usize]
-    }
-
-    // Waits for an old frame to finish to reuse its resources.
-    //
-    // Waiting should only occur when we are rendering at >60fps.
-    unsafe fn wait_for_next_frame(&mut self, present_sem: vk::Semaphore) {
-        self.frame_counter += 1;
-
-        let frame = &*(self.cur_frame_mut() as *mut Frame);
-        let dt = &self.device.table;
-
-        dt.wait_for_fences
-            (1, &frame.fence as _, vk::FALSE, u64::max_value())
-            .check_success().unwrap();
-        dt.reset_fences(1, &frame.fence as _).check().unwrap();
-
-        // Gather statistics from old frame
-        if self.frame_counter > 2 {
-            let ts = frame.timer.get_query_results().unwrap();
-            let time_ns = self.device.timestamps_to_ns(ts);
-            self.history[(self.frame_counter % 60) as usize] = FrameLog {
-                time_ns,
-            };
-        }
-
-        // Wait for framebuffers to come available
-        let mut idx = 0;
-        self.device.table.acquire_next_image_khr(
-            self.swapchain.inner,   // swapchain
-            u64::max_value(),       // timeout
-            present_sem,            // semaphore
-            vk::null(),             // fence
-            &mut idx as _,          // pImageIndex
-        ).check_success().unwrap();
-        self.cur_frame_mut().framebuffer = idx;
-    }
-
-    unsafe fn present_frame(
-        &mut self,
-        queue: vk::Queue,
-        wait_sem: vk::Semaphore,
-    ) {
-        let wait_sems = [wait_sem];
-        let swapchains = std::slice::from_ref(&self.swapchain.inner);
-        let indices = [self.cur_frame().framebuffer];
-        let present_info = vk::PresentInfoKHR {
-            wait_semaphore_count: wait_sems.len() as _,
-            p_wait_semaphores: wait_sems.as_ptr(),
-            swapchain_count: swapchains.len() as _,
-            p_swapchains: swapchains.as_ptr(),
-            p_image_indices: indices.as_ptr(),
-            ..Default::default()
-        };
-        self.device.table.queue_present_khr(queue, &present_info as _)
-            .check_success().unwrap();
-    }
-
-    unsafe fn compute_fps(&self) -> f32 {
-        let total_time_ns: f32 = self.history.iter()
-            .map(|frame| frame.time_ns)
-            .sum();
-        if total_time_ns < 1.0 {
-            // Avoid divide by zero edge cases
-            return 0.0;
-        }
-        let total_time = total_time_ns * 1e-9;
-        FRAME_HISTORY_SIZE as f32 / total_time
+impl RenderPath {
+    unsafe fn new(swapchain: Arc<Swapchain>) -> RenderPath {
+        init_render_path(swapchain)
     }
 }
 
-fn main() {
-    unsafe { unsafe_main() }
-}
-
-unsafe fn unsafe_main() {
-    let config = demos::InstanceConfig {
-        app_info: vk::ApplicationInfo {
-            p_application_name: app_title(),
-            application_version: vk::make_version!(0, 1, 0),
-            api_version: vk::API_VERSION_1_1,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let instance = demos::Instance::new(config).unwrap();
-
-    let title = CString::from_vec_unchecked(make_title(0.0).into());
-    let dims = (1280, 720).into();
-    let config = window::Config {
-        title: title.as_ptr(),
-        dims,
-        hints: Default::default(),
-    };
-    let surface = demos::Surface::new(&instance, config).unwrap();
-
-    let window = Arc::clone(&surface.window);
-
-    let pdev = demos::device_for_surface(&surface).unwrap();
-
-    let config = Default::default();
-    let device = demos::Device::new(&instance, pdev, config).unwrap();
-    let queue = device.get_queue(0, 0);
-    let swapchain = demos::Swapchain::new(&surface, &device).unwrap();
-
-    let mut gfx = demos::GfxObjects::new(&device);
+unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
+    let mut objs = Box::new(ObjectTracker::new(Arc::clone(&swapchain.device)));
 
     let attachments = [vk::AttachmentDescription {
         format: swapchain.format,
@@ -256,13 +144,13 @@ unsafe fn unsafe_main() {
         p_subpasses: subpasses.as_ptr(),
         ..Default::default()
     };
-    let render_pass = gfx.create_render_pass(&create_info);
+    let render_pass = objs.create_render_pass(&create_info);
 
     let create_info = Default::default();
-    let layout = gfx.create_pipeline_layout(&create_info);
+    let layout = objs.create_pipeline_layout(&create_info);
 
-    let vert_shader = gfx.create_shader(VERT_SHADER_SRC);
-    let frag_shader = gfx.create_shader(FRAG_SHADER_SRC);
+    let vert_shader = objs.create_shader(VERT_SHADER_SRC);
+    let frag_shader = objs.create_shader(FRAG_SHADER_SRC);
 
     let p_name = c_str!("main");
     let stages = [
@@ -292,11 +180,7 @@ unsafe fn unsafe_main() {
         min_depth: 0.0,
         max_depth: 1.0,
     }];
-    let render_area = vk::Rect2D::new(
-        vk::Offset2D::new(0, 0),
-        swapchain.extent,
-    );
-    let scissors = std::slice::from_ref(&render_area);
+    let scissors = [swapchain.rectangle()];
     let viewport_state = vk::PipelineViewportStateCreateInfo {
         viewport_count: viewports.len() as _,
         p_viewports: viewports.as_ptr(),
@@ -339,73 +223,376 @@ unsafe fn unsafe_main() {
         subpass: 0,
         ..Default::default()
     };
-    let pipeline = gfx.create_graphics_pipeline(&create_info);
+    let pipeline = objs.create_graphics_pipeline(&create_info);
 
-    let mut render_state = RenderState::new(&mut gfx, &swapchain, render_pass);
+    let framebuffers: Vec<_> = swapchain.images.iter().map(|&image| {
+        let view =
+            demos::create_swapchain_image_view(&mut objs, &swapchain, image);
+        let inner = demos::create_swapchain_framebuffer
+            (&mut objs, &swapchain, render_pass, view);
+        Framebuffer {
+            image,
+            view,
+            inner,
+        }
+    }).collect();
 
-    // ???: Can these be doubly used when graphics/present are split?
-    let present_sem = gfx.create_semaphore();
-    let graphics_sem = gfx.create_semaphore();
+    RenderPath {
+        swapchain,
+        objs,
+        framebuffers,
+        render_pass,
+        pipeline,
+    }
+}
 
-    loop {
-        let dt = &device.table;
+#[derive(Debug)]
+struct FrameState {
+    dt: Arc<vkl::DeviceTable>,
+    path: Arc<RenderPath>,
+    objs: Box<ObjectTracker>,
+    cmd_pool: vk::CommandPool,
+    timer: FrameTimer,
+    done_sem: vk::Semaphore,
+    done_fence: vk::Fence,
+    framebuf_idx: u32,
+    cmds: vk::CommandBuffer,
+}
 
-        render_state.wait_for_next_frame(present_sem);
+#[derive(Clone, Copy, Debug, Default)]
+struct FrameLog {
+    time_ns: f32,
+}
 
-        // Record for new frame
-        let frame = render_state.cur_frame();
+impl FrameState {
+    unsafe fn new(path: Arc<RenderPath>) -> Self {
+        let device = &path.swapchain.device;
+        let mut objs = Box::new(ObjectTracker::new(Arc::clone(device)));
 
-        let cb = frame.commands;
+        let create_info = vk::CommandPoolCreateInfo {
+            flags: vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+            queue_family_index: 0,
+            ..Default::default()
+        };
+        let cmd_pool = objs.create_command_pool(&create_info);
+
+        let alloc_info = vk::CommandBufferAllocateInfo {
+            command_pool: cmd_pool,
+            command_buffer_count: 1,
+            ..Default::default()
+        };
+        let mut cmds = vk::null();
+        objs.alloc_command_buffers(
+            &alloc_info,
+            std::slice::from_mut(&mut cmds),
+        );
+
+        let timer = FrameTimer::new(&mut objs);
+
+        let done_sem = objs.create_semaphore();
+        let done_fence = objs.create_fence(true);
+
+        FrameState {
+            dt: Arc::clone(&device.table),
+            path,
+            objs,
+            cmd_pool,
+            timer,
+            done_sem,
+            done_fence,
+            framebuf_idx: 0,
+            cmds,
+        }
+    }
+
+    fn framebuffer(&self) -> &Framebuffer {
+        &self.path.framebuffers[self.framebuf_idx as usize]
+    }
+
+    unsafe fn record(&mut self) {
+        let dt = &self.dt;
+
+        dt.reset_command_pool(self.cmd_pool, Default::default());
+
+        // Record commands
+        let cb = self.cmds;
         let begin_info = Default::default();
         dt.begin_command_buffer(cb, &begin_info as _);
 
-        frame.timer.start(cb);
+        self.timer.start(cb);
 
-        // TODO: Three fields named `framebuffer` is too many
-        let framebuffer = render_state.framebuffers[frame.framebuffer as usize]
-            .framebuffer;
+        let framebuffer = self.framebuffer().inner;
+        let render_area = self.path.swapchain.rectangle();
         let begin_info = vk::RenderPassBeginInfo {
-            render_pass,
+            render_pass: self.path.render_pass,
             framebuffer,
             render_area,
             ..Default::default()
         };
         dt.cmd_begin_render_pass(cb, &begin_info as _, Default::default());
 
-        dt.cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, pipeline);
+        dt.cmd_bind_pipeline(
+            cb,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.path.pipeline,
+        );
         dt.cmd_draw(cb, 4, 1, 0, 0);
 
         dt.cmd_end_render_pass(cb);
 
-        frame.timer.end(cb);
+        self.timer.end(cb);
 
         dt.end_command_buffer(cb);
+    }
 
-        // Update FPS counter
-        if render_state.frame_counter % FRAME_HISTORY_SIZE as u64 == 0 {
-            let title = make_title(render_state.compute_fps());
-            window.set_title(title.as_ptr());
-        }
-
-        let wait_sems = std::slice::from_ref(&present_sem);
-        let stage_masks =
-            [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT];
-        let command_buffers = std::slice::from_ref(&frame.commands);
-        let sig_sems = std::slice::from_ref(&graphics_sem);
+    unsafe fn submit(&mut self, queue: vk::Queue, wait_sem: vk::Semaphore) {
+        let wait_sems = std::slice::from_ref(&wait_sem);
+        let wait_masks = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT];
+        let cmds = std::slice::from_ref(&self.cmds);
+        let sig_sems = std::slice::from_ref(&self.done_sem);
         let submit_info = vk::SubmitInfo {
             wait_semaphore_count: wait_sems.len() as _,
             p_wait_semaphores: wait_sems.as_ptr(),
-            p_wait_dst_stage_mask: stage_masks.as_ptr(),
-            command_buffer_count: command_buffers.len() as _,
-            p_command_buffers: command_buffers.as_ptr(),
+            p_wait_dst_stage_mask: wait_masks.as_ptr(),
+            command_buffer_count: cmds.len() as _,
+            p_command_buffers: cmds.as_ptr(),
             signal_semaphore_count: sig_sems.len() as _,
             p_signal_semaphores: sig_sems.as_ptr(),
             ..Default::default()
         };
-        dt.queue_submit(queue, 1, &submit_info as _, frame.fence)
+        self.dt.queue_submit(queue, 1, &submit_info as _, self.done_fence)
             .check().unwrap();
+    }
 
-        render_state.present_frame(queue, graphics_sem);
+    unsafe fn wait_until_done(&mut self) {
+        self.dt.wait_for_fences
+            (1, &self.done_fence as _, vk::FALSE, u64::max_value())
+            .check_success().unwrap();
+        self.dt.reset_fences(1, &self.done_fence as _).check().unwrap();
+    }
+
+    unsafe fn collect_log(&mut self) -> FrameLog {
+        // Gather statistics after rendering
+        let ts = self.timer.get_query_results();
+        let time_ns = ts.to_ns(&self.path.swapchain.device);
+        FrameLog { time_ns }
+    }
+}
+
+const FRAME_HISTORY_SIZE: usize = 64;
+const NUM_FRAMES: usize = 2;
+
+struct RenderState {
+    device: Arc<Device>,
+    swapchain: Arc<Swapchain>,
+    objs: Box<ObjectTracker>,
+    frames: Box<[FrameState; NUM_FRAMES]>,
+    frame_counter: u64,
+    history: Box<[FrameLog; FRAME_HISTORY_SIZE]>,
+}
+
+macro_rules! impl_debug {
+    ($struct:ident { $($inner:tt)* }) => {
+        impl std::fmt::Debug for $struct {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                let mut f = f.debug_struct(stringify!($struct));
+                $(impl_debug!(@inner self, f, $inner);)*
+                f.finish()
+            }
+        }
+    };
+    (@inner $self:expr, $fmt:expr, $field:ident) => {
+        $fmt.field(stringify!($field), &$self.$field);
+    };
+    (@inner $self:expr, $fmt:expr, ($field:ident: $str:expr)) => {
+        $fmt.field(stringify!($field), &$str);
+    };
+}
+
+impl_debug!(RenderState {
+    device
+    swapchain
+    objs
+    frames
+    frame_counter
+    (history: "[...]")
+});
+
+// These are written as macros to appease the borrow checker (without
+// resorting to pointer-casting magic)
+macro_rules! cur_frame {
+    ($self:expr) => {
+        &$self.frames[($self.frame_counter % 2) as usize]
+    }
+}
+
+macro_rules! cur_frame_mut {
+    ($self:expr) => {
+        &mut $self.frames[($self.frame_counter % 2) as usize]
+    }
+}
+
+impl RenderState {
+    unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
+        let device = Arc::clone(&swapchain.device);
+        let objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
+
+        let path = Arc::new(RenderPath::new(Arc::clone(&swapchain)));
+
+        let frames = Box::new([
+            FrameState::new(Arc::clone(&path)),
+            FrameState::new(path),
+        ]);
+
+        RenderState {
+            device,
+            swapchain,
+            objs,
+            frames,
+            frame_counter: 0,
+            history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
+        }
+    }
+
+    unsafe fn acquire_framebuffer(
+        &mut self,
+        present_sem: vk::Semaphore,
+    ) -> u32 {
+        let mut idx = 0;
+        self.device.table.acquire_next_image_khr(
+            self.swapchain.inner,   // swapchain
+            u64::max_value(),       // timeout
+            present_sem,            // semaphore
+            vk::null(),             // fence
+            &mut idx as _,          // pImageIndex
+        ).check_success().unwrap();
+        idx
+    }
+
+    unsafe fn record_log(&mut self, log: FrameLog) {
+        assert!(self.frame_counter >= 2);
+        let idx = (self.frame_counter - 2) % FRAME_HISTORY_SIZE as u64;
+        self.history[idx as usize] = log;
+    }
+
+    // Waits for an old frame to finish before reusing its resources to
+    // prepare the next frame.
+    //
+    // Waiting should only occur when we are rendering at >60fps.
+    unsafe fn wait_for_next_frame(&mut self, present_sem: vk::Semaphore) {
+        self.frame_counter += 1;
+
+        cur_frame_mut!(self).wait_until_done();
+        if self.frame_counter > 2 {
+            let log = cur_frame_mut!(self).collect_log();
+            self.record_log(log);
+        }
+        cur_frame_mut!(self).framebuf_idx =
+            self.acquire_framebuffer(present_sem);
+    }
+
+    unsafe fn render(&mut self, queue: vk::Queue, wait_sem: vk::Semaphore) {
+        let frame = cur_frame_mut!(self);
+        frame.record();
+        frame.submit(queue, wait_sem);
+    }
+
+    unsafe fn present(
+        &mut self,
+        queue: vk::Queue,
+    ) {
+        let frame = cur_frame!(self);
+        let wait_sems = std::slice::from_ref(&frame.done_sem);
+        let swapchains = std::slice::from_ref(&self.swapchain.inner);
+        let indices = [frame.framebuf_idx];
+        let present_info = vk::PresentInfoKHR {
+            wait_semaphore_count: wait_sems.len() as _,
+            p_wait_semaphores: wait_sems.as_ptr(),
+            swapchain_count: swapchains.len() as _,
+            p_swapchains: swapchains.as_ptr(),
+            p_image_indices: indices.as_ptr(),
+            ..Default::default()
+        };
+        self.device.table.queue_present_khr(queue, &present_info as _)
+            .check_success().unwrap();
+    }
+
+    fn history_full(&self) -> bool {
+        self.frame_counter % FRAME_HISTORY_SIZE as u64 == 0
+    }
+
+    unsafe fn compute_fps(&self) -> f32 {
+        let total_time_ns: f32 = self.history.iter()
+            .map(|frame| frame.time_ns)
+            .sum();
+        if total_time_ns < 1.0 {
+            // Avoid divide by zero edge cases
+            return 0.0;
+        }
+        let total_time = total_time_ns * 1e-9;
+        FRAME_HISTORY_SIZE as f32 / total_time
+    }
+}
+
+unsafe fn init_video() -> Arc<Swapchain> {
+    let config = InstanceConfig {
+        app_info: vk::ApplicationInfo {
+            p_application_name: app_title(),
+            application_version: vk::make_version!(0, 1, 0),
+            api_version: vk::API_VERSION_1_1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let instance = Arc::new(Instance::new(config).unwrap());
+
+    let title = CString::from_vec_unchecked(make_title(0.0).into());
+    let dims = (1280, 720).into();
+    let config = window::Config {
+        title: title.as_ptr(),
+        dims,
+        hints: Default::default(),
+    };
+    let surface =
+        Arc::new(Surface::new(Arc::clone(&instance), config).unwrap());
+
+    let pdev = demos::device_for_surface(&surface).unwrap();
+
+    let config = Default::default();
+    let device = Arc::new(Device::new(instance, pdev, config).unwrap());
+
+    Arc::new(Swapchain::new(surface, device).unwrap())
+}
+
+fn main() {
+    unsafe { unsafe_main() }
+}
+
+unsafe fn unsafe_main() {
+    let swapchain = init_video();
+
+    let window = Arc::clone(&swapchain.surface.window);
+    let device = Arc::clone(&swapchain.device);
+    let queue = device.get_queue(0, 0);
+
+    let mut state = RenderState::new(swapchain);
+
+    let mut objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
+
+    // ???: Can this be doubly used when graphics/present are split?
+    let present_sem = objs.create_semaphore();
+
+    loop {
+        state.wait_for_next_frame(present_sem);
+
+        // Update FPS counter
+        if state.history_full() {
+            let title = make_title(state.compute_fps());
+            window.set_title(title.as_ptr());
+        }
+
+        state.render(queue, present_sem);
+        state.present(queue);
 
         window.sys().poll_events();
         if window.should_close() { break; }

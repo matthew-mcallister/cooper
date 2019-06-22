@@ -1,10 +1,13 @@
 use std::ptr;
 use std::sync::Arc;
 
-use crate::{Device, Swapchain, Timestamps};
+use crate::Device;
 
+/// This struct provides a versatile alternative to manual destructor
+/// management. Any objects created through the tracker interface will
+/// be destroyed in the proper order by the tracker.
 #[derive(Debug)]
-pub struct GfxObjects {
+pub struct ObjectTracker {
     pub device: Arc<Device>,
     pub command_pools: Vec<vk::CommandPool>,
     pub pipelines: Vec<vk::Pipeline>,
@@ -20,7 +23,7 @@ pub struct GfxObjects {
 
 macro_rules! impl_drop {
     ($(($field:ident, $destructor:ident),)*) => {
-        impl Drop for GfxObjects {
+        impl Drop for ObjectTracker {
             fn drop(&mut self) {
                 unsafe {
                     self.device.table.device_wait_idle();
@@ -48,10 +51,10 @@ impl_drop! {
     (query_pools, destroy_query_pool),
 }
 
-impl GfxObjects {
-    pub fn new(device: &Arc<Device>) -> Box<Self> {
-        let res = GfxObjects {
-            device: Arc::clone(device),
+impl ObjectTracker {
+    pub fn new(device: Arc<Device>) -> Self {
+        let res = ObjectTracker {
+            device,
             command_pools: Vec::new(),
             pipelines: Vec::new(),
             shader_modules: Vec::new(),
@@ -63,7 +66,7 @@ impl GfxObjects {
             fences: Vec::new(),
             query_pools: Vec::new(),
         };
-        Box::new(res)
+        res
     }
 
     pub unsafe fn create_command_pool(
@@ -204,102 +207,5 @@ impl GfxObjects {
             .check().unwrap();
         self.query_pools.push(obj);
         obj
-    }
-}
-
-pub unsafe fn create_swapchain_image_view(
-    gfx: &mut GfxObjects,
-    swapchain: &Swapchain,
-    image: vk::Image,
-) -> vk::ImageView {
-    let create_info = vk::ImageViewCreateInfo {
-        image,
-        view_type: vk::ImageViewType::_2D,
-        format: swapchain.format,
-        subresource_range: vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        },
-        ..Default::default()
-    };
-    gfx.create_image_view(&create_info as _)
-}
-
-pub unsafe fn create_swapchain_framebuffer(
-    gfx: &mut GfxObjects,
-    swapchain: &Swapchain,
-    render_pass: vk::RenderPass,
-    view: vk::ImageView,
-) -> vk::Framebuffer {
-    let attachments = std::slice::from_ref(&view);
-    let create_info = vk::FramebufferCreateInfo {
-        render_pass,
-        attachment_count: attachments.len() as _,
-        p_attachments: attachments.as_ptr(),
-        width: swapchain.extent.width,
-        height: swapchain.extent.height,
-        layers: 1,
-        ..Default::default()
-    };
-    gfx.create_framebuffer(&create_info as _)
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct DeviceTimer {
-    pub device: Arc<Device>,
-    pub query_pool: vk::QueryPool,
-}
-
-impl DeviceTimer {
-    pub unsafe fn new(gfx: &mut GfxObjects) -> Self {
-        let create_info = vk::QueryPoolCreateInfo {
-            query_type: vk::QueryType::TIMESTAMP,
-            query_count: 2,
-            ..Default::default()
-        };
-        let query_pool = gfx.create_query_pool(&create_info);
-        DeviceTimer {
-            device: Arc::clone(&gfx.device),
-            query_pool,
-        }
-    }
-
-    pub unsafe fn get_query_results(&self) -> Result<Timestamps, vk::Result> {
-        let mut ts: Timestamps = Default::default();
-        let data_size = std::mem::size_of::<Timestamps>();
-        let stride = std::mem::size_of::<u64>();
-        self.device.table.get_query_pool_results(
-            self.query_pool,                // queryPool
-            0,                              // firstQuery
-            2,                              // queryCount
-            data_size,                      // dataSize
-            &mut ts as *mut _ as _,         // pData
-            stride as _,                    // stride
-            vk::QueryResultFlags::_64_BIT,  // flags
-        ).check_success()?;
-        Ok(ts)
-    }
-
-    pub unsafe fn start(&self, cb: vk::CommandBuffer) {
-        self.device.table.cmd_reset_query_pool(cb, self.query_pool, 0, 2);
-        self.device.table.cmd_write_timestamp(
-            cb,
-            vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
-            self.query_pool,
-            0,
-        );
-    }
-
-    pub unsafe fn end(&self, cb: vk::CommandBuffer) {
-        self.device.table.cmd_write_timestamp(
-            cb,
-            vk::PipelineStageFlags::BOTTOM_OF_PIPE_BIT,
-            self.query_pool,
-            1,
-        );
     }
 }

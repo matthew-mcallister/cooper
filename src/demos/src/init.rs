@@ -5,11 +5,8 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::Timestamps;
-
 #[derive(Debug, Default)]
 pub struct InstanceConfig {
-    pub disable_window_exts: bool,
     pub app_info: vk::ApplicationInfo,
     pub layers: Vec<*const c_char>,
     pub extensions: Vec<*const c_char>,
@@ -30,7 +27,7 @@ impl Drop for Instance {
 
 impl Instance {
     pub unsafe fn new(config: InstanceConfig) ->
-        Result<Arc<Self>, Box<dyn Error>>
+        Result<Self, Box<dyn Error>>
     {
         let wsys = window::System::new()?;
         if !wsys.vulkan_supported() { Err("vulkan not available")?; }
@@ -39,9 +36,7 @@ impl Instance {
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
         let (layers, mut extensions) = (config.layers, config.extensions);
-        if !config.disable_window_exts {
-            extensions.extend(wsys.required_instance_extensions());
-        }
+        extensions.extend(wsys.required_instance_extensions());
 
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &config.app_info as _,
@@ -58,7 +53,7 @@ impl Instance {
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
-        Ok(Arc::new(Instance { wsys, entry, table }))
+        Ok(Instance { wsys, entry, table })
     }
 
     pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
@@ -100,17 +95,17 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    pub unsafe fn new(instance: &Arc<Instance>, config: window::Config) ->
-        Result<Arc<Self>, Box<dyn Error>>
+    pub unsafe fn new(instance: Arc<Instance>, config: window::Config) ->
+        Result<Self, Box<dyn Error>>
     {
         let wsys = window::System::new()?;
         let window = Arc::new(window::Window::new(wsys, config)?);
         let inner = window.create_surface(instance.table.instance)?;
-        Ok(Arc::new(Surface {
-            instance: Arc::clone(instance),
+        Ok(Surface {
+            instance,
             window,
             inner,
-        }))
+        })
     }
 }
 
@@ -143,7 +138,6 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
 
 #[derive(Debug, Default)]
 pub struct DeviceConfig {
-    pub disable_window_exts: bool,
     pub extensions: Vec<*const c_char>,
     pub features: Box<vk::PhysicalDeviceFeatures>,
     pub queues: Vec<vk::DeviceQueueCreateInfo>,
@@ -165,10 +159,10 @@ impl Drop for Device {
 
 impl Device {
     pub unsafe fn new(
-        instance: &Arc<Instance>,
+        instance: Arc<Instance>,
         pdev: vk::PhysicalDevice,
         config: DeviceConfig,
-    ) -> Result<Arc<Self>, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error>> {
         let it = &instance.table;
         let mut queue_infos = config.queues;
         if queue_infos.is_empty() {
@@ -181,9 +175,7 @@ impl Device {
         }
 
         let mut exts = config.extensions;
-        if !config.disable_window_exts {
-            exts.push(vk::KHR_SWAPCHAIN_EXTENSION_NAME);
-        }
+        exts.push(vk::KHR_SWAPCHAIN_EXTENSION_NAME);
 
         let features = config.features;
 
@@ -207,12 +199,12 @@ impl Device {
 
         let props = instance.get_properties(pdev);
 
-        Ok(Arc::new(Device {
-            instance: Arc::clone(instance),
+        Ok(Device {
+            instance,
             pdev,
             props,
             table,
-        }))
+        })
     }
 
     pub unsafe fn get_queue(&self, qf: u32, idx: u32) -> vk::Queue {
@@ -220,18 +212,12 @@ impl Device {
         self.table.get_device_queue(qf, idx, &mut queue as _);
         queue
     }
-
-    pub fn timestamps_to_ns(&self, ts: Timestamps) -> f32 {
-        let timestamp_period = self.props.limits.timestamp_period;
-        ((ts.new - ts.old) as f64 * timestamp_period as f64) as f32
-    }
 }
 
 #[derive(Debug)]
 pub struct Swapchain {
     pub surface: Arc<Surface>,
     pub device: Arc<Device>,
-    pub dt: Arc<vkl::DeviceTable>,
     pub inner: vk::SwapchainKHR,
     pub format: vk::Format,
     pub extent: vk::Extent2D,
@@ -245,13 +231,12 @@ impl Drop for Swapchain {
 }
 
 impl Swapchain {
-    pub unsafe fn new(surface: &Arc<Surface>, device: &Arc<Device>) ->
-        Result<Arc<Self>, Box<dyn Error>>
+    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
+        Result<Self, Box<dyn Error>>
     {
         let mut result = Swapchain {
-            surface: Arc::clone(surface),
-            device: Arc::clone(device),
-            dt: Arc::clone(&device.table),
+            surface,
+            device,
             inner: vk::null(),
             format: Default::default(),
             extent: Default::default(),
@@ -259,14 +244,19 @@ impl Swapchain {
         };
         result.recreate()?;
 
-        Ok(Arc::new(result))
+        Ok(result)
+    }
+
+    pub fn rectangle(&self) -> vk::Rect2D {
+        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
     }
 
     unsafe fn destroy(&self) {
-        self.dt.destroy_swapchain_khr(self.inner, ptr::null());
+        self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
     }
 
     pub unsafe fn recreate(&mut self) -> Result<(), Box<dyn Error>> {
+        let dt = &self.device.table;
         let it: &vkl::InstanceTable = &self.device.instance.table;
         let pdev = self.device.pdev;
 
@@ -342,13 +332,13 @@ impl Swapchain {
             old_swapchain: self.inner,
         };
         let mut new = vk::null();
-        self.dt.create_swapchain_khr
+        dt.create_swapchain_khr
             (&create_info as _, ptr::null(), &mut new as _).check()?;
 
         self.destroy();
         self.inner = new;
         self.images = vk::enumerate2!
-            (self.dt, get_swapchain_images_khr, self.inner)?;
+            (dt, get_swapchain_images_khr, self.inner)?;
 
         Ok(())
     }
