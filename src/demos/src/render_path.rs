@@ -15,7 +15,6 @@ pub struct Framebuffer {
 #[derive(Debug)]
 pub struct RenderPath {
     pub swapchain: Arc<Swapchain>,
-    pub objs: Box<ObjectTracker>,
     pub render_pass: vk::RenderPass,
     pub framebuffers: Vec<Framebuffer>,
     pub sprite_set_layout: SetLayoutInfo,
@@ -24,13 +23,19 @@ pub struct RenderPath {
 }
 
 impl RenderPath {
-    pub unsafe fn new(swapchain: Arc<Swapchain>) -> RenderPath {
-        init_render_path(swapchain)
+    pub unsafe fn new(
+        swapchain: Arc<Swapchain>,
+        res: &mut InitResources,
+    ) -> RenderPath {
+        init_render_path(swapchain, res)
     }
 }
 
-unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
-    let mut objs = Box::new(ObjectTracker::new(Arc::clone(&swapchain.device)));
+unsafe fn init_render_path(
+    swapchain: Arc<Swapchain>,
+    res: &mut InitResources,
+) -> RenderPath {
+    let objs = &mut res.objs;
 
     let attachments = [vk::AttachmentDescription {
         format: swapchain.format,
@@ -96,7 +101,7 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
     }).collect();
 
     // Bindings for textures and sprite data
-    let sprite_set_layout = create_descriptor_set_layout(&mut objs, &[
+    let sprite_set_layout = create_descriptor_set_layout(objs, &[
         vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
@@ -193,7 +198,6 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
 
     RenderPath {
         swapchain,
-        objs,
         render_pass,
         framebuffers,
         sprite_set_layout,

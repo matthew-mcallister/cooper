@@ -4,6 +4,12 @@ use crate::*;
 
 const FRAME_HISTORY_SIZE: usize = 64;
 
+#[derive(Debug)]
+pub struct InitResources {
+    pub objs: ObjectTracker,
+    pub mapped_mem: MemoryPool,
+}
+
 pub unsafe fn init_video() -> Arc<Swapchain> {
     let config = InstanceConfig {
         app_info: vk::ApplicationInfo {
@@ -37,8 +43,7 @@ pub unsafe fn init_video() -> Arc<Swapchain> {
 pub struct RenderState {
     pub device: Arc<Device>,
     pub swapchain: Arc<Swapchain>,
-    pub objs: Box<ObjectTracker>,
-    pub mapped_mem: MemoryPool,
+    pub res: Box<InitResources>,
     pub frames: Box<[FrameState; 2]>,
     pub frame_counter: u64,
     pub history: Box<[FrameLog; FRAME_HISTORY_SIZE]>,
@@ -65,7 +70,7 @@ macro_rules! impl_debug {
 impl_debug!(RenderState {
     device
     swapchain
-    objs
+    res
     frames
     frame_counter
     (history: "[...]")
@@ -88,7 +93,6 @@ macro_rules! cur_frame_mut {
 impl RenderState {
     pub unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
         let device = Arc::clone(&swapchain.device);
-        let mut objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
 
         let type_index = find_memory_type(&device, visible_coherent_memory())
             .unwrap();
@@ -99,26 +103,24 @@ impl RenderState {
         };
         let mut mapped_mem = MemoryPool::new(Arc::clone(&device), create_info);
 
-        let path = Arc::new(RenderPath::new(Arc::clone(&swapchain)));
-
-        let frames =
-            Box::new(FrameState::new_pair(path, &mut objs, &mut mapped_mem));
+        let objs = ObjectTracker::new(Arc::clone(&device));
+        let mut res = Box::new(InitResources { objs, mapped_mem });
+        let path = Arc::new(RenderPath::new(Arc::clone(&swapchain), &mut res));
+        let frames = Box::new(FrameState::new_pair(path, &mut res));
 
         RenderState {
             device,
             swapchain,
-            objs,
-            mapped_mem,
+            res,
             frames,
             frame_counter: 0,
             history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
         }
     }
 
-    pub unsafe fn acquire_framebuffer(
-        &mut self,
-        present_sem: vk::Semaphore,
-    ) -> u32 {
+    pub unsafe fn acquire_framebuffer(&mut self, present_sem: vk::Semaphore) ->
+        u32
+    {
         let mut idx = 0;
         self.device.table.acquire_next_image_khr(
             self.swapchain.inner,   // swapchain
@@ -139,7 +141,7 @@ impl RenderState {
     // Waits for an old frame to finish before reusing its resources to
     // prepare the next frame.
     //
-    // Waiting should only occur when we are rendering at >60fps.
+    // Waiting should only occur when rendering at >60fps.
     pub unsafe fn wait_for_next_frame(&mut self, present_sem: vk::Semaphore) {
         self.frame_counter += 1;
 

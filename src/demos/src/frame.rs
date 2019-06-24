@@ -7,13 +7,13 @@ use crate::*;
 pub struct FrameState {
     pub dt: Arc<vkl::DeviceTable>,
     pub path: Arc<RenderPath>,
-    pub objs: Box<ObjectTracker>,
     pub cmd_pool: vk::CommandPool,
     pub cmds: vk::CommandBuffer,
     pub timer: FrameTimer,
     pub done_sem: vk::Semaphore,
     pub done_fence: vk::Fence,
     pub sprite_buf: SpriteBuffer,
+    pub sprite_set: vk::DescriptorSet,
     pub framebuf_idx: u32,
     pub sprite_count: u32,
 }
@@ -25,21 +25,56 @@ pub struct FrameLog {
 
 const SPRITE_BUF_SIZE: u32 = 2048;
 
+unsafe fn prepare_descriptor_sets(
+    path: &RenderPath,
+    res: &mut InitResources,
+    sprite_buffers: &[SpriteBuffer; 2],
+) -> [vk::DescriptorSet; 2] {
+    let objs = &mut res.objs;
+
+    let set_layout = &path.sprite_set_layout;
+    let params = CreateDescriptorSetParams {
+        count: 2,
+        ..Default::default()
+    };
+    let (_, mut sets) = create_descriptor_sets(objs, set_layout, params);
+
+    for (&set, sbuf) in sets.iter().zip(sprite_buffers.iter()) {
+        let buf_writes = [vk::DescriptorBufferInfo {
+            buffer: sbuf.buffer,
+            offset: sbuf.offset,
+            range: sbuf.range,
+        }];
+        let writes = [vk::WriteDescriptorSet {
+            dst_set: set,
+            dst_binding: 0,
+            descriptor_count: 1,
+            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+            p_buffer_info: buf_writes.as_ptr(),
+            ..Default::default()
+        }];
+        objs.device.table.update_descriptor_sets(
+            writes.len() as _,
+            writes.as_ptr(),
+            0,
+            ptr::null(),
+        );
+    }
+
+    [sets.pop().unwrap(), sets.pop().unwrap()]
+}
+
 impl FrameState {
-    pub unsafe fn new_pair(
-        path: Arc<RenderPath>,
-        shared_objs: &mut ObjectTracker,
-        mapped_mem: &mut MemoryPool,
-    ) -> [Self; 2] {
+    pub unsafe fn new_pair(path: Arc<RenderPath>, res: &mut InitResources) ->
+        [Self; 2]
+    {
         let device = &path.swapchain.device;
-        assert!(mapped_mem.mapped());
 
-        let sprite_bufs = SpriteBuffer::new_pair
-            (&path, shared_objs, mapped_mem, SPRITE_BUF_SIZE);
+        let sprite_bufs = SpriteBuffer::new_pair(&path, res, SPRITE_BUF_SIZE);
+        let desc_sets = prepare_descriptor_sets(&path, res, &sprite_bufs);
 
-        let create_frame = |sprite_buf| {
-            let mut objs = Box::new(ObjectTracker::new(Arc::clone(device)));
-
+        let objs = &mut res.objs;
+        let mut create_frame = |sprite_buf, sprite_set| {
             let create_info = vk::CommandPoolCreateInfo {
                 flags: vk::CommandPoolCreateFlags::TRANSIENT_BIT,
                 queue_family_index: 0,
@@ -58,7 +93,7 @@ impl FrameState {
                 std::slice::from_mut(&mut cmds),
             );
 
-            let timer = FrameTimer::new(&mut objs);
+            let timer = FrameTimer::new(objs);
 
             let done_sem = objs.create_semaphore();
             let done_fence = objs.create_fence(true);
@@ -66,20 +101,21 @@ impl FrameState {
             FrameState {
                 dt: Arc::clone(&device.table),
                 path: Arc::clone(&path),
-                objs,
                 cmd_pool,
                 cmds,
                 timer,
                 done_sem,
                 done_fence,
                 sprite_buf,
+                sprite_set,
                 framebuf_idx: 0,
                 sprite_count: 0,
             }
         };
 
         let [s0, s1] = sprite_bufs;
-        [create_frame(s0), create_frame(s1)]
+        let [d0, d1] = desc_sets;
+        [create_frame(s0, d0), create_frame(s1, d1)]
     }
 
     fn framebuffer(&self) -> &Framebuffer {
@@ -114,7 +150,7 @@ impl FrameState {
             self.path.sprite_pipeline,
         );
 
-        let descriptors = std::slice::from_ref(&self.sprite_buf.desc_set);
+        let descriptors = std::slice::from_ref(&self.sprite_set);
         dt.cmd_bind_descriptor_sets(
             cb,                                 // commandBuffer
             vk::PipelineBindPoint::GRAPHICS,    // pipelineBindPoint
