@@ -13,9 +13,12 @@ pub struct ObjectTracker {
     pub pipelines: Vec<vk::Pipeline>,
     pub shader_modules: Vec<vk::ShaderModule>,
     pub pipeline_layouts: Vec<vk::PipelineLayout>,
+    pub descriptor_pools: Vec<vk::DescriptorPool>,
+    pub descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub render_passes: Vec<vk::RenderPass>,
     pub image_views: Vec<vk::ImageView>,
+    pub buffers: Vec<vk::Buffer>,
     pub semaphores: Vec<vk::Semaphore>,
     pub fences: Vec<vk::Fence>,
     pub query_pools: Vec<vk::QueryPool>,
@@ -43,9 +46,12 @@ impl_drop! {
     (pipelines, destroy_pipeline),
     (shader_modules, destroy_shader_module),
     (pipeline_layouts, destroy_pipeline_layout),
+    (descriptor_pools, destroy_descriptor_pool),
+    (descriptor_set_layouts, destroy_descriptor_set_layout),
     (framebuffers, destroy_framebuffer),
     (render_passes, destroy_render_pass),
     (image_views, destroy_image_view),
+    (buffers, destroy_buffer),
     (semaphores, destroy_semaphore),
     (fences, destroy_fence),
     (query_pools, destroy_query_pool),
@@ -59,9 +65,12 @@ impl ObjectTracker {
             pipelines: Vec::new(),
             shader_modules: Vec::new(),
             pipeline_layouts: Vec::new(),
+            descriptor_pools: Vec::new(),
+            descriptor_set_layouts: Vec::new(),
             framebuffers: Vec::new(),
             render_passes: Vec::new(),
             image_views: Vec::new(),
+            buffers: Vec::new(),
             semaphores: Vec::new(),
             fences: Vec::new(),
             query_pools: Vec::new(),
@@ -206,6 +215,30 @@ impl ObjectTracker {
             (create_info as _, ptr::null(), &mut obj as _)
             .check().unwrap();
         self.query_pools.push(obj);
+        obj
+    }
+
+    pub unsafe fn create_descriptor_set_layout(
+        &mut self,
+        create_info: &vk::DescriptorSetLayoutCreateInfo,
+    ) -> vk::DescriptorSetLayout {
+        let mut obj = vk::null();
+        self.device.table.create_descriptor_set_layout
+            (create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        self.descriptor_set_layouts.push(obj);
+        obj
+    }
+
+    pub unsafe fn create_descriptor_pool(
+        &mut self,
+        create_info: &vk::DescriptorPoolCreateInfo,
+    ) -> vk::DescriptorPool {
+        let mut obj = vk::null();
+        self.device.table.create_descriptor_pool
+            (create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        self.descriptor_pools.push(obj);
         obj
     }
 }

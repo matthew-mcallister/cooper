@@ -1,3 +1,4 @@
+use std::ptr;
 use std::sync::Arc;
 
 use crate::*;
@@ -8,11 +9,13 @@ pub struct FrameState {
     pub path: Arc<RenderPath>,
     pub objs: Box<ObjectTracker>,
     pub cmd_pool: vk::CommandPool,
+    pub cmds: vk::CommandBuffer,
     pub timer: FrameTimer,
     pub done_sem: vk::Semaphore,
     pub done_fence: vk::Fence,
+    pub sprite_buf: SpriteBuffer,
     pub framebuf_idx: u32,
-    pub cmds: vk::CommandBuffer,
+    pub sprite_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -20,45 +23,63 @@ pub struct FrameLog {
     pub time_ns: f32,
 }
 
+const SPRITE_BUF_SIZE: u32 = 2048;
+
 impl FrameState {
-    pub unsafe fn new(path: Arc<RenderPath>) -> Self {
+    pub unsafe fn new_pair(
+        path: Arc<RenderPath>,
+        shared_objs: &mut ObjectTracker,
+        mapped_mem: &mut MemoryPool,
+    ) -> [Self; 2] {
         let device = &path.swapchain.device;
-        let mut objs = Box::new(ObjectTracker::new(Arc::clone(device)));
+        assert!(mapped_mem.mapped());
 
-        let create_info = vk::CommandPoolCreateInfo {
-            flags: vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-            queue_family_index: 0,
-            ..Default::default()
+        let sprite_bufs = SpriteBuffer::new_pair
+            (&path, shared_objs, mapped_mem, SPRITE_BUF_SIZE);
+
+        let create_frame = |sprite_buf| {
+            let mut objs = Box::new(ObjectTracker::new(Arc::clone(device)));
+
+            let create_info = vk::CommandPoolCreateInfo {
+                flags: vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+                queue_family_index: 0,
+                ..Default::default()
+            };
+            let cmd_pool = objs.create_command_pool(&create_info);
+
+            let alloc_info = vk::CommandBufferAllocateInfo {
+                command_pool: cmd_pool,
+                command_buffer_count: 1,
+                ..Default::default()
+            };
+            let mut cmds = vk::null();
+            objs.alloc_command_buffers(
+                &alloc_info,
+                std::slice::from_mut(&mut cmds),
+            );
+
+            let timer = FrameTimer::new(&mut objs);
+
+            let done_sem = objs.create_semaphore();
+            let done_fence = objs.create_fence(true);
+
+            FrameState {
+                dt: Arc::clone(&device.table),
+                path: Arc::clone(&path),
+                objs,
+                cmd_pool,
+                cmds,
+                timer,
+                done_sem,
+                done_fence,
+                sprite_buf,
+                framebuf_idx: 0,
+                sprite_count: 0,
+            }
         };
-        let cmd_pool = objs.create_command_pool(&create_info);
 
-        let alloc_info = vk::CommandBufferAllocateInfo {
-            command_pool: cmd_pool,
-            command_buffer_count: 1,
-            ..Default::default()
-        };
-        let mut cmds = vk::null();
-        objs.alloc_command_buffers(
-            &alloc_info,
-            std::slice::from_mut(&mut cmds),
-        );
-
-        let timer = FrameTimer::new(&mut objs);
-
-        let done_sem = objs.create_semaphore();
-        let done_fence = objs.create_fence(true);
-
-        FrameState {
-            dt: Arc::clone(&device.table),
-            path,
-            objs,
-            cmd_pool,
-            timer,
-            done_sem,
-            done_fence,
-            framebuf_idx: 0,
-            cmds,
-        }
+        let [s0, s1] = sprite_bufs;
+        [create_frame(s0), create_frame(s1)]
     }
 
     fn framebuffer(&self) -> &Framebuffer {
@@ -90,9 +111,21 @@ impl FrameState {
         dt.cmd_bind_pipeline(
             cb,
             vk::PipelineBindPoint::GRAPHICS,
-            self.path.pipeline,
+            self.path.sprite_pipeline,
         );
-        dt.cmd_draw(cb, 4, 1, 0, 0);
+
+        let descriptors = std::slice::from_ref(&self.sprite_buf.desc_set);
+        dt.cmd_bind_descriptor_sets(
+            cb,                                 // commandBuffer
+            vk::PipelineBindPoint::GRAPHICS,    // pipelineBindPoint
+            self.path.sprite_pipeline_layout,   // layout
+            0,                                  // firstSet
+            descriptors.len() as _,             // descriptorSetCount
+            descriptors.as_ptr(),               // pDescriptorSets
+            0,                                  // dynamicOffsetCount
+            ptr::null(),                        // pDynamicOffsets
+        );
+        dt.cmd_draw(cb, 4, self.sprite_count, 0, 0);
 
         dt.cmd_end_render_pass(cb);
 

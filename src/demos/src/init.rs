@@ -147,6 +147,7 @@ pub struct Device {
     pub instance: Arc<Instance>,
     pub pdev: vk::PhysicalDevice,
     pub props: Box<vk::PhysicalDeviceProperties>,
+    pub mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
     pub table: Arc<vkl::DeviceTable>,
 }
 
@@ -197,11 +198,15 @@ impl Device {
             Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
         let props = instance.get_properties(pdev);
+        let mut mem_props: Box<vk::PhysicalDeviceMemoryProperties> =
+            Default::default();
+        it.get_physical_device_memory_properties(pdev, &mut *mem_props as _);
 
         Ok(Device {
             instance,
             pdev,
             props,
+            mem_props,
             table,
         })
     }

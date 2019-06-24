@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::*;
 
 const FRAME_HISTORY_SIZE: usize = 64;
-const NUM_FRAMES: usize = 2;
 
 pub unsafe fn init_video() -> Arc<Swapchain> {
     let config = InstanceConfig {
@@ -39,7 +38,8 @@ pub struct RenderState {
     pub device: Arc<Device>,
     pub swapchain: Arc<Swapchain>,
     pub objs: Box<ObjectTracker>,
-    pub frames: Box<[FrameState; NUM_FRAMES]>,
+    pub mapped_mem: MemoryPool,
+    pub frames: Box<[FrameState; 2]>,
     pub frame_counter: u64,
     pub history: Box<[FrameLog; FRAME_HISTORY_SIZE]>,
 }
@@ -88,19 +88,27 @@ macro_rules! cur_frame_mut {
 impl RenderState {
     pub unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
         let device = Arc::clone(&swapchain.device);
-        let objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
+        let mut objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
+
+        let type_index = find_memory_type(&device, visible_coherent_memory())
+            .unwrap();
+        let create_info = MemoryPoolCreateInfo {
+            type_index,
+            mapped: true,
+            base_size: 0x100_0000,
+        };
+        let mut mapped_mem = MemoryPool::new(Arc::clone(&device), create_info);
 
         let path = Arc::new(RenderPath::new(Arc::clone(&swapchain)));
 
-        let frames = Box::new([
-            FrameState::new(Arc::clone(&path)),
-            FrameState::new(path),
-        ]);
+        let frames =
+            Box::new(FrameState::new_pair(path, &mut objs, &mut mapped_mem));
 
         RenderState {
             device,
             swapchain,
             objs,
+            mapped_mem,
             frames,
             frame_counter: 0,
             history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
@@ -142,6 +150,16 @@ impl RenderState {
         }
         cur_frame_mut!(self).framebuf_idx =
             self.acquire_framebuffer(present_sem);
+    }
+
+    pub fn set_sprite_count(&mut self, count: u32) {
+        cur_frame_mut!(self).sprite_count = count;
+    }
+
+    pub fn sprites(&self) -> *mut [Sprite] {
+        let frame = cur_frame!(self);
+        let count = frame.sprite_count;
+        unsafe { &mut (*frame.sprite_buf.data)[..count as _] as _ }
     }
 
     pub unsafe fn render(&mut self, queue: vk::Queue, wait_sem: vk::Semaphore)

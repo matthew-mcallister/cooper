@@ -16,9 +16,11 @@ pub struct Framebuffer {
 pub struct RenderPath {
     pub swapchain: Arc<Swapchain>,
     pub objs: Box<ObjectTracker>,
-    pub framebuffers: Vec<Framebuffer>,
     pub render_pass: vk::RenderPass,
-    pub pipeline: vk::Pipeline,
+    pub framebuffers: Vec<Framebuffer>,
+    pub sprite_set_layout: SetLayoutInfo,
+    pub sprite_pipeline_layout: vk::PipelineLayout,
+    pub sprite_pipeline: vk::Pipeline,
 }
 
 impl RenderPath {
@@ -58,8 +60,60 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
     };
     let render_pass = objs.create_render_pass(&create_info);
 
-    let create_info = Default::default();
-    let layout = objs.create_pipeline_layout(&create_info);
+    let framebuffers: Vec<_> = swapchain.images.iter().map(|&image| {
+        let create_info = vk::ImageViewCreateInfo {
+            image,
+            view_type: vk::ImageViewType::_2D,
+            format: swapchain.format,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        };
+        let view = objs.create_image_view(&create_info as _);
+
+        let attachments = std::slice::from_ref(&view);
+        let create_info = vk::FramebufferCreateInfo {
+            render_pass,
+            attachment_count: attachments.len() as _,
+            p_attachments: attachments.as_ptr(),
+            width: swapchain.extent.width,
+            height: swapchain.extent.height,
+            layers: 1,
+            ..Default::default()
+        };
+        let inner = objs.create_framebuffer(&create_info as _);
+
+        Framebuffer {
+            image,
+            view,
+            inner,
+        }
+    }).collect();
+
+    // Bindings for textures and sprite data
+    let sprite_set_layout = create_descriptor_set_layout(&mut objs, &[
+        vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+                | vk::ShaderStageFlags::FRAGMENT_BIT,
+            ..Default::default()
+        },
+    ]);
+
+    let set_layouts = [sprite_set_layout.inner];
+    let create_info = vk::PipelineLayoutCreateInfo {
+        set_layout_count: set_layouts.len() as _,
+        p_set_layouts: set_layouts.as_ptr(),
+        ..Default::default()
+    };
+    let sprite_pipeline_layout = objs.create_pipeline_layout(&create_info);
 
     let vert_shader = objs.create_shader(VERT_SHADER_SRC);
     let frag_shader = objs.create_shader(FRAG_SHADER_SRC);
@@ -130,53 +184,20 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>) -> RenderPath {
         p_rasterization_state: &rasterization_state as _,
         p_multisample_state: &multisample_state as _,
         p_color_blend_state: &color_blend_state as _,
-        layout,
+        layout: sprite_pipeline_layout,
         render_pass,
         subpass: 0,
         ..Default::default()
     };
-    let pipeline = objs.create_graphics_pipeline(&create_info);
-
-    let framebuffers: Vec<_> = swapchain.images.iter().map(|&image| {
-        let create_info = vk::ImageViewCreateInfo {
-            image,
-            view_type: vk::ImageViewType::_2D,
-            format: swapchain.format,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            ..Default::default()
-        };
-        let view = objs.create_image_view(&create_info as _);
-
-        let attachments = std::slice::from_ref(&view);
-        let create_info = vk::FramebufferCreateInfo {
-            render_pass,
-            attachment_count: attachments.len() as _,
-            p_attachments: attachments.as_ptr(),
-            width: swapchain.extent.width,
-            height: swapchain.extent.height,
-            layers: 1,
-            ..Default::default()
-        };
-        let inner = objs.create_framebuffer(&create_info as _);
-
-        Framebuffer {
-            image,
-            view,
-            inner,
-        }
-    }).collect();
+    let sprite_pipeline = objs.create_graphics_pipeline(&create_info);
 
     RenderPath {
         swapchain,
         objs,
-        framebuffers,
         render_pass,
-        pipeline,
+        framebuffers,
+        sprite_set_layout,
+        sprite_pipeline_layout,
+        sprite_pipeline,
     }
 }

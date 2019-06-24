@@ -1,6 +1,5 @@
 //! This module defines memory allocators. It is not responsible for
-//! populating memory or binding buffers, as that is the resource
-//! manager's job.
+//! populating memory, i.e. resource management.
 use std::ops::Range;
 use std::ffi::c_void;
 use std::ptr;
@@ -8,12 +7,18 @@ use std::sync::Arc;
 
 use crate::*;
 
+#[inline(always)]
+crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
+    vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
+        vk::MemoryPropertyFlags::HOST_COHERENT_BIT
+}
+
 /// This struct includes the information about an allocation that is
 /// relevant to users of that memory. It includes a size and location
 /// within device memory as well as an optional pointer to a region of
 /// host address space mapped to said memory. It doesn't include
-/// allocator-specific metadata and can't be used to correctly free an
-/// allocation.
+/// allocator-specific metadata and can't be used to correctly free most
+/// allocations.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct DeviceSlice {
     pub memory: vk::DeviceMemory,
@@ -29,14 +34,36 @@ impl Default for DeviceSlice {
 }
 
 impl DeviceSlice {
-    crate fn end(&self) -> vk::DeviceSize {
+    pub fn end(&self) -> vk::DeviceSize {
         self.offset + self.size
+    }
+
+    pub fn as_slice<T: Sized>(&self) -> *mut [T] {
+        let mem_size = self.size as usize;
+        let elem_size = std::mem::size_of::<T>();
+        assert_eq!(mem_size % elem_size, 0);
+        let slice_len = mem_size / elem_size;
+        unsafe {
+            std::slice::from_raw_parts_mut(self.ptr as *mut T, slice_len) as _
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn as_block<T: Sized>(&self) -> *mut T {
+        assert_eq!(self.size as usize, std::mem::size_of::<T>());
+        self.ptr as _
     }
 }
 
 /// Returns whether the type index is in the bitmask of types.
-crate fn compatible_type(type_bits: u32, type_index: u32) -> bool {
+fn compatible_type(type_bits: u32, type_index: u32) -> bool {
     type_bits & (1 << type_index) > 0
+}
+
+pub fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
+    impl Iterator<Item = &vk::MemoryType>
+{
+    props.memory_types.iter().take(props.memory_type_count as _)
 }
 
 /// Finds a desirable memory type that meets requirements. This
@@ -44,22 +71,16 @@ crate fn compatible_type(type_bits: u32, type_index: u32) -> bool {
 /// implementations are to sort memory types in order of "performance",
 /// so the first memory type with the required properties is probably
 /// the best for general use.
-crate fn find_type_index(
-    props: &vk::PhysicalDeviceMemoryProperties,
-    type_bits: u32,
-    flags: vk::MemoryPropertyFlags,
-) -> Option<u32> {
-    for idx in 0..props.memory_type_count {
-        let f = props.memory_types[idx as usize].property_flags;
-        if compatible_type(type_bits, idx) && flags.contains(f)
-            { return Some(idx); }
-    }
-    None
+pub fn find_memory_type(device: &Device, flags: vk::MemoryPropertyFlags) ->
+    Option<u32>
+{
+    iter_memory_types(&device.mem_props)
+        .position(|ty| ty.property_flags.contains(flags))
+        .map(|x| x as _)
 }
 
-/// The result of allocating memory through an allocator.
 #[derive(Clone, Copy, Debug)]
-crate struct CommonAlloc {
+pub struct CommonAlloc {
     info: DeviceSlice,
     // Allocator-specific data (e.g. array indices and flags).
     data_0: u32,
@@ -67,13 +88,12 @@ crate struct CommonAlloc {
 }
 
 impl CommonAlloc {
-    /// Returns relevant info for the user of the memory.
-    crate fn info(&self) -> &DeviceSlice {
+    pub fn info(&self) -> &DeviceSlice {
         &self.info
     }
 }
 
-// TODO: dedicated allocations (mid-priority)
+// TODO: dedicated allocations
 crate trait DeviceAllocator {
     fn dt(&self) -> &vkl::DeviceTable;
 
@@ -81,11 +101,13 @@ crate trait DeviceAllocator {
     /// future contents.
     unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) -> CommonAlloc;
 
-    /// Frees an allocation, if possible.
-    unsafe fn free(&mut self, alloc: &CommonAlloc) {
+    /// Frees a memory allocation, if possible. If any resource is still
+    /// bound to that memory, it may alias a future allocation that
+    /// overlaps the same range.
+    unsafe fn free(&mut self, alloc: &CommonAlloc);
 
     /// Creates a buffer and immediately binds it to memory.
-    unsafe fn create_buffer(
+    unsafe fn alloc_buffer(
         &mut self,
         create_info: &vk::BufferCreateInfo,
     ) -> (vk::Buffer, CommonAlloc) {
@@ -96,14 +118,14 @@ crate trait DeviceAllocator {
         self.dt().get_buffer_memory_requirements(buf, &mut reqs as _);
         let alloc = self.allocate(reqs);
 
-        self.dt()
-            .bind_buffer_memory(buf, alloc.info.memory, alloc.info.offset);
+        let DeviceSlice { memory, offset, .. } = *alloc.info();
+        self.dt().bind_buffer_memory(buf, memory, offset);
 
         (buf, alloc)
     }
 
     /// Creates an image and immediately binds it to memory.
-    unsafe fn create_image(&mut self, create_info: &vk::ImageCreateInfo)
+    unsafe fn alloc_image(&mut self, create_info: &vk::ImageCreateInfo)
         -> (vk::Image, CommonAlloc)
     {
         let mut image = vk::null();
@@ -113,8 +135,8 @@ crate trait DeviceAllocator {
         self.dt().get_image_memory_requirements(image, &mut reqs as _);
         let alloc = self.allocate(reqs);
 
-        self.dt()
-            .bind_image_memory(image, alloc.info.memory, alloc.info.offset);
+        let DeviceSlice { memory, offset, .. } = *alloc.info();
+        self.dt().bind_image_memory(image, memory, offset);
 
         (image, alloc)
     }
@@ -123,10 +145,11 @@ crate trait DeviceAllocator {
 /// This is a simple address-ordered FIFO allocator. It is somewhat
 /// low-level as it doesn't check for correct memory usage.
 #[derive(Debug)]
-crate struct MemoryPool {
-    dt: Arc<vkl::DeviceTable>,
+pub struct MemoryPool {
+    device: Arc<Device>,
     type_index: u32,
-    map_memory: bool,
+    mapped: bool,
+    base_size: vk::DeviceSize,
     chunks: Vec<Chunk>,
     free: Vec<FreeBlock>,
 }
@@ -134,16 +157,16 @@ crate struct MemoryPool {
 impl Drop for MemoryPool {
     fn drop(&mut self) {
         for &chunk in self.chunks.iter() {
-            unsafe { self.dt.free_memory(chunk.memory, ptr::null()); }
+            unsafe { self.dt().free_memory(chunk.memory, ptr::null()); }
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-crate struct MemoryPoolCreateInfo {
-    crate type_index: u32,
-    crate map_memory: bool,
-    crate capacity: vk::DeviceSize,
+pub struct MemoryPoolCreateInfo {
+    pub type_index: u32,
+    pub mapped: bool,
+    pub base_size: vk::DeviceSize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -167,35 +190,40 @@ impl FreeBlock {
 }
 
 impl MemoryPool {
-    crate unsafe fn new(
-        dt: Arc<vkl::DeviceTable>,
+    pub unsafe fn new(
+        device: Arc<Device>,
         create_info: MemoryPoolCreateInfo,
     ) -> Self {
         let mut res = MemoryPool {
-            dt,
+            device,
             type_index: create_info.type_index,
-            map_memory: create_info.map_memory,
+            mapped: create_info.mapped,
+            base_size: create_info.base_size,
             chunks: Vec::new(),
             free: Vec::new(),
         };
-        res.grow(create_info.capacity);
+        assert!(!res.mapped() ||
+            res.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT));
+        res.grow(create_info.base_size);
         res
     }
 
-    crate unsafe fn grow(&mut self, size: vk::DeviceSize) {
+    pub unsafe fn grow(&mut self, size: vk::DeviceSize) {
+        let dt = &self.dt();
+
         let alloc_info = vk::MemoryAllocateInfo {
             allocation_size: size,
             memory_type_index: self.type_index,
             ..Default::default()
         };
         let mut memory = vk::null();
-        self.dt.allocate_memory(&alloc_info, ptr::null(), &mut memory as _)
+        dt.allocate_memory(&alloc_info, ptr::null(), &mut memory as _)
             .check().expect("failed to allocate device memory");
 
         let mut ptr = 0usize as *mut c_void;
-        if self.map_memory {
+        if self.mapped {
             let flags = Default::default();
-            self.dt.map_memory(memory, 0, size, flags, &mut ptr as _)
+            dt.map_memory(memory, 0, size, flags, &mut ptr as _)
                 .check().expect("failed to map device memory");
         }
 
@@ -247,23 +275,31 @@ impl MemoryPool {
         }
     }
 
-
-impl DeviceAllocator for MemoryPool {
-    #[inline]
-    fn dt(&self) -> &vkl::DeviceTable {
-        &self.dt
+    pub fn mapped(&self) -> bool {
+        self.mapped
     }
 
-    unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) ->
-        CommonAlloc
+    pub fn flags(&self) -> vk::MemoryPropertyFlags {
+        self.device.mem_props.memory_types[self.type_index as usize]
+            .property_flags
+    }
+}
+
+
+impl DeviceAllocator for MemoryPool {
+    fn dt(&self) -> &vkl::DeviceTable {
+        &self.device.table
+    }
+
+    unsafe fn allocate(&mut self, reqs: vk::MemoryRequirements) -> CommonAlloc
     {
         assert!(compatible_type(reqs.memory_type_bits, self.type_index));
-        // I don't know what this accomplishes besides reducing padding.
-        let size = align_to(reqs.alignment, reqs.size);
+        // Avoid leaving padding bytes as free blocks
+        let size = align_64(reqs.alignment, reqs.size);
 
         for idx in 0..self.free.len() {
             let block = &mut self.free[idx];
-            let offset = align_to(reqs.alignment, block.start);
+            let offset = align_64(reqs.alignment, block.start);
             if block.end - offset >= size {
                 // Found a spot
                 return self.carve_block(idx, offset..(offset + size));
@@ -272,22 +308,19 @@ impl DeviceAllocator for MemoryPool {
 
         // Didn't find a block; allocate a new chunk and put the
         // allocation there.
-        let grow_size = self.chunks.last().unwrap().size;
-        self.grow(std::cmp::max(grow_size, size));
+        self.grow(align_64(self.base_size, size));
 
         let block = self.free.len() - 1;
         self.carve_block(block, 0..size)
     }
 
-    /// Frees an allocation of memory. If any resource is still bound to
-    /// that memory, it may alias a future allocation at that site.
     unsafe fn free(&mut self, alloc: &CommonAlloc) {
         let chunk = alloc.data_0 as usize;
         assert!(chunk < self.chunks.len());
         let info = alloc.info;
         let (start, end) = (info.offset, info.end());
 
-        // TODO: Optimize search and insertion (b-tree maybe)
+        // TODO: Optimize search and insertion
         let mut idx = self.free.len();
         for i in 0..self.free.len() {
             let block = self.free[i];
@@ -317,8 +350,8 @@ impl DeviceAllocator for MemoryPool {
             (true, false) => self.free[idx - 1].end = end,
             (false, true) => self.free[idx].start = start,
             (true, true) => {
-                self.free[idx].start = self.free[idx - 1].start;
-                self.free.remove(idx - 1);
+                self.free[idx - 1].end = self.free[idx].end;
+                self.free.remove(idx);
             },
         }
     }
