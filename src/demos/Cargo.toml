@@ -6,6 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
+lodepng = "2.4"
 window = { path = "../window", package = "cooper-window" }
 
 [dependencies.vk]

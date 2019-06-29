@@ -43,7 +43,11 @@ pub unsafe fn init_video() -> Arc<Swapchain> {
 pub struct RenderState {
     pub device: Arc<Device>,
     pub swapchain: Arc<Swapchain>,
+    pub gfx_queue: vk::Queue,
+    pub gfx_queue_family: u32,
     pub res: Box<InitResources>,
+    pub present_sem: vk::Semaphore,
+    pub textures: Box<TextureManager>,
     pub frames: Box<[FrameState; 2]>,
     pub frame_counter: u64,
     pub history: Box<[FrameLog; FRAME_HISTORY_SIZE]>,
@@ -94,6 +98,9 @@ impl RenderState {
     pub unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
         let device = Arc::clone(&swapchain.device);
 
+        let gfx_queue_family = 0;
+        let gfx_queue = device.get_queue(0, 0);
+
         let type_index = find_memory_type(&device, visible_coherent_memory())
             .unwrap();
         let create_info = MemoryPoolCreateInfo {
@@ -101,31 +108,45 @@ impl RenderState {
             mapped: true,
             base_size: 0x100_0000,
         };
-        let mut mapped_mem = MemoryPool::new(Arc::clone(&device), create_info);
+        let mapped_mem = MemoryPool::new(Arc::clone(&device), create_info);
 
         let objs = ObjectTracker::new(Arc::clone(&device));
         let mut res = Box::new(InitResources { objs, mapped_mem });
+
+        let present_sem = res.objs.create_semaphore();
+
         let path = Arc::new(RenderPath::new(Arc::clone(&swapchain), &mut res));
+        let textures = Box::new(TextureManager::new
+            (Arc::clone(&path), &mut res, gfx_queue_family));
         let frames = Box::new(FrameState::new_pair(path, &mut res));
 
         RenderState {
             device,
             swapchain,
+            gfx_queue,
+            gfx_queue_family,
             res,
+            present_sem,
+            textures,
             frames,
             frame_counter: 0,
             history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
         }
     }
 
-    pub unsafe fn acquire_framebuffer(&mut self, present_sem: vk::Semaphore) ->
-        u32
-    {
+    pub unsafe fn load_textures(&mut self) {
+        for _ in 0..256 {
+            self.textures.load_png("/tmp/test_pattern.png").unwrap();
+        }
+        self.textures.flush();
+    }
+
+    pub unsafe fn acquire_framebuffer(&mut self) -> u32 {
         let mut idx = 0;
         self.device.table.acquire_next_image_khr(
             self.swapchain.inner,   // swapchain
             u64::max_value(),       // timeout
-            present_sem,            // semaphore
+            self.present_sem,       // semaphore
             vk::null(),             // fence
             &mut idx as _,          // pImageIndex
         ).check_success().unwrap();
@@ -142,7 +163,7 @@ impl RenderState {
     // prepare the next frame.
     //
     // Waiting should only occur when rendering at >60fps.
-    pub unsafe fn wait_for_next_frame(&mut self, present_sem: vk::Semaphore) {
+    pub unsafe fn wait_for_next_frame(&mut self) {
         self.frame_counter += 1;
 
         cur_frame_mut!(self).wait_until_done();
@@ -150,8 +171,7 @@ impl RenderState {
             let log = cur_frame_mut!(self).collect_log();
             self.record_log(log);
         }
-        cur_frame_mut!(self).framebuf_idx =
-            self.acquire_framebuffer(present_sem);
+        cur_frame_mut!(self).framebuf_idx = self.acquire_framebuffer();
     }
 
     pub fn set_sprite_count(&mut self, count: u32) {
@@ -164,17 +184,14 @@ impl RenderState {
         unsafe { &mut (*frame.sprite_buf.data)[..count as _] as _ }
     }
 
-    pub unsafe fn render(&mut self, queue: vk::Queue, wait_sem: vk::Semaphore)
+    pub unsafe fn render(&mut self)
     {
         let frame = cur_frame_mut!(self);
         frame.record();
-        frame.submit(queue, wait_sem);
+        frame.submit(self.gfx_queue, self.present_sem);
     }
 
-    pub unsafe fn present(
-        &mut self,
-        queue: vk::Queue,
-    ) {
+    pub unsafe fn present(&mut self) {
         let frame = cur_frame!(self);
         let wait_sems = std::slice::from_ref(&frame.done_sem);
         let swapchains = std::slice::from_ref(&self.swapchain.inner);
@@ -187,7 +204,7 @@ impl RenderState {
             p_image_indices: indices.as_ptr(),
             ..Default::default()
         };
-        self.device.table.queue_present_khr(queue, &present_info as _)
+        self.device.table.queue_present_khr(self.gfx_queue, &present_info as _)
             .check_success().unwrap();
     }
 
@@ -200,7 +217,7 @@ impl RenderState {
             .map(|frame| frame.time_ns)
             .sum();
         if total_time_ns < 1.0 {
-            // Avoid divide by zero edge cases
+            // Avoid divide-by-zero edge cases
             return 0.0;
         }
         let total_time = total_time_ns * 1e-9;

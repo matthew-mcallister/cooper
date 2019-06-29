@@ -42,12 +42,6 @@ pub struct SetLayoutInfo {
     pub counts: DescriptorCounts,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-crate struct CreateDescriptorSetParams {
-    crate count: u32,
-    crate pool_flags: vk::DescriptorPoolCreateFlags,
-}
-
 crate unsafe fn create_descriptor_set_layout(
     objs: &mut ObjectTracker,
     bindings: &[vk::DescriptorSetLayoutBinding],
@@ -63,6 +57,12 @@ crate unsafe fn create_descriptor_set_layout(
         inner: layout,
         counts,
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+crate struct CreateDescriptorSetParams {
+    crate count: u32,
+    crate pool_flags: vk::DescriptorPoolCreateFlags,
 }
 
 crate unsafe fn create_descriptor_sets(

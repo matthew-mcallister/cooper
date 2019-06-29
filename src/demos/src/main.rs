@@ -29,6 +29,7 @@ mod object;
 mod render_path;
 mod sprite;
 mod stats;
+mod texture;
 
 use descriptor::*;
 use frame::*;
@@ -39,6 +40,7 @@ use object::*;
 use render_path::*;
 use sprite::*;
 use stats::*;
+use texture::*;
 
 #[inline(always)]
 #[allow(dead_code)]
@@ -49,6 +51,18 @@ crate fn align(alignment: usize, offset: usize) -> usize {
 #[inline(always)]
 crate fn align_64(alignment: u64, offset: u64) -> u64 {
     ((offset + alignment - 1) / alignment) * alignment
+}
+
+#[inline(always)]
+crate fn opt(cond: bool) -> Option<()> {
+    if cond { Some(()) } else { None }
+}
+
+// Vexing that this isn't in std
+#[inline(always)]
+crate fn slice_to_bytes<T: Sized>(slice: &[T]) -> &[u8] {
+    let len = slice.len() * std::mem::size_of::<T>();
+    unsafe { std::slice::from_raw_parts(slice as *const [T] as _, len) }
 }
 
 const TITLE_BASE: &'static str = "Triangle demo\0";
@@ -69,20 +83,13 @@ fn main() {
 
 unsafe fn unsafe_main() {
     let swapchain = init_video();
-
     let window = Arc::clone(&swapchain.surface.window);
-    let device = Arc::clone(&swapchain.device);
-    let queue = device.get_queue(0, 0);
-
     let mut state = RenderState::new(swapchain);
 
-    let mut objs = Box::new(ObjectTracker::new(Arc::clone(&device)));
-
-    // ???: Can this be doubly used when graphics/present are split?
-    let present_sem = objs.create_semaphore();
+    state.load_textures();
 
     loop {
-        state.wait_for_next_frame(present_sem);
+        state.wait_for_next_frame();
 
         state.set_sprite_count(2);
         let sprites = state.sprites();
@@ -107,8 +114,8 @@ unsafe fn unsafe_main() {
             textures: [0, 0],
         };
 
-        state.render(queue, present_sem);
-        state.present(queue);
+        state.render();
+        state.present();
 
         // Update FPS counter
         if state.history_full() {

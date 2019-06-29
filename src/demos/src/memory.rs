@@ -67,7 +67,7 @@ pub fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
 }
 
 /// Finds a desirable memory type that meets requirements. This
-/// method follows the guidelines in the Vulkan spec stating that
+/// function follows the guidelines in the Vulkan spec stating that
 /// implementations are to sort memory types in order of "performance",
 /// so the first memory type with the required properties is probably
 /// the best for general use.
@@ -94,6 +94,8 @@ impl CommonAlloc {
 }
 
 // TODO: dedicated allocations
+// TODO: I think this trait should actually be a wrapper type and the
+// underlying trait should only implement alloc and free
 crate trait DeviceAllocator {
     fn dt(&self) -> &vkl::DeviceTable;
 

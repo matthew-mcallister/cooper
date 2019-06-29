@@ -70,7 +70,7 @@ impl FrameState {
     {
         let device = &path.swapchain.device;
 
-        let sprite_bufs = SpriteBuffer::new_pair(&path, res, SPRITE_BUF_SIZE);
+        let sprite_bufs = SpriteBuffer::new_pair(res, SPRITE_BUF_SIZE);
         let desc_sets = prepare_descriptor_sets(&path, res, &sprite_bufs);
 
         let objs = &mut res.objs;

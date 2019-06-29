@@ -28,7 +28,6 @@ pub struct SpriteBuffer {
 
 impl SpriteBuffer {
     pub unsafe fn new_pair(
-        path: &RenderPath,
         res: &mut InitResources,
         size: u32,
     ) -> [Self; 2] {
