@@ -135,13 +135,6 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
     Err("no presentable graphics device".into())
 }
 
-#[derive(Debug, Default)]
-pub struct DeviceConfig {
-    pub extensions: Vec<*const c_char>,
-    pub features: Box<vk::PhysicalDeviceFeatures>,
-    pub queues: Vec<vk::DeviceQueueCreateInfo>,
-}
-
 #[derive(Debug)]
 pub struct Device {
     pub instance: Arc<Instance>,
@@ -157,34 +150,87 @@ impl Drop for Device {
     }
 }
 
+macro_rules! check_for_features {
+    ($expected:expr, $actual:expr; $($member:ident,)*) => {
+        $(
+            if ($expected.$member == vk::TRUE) & ($actual.$member != vk::TRUE)
+            {
+                Err(concat!(
+                    "graphics device missing required feature:",
+                    stringify!($member),
+                ))?;
+            }
+        )*
+    }
+}
+
+unsafe fn check_for_features(
+    it: &vkl::InstanceTable,
+    pdev: vk::PhysicalDevice,
+    _desired_features: &vk::PhysicalDeviceFeatures,
+    desired_descriptor_indexing_features:
+        &vk::PhysicalDeviceDescriptorIndexingFeaturesEXT,
+) -> Result<(), Box<dyn Error>> {
+    let mut descriptor_indexing_features =
+        vk::PhysicalDeviceDescriptorIndexingFeaturesEXT::default();
+    let mut features = vk::PhysicalDeviceFeatures2 {
+        p_next: &mut descriptor_indexing_features as *mut _ as _,
+        ..Default::default()
+    };
+    it.get_physical_device_features_2(pdev, &mut features as _);
+
+    // TODO: Add logic methods to Vk*Features in the bindings
+    check_for_features!(
+        desired_descriptor_indexing_features, descriptor_indexing_features;
+        shader_sampled_image_array_non_uniform_indexing,
+        descriptor_binding_sampled_image_update_after_bind,
+        descriptor_binding_update_unused_while_pending,
+        descriptor_binding_partially_bound,
+        runtime_descriptor_array,
+    );
+
+    Ok(())
+}
+
 impl Device {
-    pub unsafe fn new(
-        instance: Arc<Instance>,
-        pdev: vk::PhysicalDevice,
-        config: DeviceConfig,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
+        Result<Self, Box<dyn Error>>
+    {
         let it = &instance.table;
-        let mut queue_infos = config.queues;
-        if queue_infos.is_empty() {
-            queue_infos.push(vk::DeviceQueueCreateInfo {
-                queue_family_index: 0,
-                queue_count: 1,
-                p_queue_priorities: &1f32 as _,
+
+        // TODO: check that extensions are actually supported
+        let exts = [
+            vk::KHR_SWAPCHAIN_EXTENSION_NAME,
+            vk::EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        ];
+
+        let features = Default::default();
+        let descriptor_indexing_features =
+            vk::PhysicalDeviceDescriptorIndexingFeaturesEXT {
+                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                descriptor_binding_update_unused_while_pending: vk::TRUE,
+                descriptor_binding_partially_bound: vk::TRUE,
+                runtime_descriptor_array: vk::TRUE,
                 ..Default::default()
-            });
-        }
+            };
+        check_for_features
+            (it, pdev, &features, &descriptor_indexing_features)?;
 
-        let mut exts = config.extensions;
-        exts.push(vk::KHR_SWAPCHAIN_EXTENSION_NAME);
-
-        let features = config.features;
+        let queue_infos = [vk::DeviceQueueCreateInfo {
+            queue_family_index: 0,
+            queue_count: 1,
+            p_queue_priorities: &1f32 as _,
+            ..Default::default()
+        }];
 
         let create_info = vk::DeviceCreateInfo {
+            p_next: &descriptor_indexing_features as *const _ as _,
             queue_create_info_count: queue_infos.len() as _,
             p_queue_create_infos: queue_infos.as_ptr(),
             enabled_extension_count: exts.len() as _,
             pp_enabled_extension_names: exts.as_ptr(),
-            p_enabled_features: &*features as _,
+            p_enabled_features: &features as _,
             ..Default::default()
         };
         let mut dev = vk::null();

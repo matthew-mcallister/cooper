@@ -1,4 +1,5 @@
 #![feature(crate_visibility_modifier)]
+#![feature(seek_convenience)]
 #![feature(try_blocks)]
 
 macro_rules! c_str {

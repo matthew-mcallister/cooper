@@ -42,8 +42,8 @@ impl SpriteBuffer {
             usage: vk::BufferUsageFlags::STORAGE_BUFFER_BIT,
             ..Default::default()
         };
-        let (buffer, mem) = mapped_mem.alloc_buffer(&create_info);
-        objs.buffers.push(buffer);
+        let buffer = objs.create_buffer(&create_info);
+        let mem = mapped_mem.alloc_buffer_memory(buffer);
 
         let size = size as usize;
         let slice: *mut [Sprite] = mem.info().as_slice();

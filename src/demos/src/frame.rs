@@ -33,11 +33,9 @@ unsafe fn prepare_descriptor_sets(
     let objs = &mut res.objs;
 
     let set_layout = &path.sprite_set_layout;
-    let params = CreateDescriptorSetParams {
-        count: 2,
-        ..Default::default()
-    };
-    let (_, mut sets) = create_descriptor_sets(objs, set_layout, params);
+    let count = 2;
+    let flags = Default::default();
+    let (_, mut sets) = create_descriptor_sets(objs, set_layout, count, flags);
 
     for (&set, sbuf) in sets.iter().zip(sprite_buffers.iter()) {
         let buf_writes = [vk::DescriptorBufferInfo {
@@ -150,7 +148,7 @@ impl FrameState {
             self.path.sprite_pipeline,
         );
 
-        let descriptors = std::slice::from_ref(&self.sprite_set);
+        let descriptors = [self.path.texture_set, self.sprite_set];
         dt.cmd_bind_descriptor_sets(
             cb,                                 // commandBuffer
             vk::PipelineBindPoint::GRAPHICS,    // pipelineBindPoint

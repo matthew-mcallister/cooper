@@ -11,6 +11,7 @@ pub struct InitResources {
 }
 
 pub unsafe fn init_video() -> Arc<Swapchain> {
+    println!("init_video");
     let config = InstanceConfig {
         app_info: vk::ApplicationInfo {
             p_application_name: app_title(),
@@ -34,8 +35,7 @@ pub unsafe fn init_video() -> Arc<Swapchain> {
 
     let pdev = device_for_surface(&surface).unwrap();
 
-    let config = Default::default();
-    let device = Arc::new(Device::new(instance, pdev, config).unwrap());
+    let device = Arc::new(Device::new(instance, pdev).unwrap());
 
     Arc::new(Swapchain::new(surface, device).unwrap())
 }
@@ -96,6 +96,7 @@ macro_rules! cur_frame_mut {
 
 impl RenderState {
     pub unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
+        println!("RenderState::new");
         let device = Arc::clone(&swapchain.device);
 
         let gfx_queue_family = 0;
@@ -117,7 +118,7 @@ impl RenderState {
 
         let path = Arc::new(RenderPath::new(Arc::clone(&swapchain), &mut res));
         let textures = Box::new(TextureManager::new
-            (Arc::clone(&path), &mut res, gfx_queue_family));
+            (&mut res, Arc::clone(&path), gfx_queue_family));
         let frames = Box::new(FrameState::new_pair(path, &mut res));
 
         RenderState {
@@ -135,6 +136,9 @@ impl RenderState {
     }
 
     pub unsafe fn load_textures(&mut self) {
+        // TODO: Load asynchronously
+        // Also, this is unusably slow
+        println!("RenderState::load_textures");
         for _ in 0..256 {
             self.textures.load_png("/tmp/test_pattern.png").unwrap();
         }

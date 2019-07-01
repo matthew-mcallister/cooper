@@ -108,39 +108,31 @@ crate trait DeviceAllocator {
     /// overlaps the same range.
     unsafe fn free(&mut self, alloc: &CommonAlloc);
 
-    /// Creates a buffer and immediately binds it to memory.
-    unsafe fn alloc_buffer(
-        &mut self,
-        create_info: &vk::BufferCreateInfo,
-    ) -> (vk::Buffer, CommonAlloc) {
-        let mut buf = vk::null();
-        self.dt().create_buffer(create_info as _, ptr::null(), &mut buf as _);
-
+    /// Binds a buffer to newly allocated memory.
+    unsafe fn alloc_buffer_memory(&mut self, buffer: vk::Buffer) -> CommonAlloc
+    {
         let mut reqs = Default::default();
-        self.dt().get_buffer_memory_requirements(buf, &mut reqs as _);
+        self.dt().get_buffer_memory_requirements(buffer, &mut reqs as _);
         let alloc = self.allocate(reqs);
 
         let DeviceSlice { memory, offset, .. } = *alloc.info();
-        self.dt().bind_buffer_memory(buf, memory, offset);
+        self.dt().bind_buffer_memory(buffer, memory, offset)
+            .check().unwrap();
 
-        (buf, alloc)
+        alloc
     }
 
-    /// Creates an image and immediately binds it to memory.
-    unsafe fn alloc_image(&mut self, create_info: &vk::ImageCreateInfo)
-        -> (vk::Image, CommonAlloc)
-    {
-        let mut image = vk::null();
-        self.dt().create_image(create_info as _, ptr::null(), &mut image as _);
-
+    /// Binds an image to newly allocated memory.
+    unsafe fn alloc_image_memory(&mut self, image: vk::Image) -> CommonAlloc {
         let mut reqs = Default::default();
         self.dt().get_image_memory_requirements(image, &mut reqs as _);
         let alloc = self.allocate(reqs);
 
         let DeviceSlice { memory, offset, .. } = *alloc.info();
-        self.dt().bind_image_memory(image, memory, offset);
+        self.dt().bind_image_memory(image, memory, offset)
+            .check().unwrap();
 
-        (image, alloc)
+        alloc
     }
 }
 

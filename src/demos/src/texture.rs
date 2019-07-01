@@ -1,6 +1,7 @@
 // TODO: asynchronous transfer (for computing mipmaps I guess?)
 use std::error::Error;
 use std::ffi::c_void;
+use std::io;
 use std::path::Path;
 use std::ptr;
 use std::sync::Arc;
@@ -37,8 +38,8 @@ impl StagingBuffer {
             usage: vk::BufferUsageFlags::TRANSFER_SRC_BIT,
             ..Default::default()
         };
-        let (buffer, alloc) = res.mapped_mem.alloc_buffer(&create_info);
-        objs.buffers.push(buffer);
+        let buffer = objs.create_buffer(&create_info);
+        let alloc = res.mapped_mem.alloc_buffer_memory(buffer);
 
         StagingBuffer {
             dt: Arc::clone(&objs.device.table),
@@ -108,7 +109,7 @@ pub struct ImageUpload {
     rec_state: CommandBufferState,
 }
 
-const STAGING_BUFFER_SIZE: usize = 0x20_0000;
+const STAGING_BUFFER_SIZE: usize = 0x100_0000;
 
 impl ImageUpload {
     pub unsafe fn new(res: &mut InitResources, gfx_queue: (u32, vk::Queue)) ->
@@ -310,7 +311,6 @@ impl ImageUpload {
     }
 
     unsafe fn submit(&mut self) {
-        println!("uploading {} bytes", self.offset);
         match self.rec_state {
             CommandBufferState::Initial => return,
             CommandBufferState::Recording => unreachable!(),
@@ -364,7 +364,7 @@ impl ImageUpload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 struct ImageInfo {
     inner: vk::Image,
     view: vk::ImageView,
@@ -372,19 +372,92 @@ struct ImageInfo {
 }
 
 #[derive(Debug)]
-pub struct TextureManager {
+struct ImageStorage {
     device: Arc<Device>,
     path: Arc<RenderPath>,
-    gfx_queue: vk::Queue,
-    gfx_queue_family: u32,
+    univ_sampler: vk::Sampler,
     image_mem: MemoryPool,
     images: Vec<ImageInfo>,
-    upload: ImageUpload,
 }
 
-const DESCRIPTOR_ARRAY_SIZE: usize = 0x2000;
+impl ImageStorage {
+    unsafe fn new(res: &mut InitResources, path: Arc<RenderPath>) -> Self {
+        let device = Arc::clone(&path.swapchain.device);
 
-impl Drop for TextureManager {
+        let create_info = Default::default();
+        let univ_sampler = res.objs.create_sampler(&create_info);
+
+        let type_index = find_memory_type(
+            &device,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
+        ).unwrap();
+        let create_info = MemoryPoolCreateInfo {
+            type_index,
+            mapped: false,
+            base_size: 0x100_0000,
+        };
+        let image_mem = MemoryPool::new(Arc::clone(&device), create_info);
+
+        ImageStorage {
+            device,
+            path,
+            univ_sampler,
+            image_mem,
+            images: Vec::new(),
+        }
+    }
+
+    // TODO: Batch writes?
+    unsafe fn create_image(
+        &mut self,
+        create_info: &vk::ImageCreateInfo,
+        view_create_info: &mut vk::ImageViewCreateInfo,
+    ) -> (u32, &ImageInfo) {
+        let dst_set = self.path.texture_set;
+        let slot = self.images.len() as _;
+        assert!(slot < self.path.max_texture_descriptors);
+
+        let mut image = vk::null();
+        self.device.table.create_image
+            (create_info as _, ptr::null(), &mut image as _)
+            .check().unwrap();
+
+        let alloc = self.image_mem.alloc_image_memory(image);
+
+        view_create_info.image = image;
+        let mut view = vk::null();
+        self.device.table.create_image_view
+            (view_create_info as _, ptr::null(), &mut view as _)
+            .check().unwrap();
+
+        self.images.push(ImageInfo { inner: image, view, alloc });
+
+        let image_infos = [vk::DescriptorImageInfo {
+            sampler: self.univ_sampler,
+            image_view: view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let writes = [vk::WriteDescriptorSet {
+            dst_set,
+            dst_binding: 0,
+            dst_array_element: slot,
+            descriptor_count: 1,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            p_image_info: image_infos.as_ptr(),
+            ..Default::default()
+        }];
+        self.device.table.update_descriptor_sets(
+            writes.len() as _,
+            writes.as_ptr(),
+            0,
+            ptr::null(),
+        );
+
+        (slot, &self.images[slot as usize])
+    }
+}
+
+impl Drop for ImageStorage {
     fn drop(&mut self) {
         for image in self.images.iter() {
             unsafe {
@@ -395,35 +468,34 @@ impl Drop for TextureManager {
     }
 }
 
+#[derive(Debug)]
+pub struct TextureManager {
+    device: Arc<Device>,
+    path: Arc<RenderPath>,
+    gfx_queue: vk::Queue,
+    gfx_queue_family: u32,
+    storage: ImageStorage,
+    upload: ImageUpload,
+}
+
 impl TextureManager {
     pub unsafe fn new(
-        path: Arc<RenderPath>,
         res: &mut InitResources,
+        path: Arc<RenderPath>,
         gfx_queue_family: u32,
     ) -> Self {
         let device = Arc::clone(&path.swapchain.device);
         let gfx_queue = device.get_queue(gfx_queue_family, 0);
 
-        let type_index = find_memory_type(
-            &device,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
-        ).unwrap();
-        let create_info = MemoryPoolCreateInfo {
-            type_index,
-            mapped: false,
-            base_size: 0x20_0000,
-        };
-        let image_mem = MemoryPool::new(Arc::clone(&device), create_info);
-
         let upload = ImageUpload::new(res, (gfx_queue_family, gfx_queue));
+        let storage = ImageStorage::new(res, Arc::clone(&path));
 
         TextureManager {
             device,
             path,
             gfx_queue,
             gfx_queue_family,
-            image_mem,
-            images: Vec::new(),
+            storage,
             upload,
         }
     }
@@ -434,13 +506,12 @@ impl TextureManager {
         self.upload.reserve(size).unwrap()
     }
 
-    pub unsafe fn load_png<P: AsRef<Path>>(&mut self, path: P) ->
-        Result<u32, Box<dyn Error>>
-    {
-        let png = lodepng::decode32_file(path)?;
-
-        let extent = (png.width as u32, png.height as u32, 1).into();
-        let format = vk::Format::R8G8B8A8_UNORM;
+    pub unsafe fn load_image<R: io::Read + io::Seek>(
+        &mut self,
+        extent: vk::Extent3D,
+        format: vk::Format,
+        mut stream: R,
+    ) -> Result<u32, Box<dyn Error>> {
         let create_info = vk::ImageCreateInfo {
             image_type: vk::ImageType::_2D,
             format,
@@ -453,8 +524,6 @@ impl TextureManager {
             initial_layout: vk::ImageLayout::UNDEFINED,
             ..Default::default()
         };
-        let (image, alloc) = self.image_mem.alloc_image(&create_info);
-
         let subresource_range = vk::ImageSubresourceRange {
             aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
             base_mip_level: 0,
@@ -462,20 +531,19 @@ impl TextureManager {
             base_array_layer: 0,
             layer_count: 1,
         };
-        let create_info = vk::ImageViewCreateInfo {
-            image,
+        let mut view_create_info = vk::ImageViewCreateInfo {
             view_type: vk::ImageViewType::_2D,
             format,
             subresource_range,
             ..Default::default()
         };
-        let mut view = vk::null();
-        self.device.table.create_image_view
-            (&create_info as _, ptr::null(), &mut view as _).check().unwrap();
+        let (slot, image) =
+            self.storage.create_image(&create_info, &mut view_create_info);
+        let image = image.inner;
 
-        let size = std::mem::size_of_val(&png.buffer[..]);
+        let size = stream.stream_len()? as usize;
         let stage = &mut *self.reserve(size);
-        stage.copy_from_slice(slice_to_bytes(&png.buffer[..]));
+        stream.read_exact(stage)?;
 
         self.upload.emit_pre_barrier(image, subresource_range);
         self.upload.emit_copy(image, &mut [vk::BufferImageCopy {
@@ -503,12 +571,21 @@ impl TextureManager {
             ..Default::default()
         });
 
-        let res = self.images.len() as u32;
-        self.images.push(ImageInfo { inner: image, view, alloc });
-
         self.upload.advance(size);
 
-        Ok(res)
+        Ok(slot)
+    }
+
+    pub unsafe fn load_png<P: AsRef<Path>>(&mut self, path: P) ->
+        Result<u32, Box<dyn Error>>
+    {
+        let png = lodepng::decode32_file(path)?;
+        let stream = io::Cursor::new(slice_to_bytes(&png.buffer[..]));
+        self.load_image(
+            (png.width as u32, png.height as u32, 1).into(),
+            vk::Format::R8G8B8A8_UNORM,
+            stream,
+        )
     }
 
     pub unsafe fn flush(&mut self) {

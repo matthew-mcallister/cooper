@@ -1,34 +1,21 @@
 #version 450
 #pragma shader_stage(vertex)
 
+#include "common.inc"
+
 const vec2 VERTEX_POS[] = {
     vec2(0, 1),
     vec2(1, 1),
     vec2(0, 0),
     vec2(1, 0),
 };
-const vec3 VERTEX_COLOR[] = {
-    vec3(1, 0, 0),
-    vec3(0, 1, 0),
-    vec3(0, 0, 1),
-    vec3(1, 1, 0),
-};
 
-struct SpriteTransform {
-    mat2 mat;
-    vec2 offs;
-};
-
-struct Sprite {
-    SpriteTransform transform;
-    uvec2 textures;
-};
-
-layout(set = 0, binding = 0, row_major) readonly buffer SpriteBuf {
+layout(set = 1, binding = 0, row_major) readonly buffer SpriteBuf {
     Sprite sprites[];
 };
 
-layout(location = 0) out vec4 vtx_color;
+layout(location = 0) out flat uvec2 vtx_textures;
+layout(location = 1) out vec2 vtx_texcoord0;
 
 void main() {
     Sprite sprite = sprites[gl_InstanceIndex];
@@ -38,5 +25,6 @@ void main() {
     vec2 pos = xform.mat * pos0 + xform.offs;
 
     gl_Position = vec4(pos, 0, 1);
-    vtx_color = vec4(VERTEX_COLOR[gl_VertexIndex], 1);
+    vtx_textures = sprite.textures;
+    vtx_texcoord0 = pos0;
 }

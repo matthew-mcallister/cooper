@@ -10,11 +10,12 @@ use crate::Device;
 pub struct ObjectTracker {
     pub device: Arc<Device>,
     pub command_pools: Vec<vk::CommandPool>,
+    pub descriptor_pools: Vec<vk::DescriptorPool>,
     pub pipelines: Vec<vk::Pipeline>,
     pub shader_modules: Vec<vk::ShaderModule>,
     pub pipeline_layouts: Vec<vk::PipelineLayout>,
-    pub descriptor_pools: Vec<vk::DescriptorPool>,
     pub descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
+    pub samplers: Vec<vk::Sampler>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub render_passes: Vec<vk::RenderPass>,
     pub image_views: Vec<vk::ImageView>,
@@ -43,11 +44,12 @@ macro_rules! impl_drop {
 
 impl_drop! {
     (command_pools, destroy_command_pool),
+    (descriptor_pools, destroy_descriptor_pool),
     (pipelines, destroy_pipeline),
     (shader_modules, destroy_shader_module),
     (pipeline_layouts, destroy_pipeline_layout),
-    (descriptor_pools, destroy_descriptor_pool),
     (descriptor_set_layouts, destroy_descriptor_set_layout),
+    (samplers, destroy_sampler),
     (framebuffers, destroy_framebuffer),
     (render_passes, destroy_render_pass),
     (image_views, destroy_image_view),
@@ -62,11 +64,12 @@ impl ObjectTracker {
         let res = ObjectTracker {
             device,
             command_pools: Vec::new(),
+            descriptor_pools: Vec::new(),
             pipelines: Vec::new(),
             shader_modules: Vec::new(),
             pipeline_layouts: Vec::new(),
-            descriptor_pools: Vec::new(),
             descriptor_set_layouts: Vec::new(),
+            samplers: Vec::new(),
             framebuffers: Vec::new(),
             render_passes: Vec::new(),
             image_views: Vec::new(),
@@ -239,6 +242,30 @@ impl ObjectTracker {
             (create_info as _, ptr::null(), &mut obj as _)
             .check().unwrap();
         self.descriptor_pools.push(obj);
+        obj
+    }
+
+    pub unsafe fn create_sampler(
+        &mut self,
+        create_info: &vk::SamplerCreateInfo,
+    ) -> vk::Sampler {
+        let mut obj = vk::null();
+        self.device.table.create_sampler
+            (create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        self.samplers.push(obj);
+        obj
+    }
+
+    pub unsafe fn create_buffer(
+        &mut self,
+        create_info: &vk::BufferCreateInfo,
+    ) -> vk::Buffer {
+        let mut obj = vk::null();
+        self.device.table.create_buffer
+            (create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        self.buffers.push(obj);
         obj
     }
 }

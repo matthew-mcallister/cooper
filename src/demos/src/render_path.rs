@@ -1,3 +1,4 @@
+use std::ptr;
 use std::sync::Arc;
 
 use crate::*;
@@ -17,6 +18,10 @@ pub struct RenderPath {
     pub swapchain: Arc<Swapchain>,
     pub render_pass: vk::RenderPass,
     pub framebuffers: Vec<Framebuffer>,
+    pub max_texture_descriptors: u32,
+    pub texture_set_layout: SetLayoutInfo,
+    // XXX: Should only be bound through this interface, not updated
+    pub texture_set: vk::DescriptorSet,
     pub sprite_set_layout: SetLayoutInfo,
     pub sprite_pipeline_layout: vk::PipelineLayout,
     pub sprite_pipeline: vk::Pipeline,
@@ -31,10 +36,11 @@ impl RenderPath {
     }
 }
 
-unsafe fn init_render_path(
-    swapchain: Arc<Swapchain>,
-    res: &mut InitResources,
-) -> RenderPath {
+const MAX_TEXTURE_DESCRIPTORS: u32 = 8192;
+
+unsafe fn init_render_path(swapchain: Arc<Swapchain>, res: &mut InitResources)
+    -> RenderPath
+{
     let objs = &mut res.objs;
 
     let attachments = [vk::AttachmentDescription {
@@ -100,19 +106,51 @@ unsafe fn init_render_path(
         }
     }).collect();
 
-    // Bindings for textures and sprite data
-    let sprite_set_layout = create_descriptor_set_layout(objs, &[
-        vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::VERTEX_BIT
-                | vk::ShaderStageFlags::FRAGMENT_BIT,
-            ..Default::default()
-        },
-    ]);
+    // Texture bindings
+    let max_texture_descriptors = MAX_TEXTURE_DESCRIPTORS;
+    let binding_flags = [
+        vk::DescriptorBindingFlagsEXT::UPDATE_AFTER_BIND_BIT_EXT
+        | vk::DescriptorBindingFlagsEXT::UPDATE_UNUSED_WHILE_PENDING_BIT_EXT
+        | vk::DescriptorBindingFlagsEXT::PARTIALLY_BOUND_BIT_EXT
+    ];
+    let bindings = [vk::DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        descriptor_count: max_texture_descriptors,
+        stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+        p_immutable_samplers: ptr::null(),
+    }];
+    let texture_set_layout = create_descriptor_set_layout_info(
+        objs,
+        vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL_BIT_EXT,
+        &bindings,
+        Some(&binding_flags),
+    );
+    let (_, sets) = create_descriptor_sets(
+        objs,
+        &texture_set_layout,
+        1,
+        vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND_BIT_EXT,
+    );
+    let texture_set = sets[0];
 
-    let set_layouts = [sprite_set_layout.inner];
+    // Sprite buffer bindings
+    let bindings = [vk::DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+            | vk::ShaderStageFlags::FRAGMENT_BIT,
+        ..Default::default()
+    }];
+    let sprite_set_layout = create_descriptor_set_layout_info(
+        objs,
+        Default::default(),
+        &bindings,
+        None,
+    );
+
+    let set_layouts = [texture_set_layout.inner, sprite_set_layout.inner];
     let create_info = vk::PipelineLayoutCreateInfo {
         set_layout_count: set_layouts.len() as _,
         p_set_layouts: set_layouts.as_ptr(),
@@ -200,6 +238,9 @@ unsafe fn init_render_path(
         swapchain,
         render_pass,
         framebuffers,
+        max_texture_descriptors,
+        texture_set_layout,
+        texture_set,
         sprite_set_layout,
         sprite_pipeline_layout,
         sprite_pipeline,

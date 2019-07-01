@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ptr;
 
 use crate::*;
 
@@ -44,46 +45,73 @@ pub struct SetLayoutInfo {
 
 crate unsafe fn create_descriptor_set_layout(
     objs: &mut ObjectTracker,
+    flags: vk::DescriptorSetLayoutCreateFlags,
     bindings: &[vk::DescriptorSetLayoutBinding],
-) -> SetLayoutInfo {
+    binding_flags: Option<&[vk::DescriptorBindingFlagsEXT]>,
+) -> vk::DescriptorSetLayout {
+    let (p_next, _flag_create_info);
+    if let Some(binding_flags) = binding_flags {
+         _flag_create_info = vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT {
+            binding_count: binding_flags.len() as _,
+            p_binding_flags: binding_flags.as_ptr(),
+            ..Default::default()
+        };
+        p_next = &_flag_create_info as *const _ as _;
+    } else {
+        _flag_create_info = Default::default();
+        p_next = ptr::null();
+    }
+
     let create_info = vk::DescriptorSetLayoutCreateInfo {
+        p_next,
+        flags,
         binding_count: bindings.len() as _,
         p_bindings: bindings.as_ptr(),
         ..Default::default()
     };
-    let layout = objs.create_descriptor_set_layout(&create_info);
-    let counts = DescriptorCounts::from_bindings(&bindings);
-    SetLayoutInfo {
-        inner: layout,
-        counts,
-    }
+    objs.create_descriptor_set_layout(&create_info)
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-crate struct CreateDescriptorSetParams {
-    crate count: u32,
-    crate pool_flags: vk::DescriptorPoolCreateFlags,
+crate unsafe fn create_descriptor_set_layout_info(
+    objs: &mut ObjectTracker,
+    flags: vk::DescriptorSetLayoutCreateFlags,
+    bindings: &[vk::DescriptorSetLayoutBinding],
+    binding_flags: Option<&[vk::DescriptorBindingFlagsEXT]>,
+) -> SetLayoutInfo {
+    let inner = create_descriptor_set_layout(
+        objs,
+        flags,
+        bindings,
+        binding_flags,
+    );
+    let counts = DescriptorCounts::from_bindings(bindings);
+    SetLayoutInfo {
+        inner,
+        counts,
+    }
 }
 
 crate unsafe fn create_descriptor_sets(
     objs: &mut ObjectTracker,
     set_layout: &SetLayoutInfo,
-    params: CreateDescriptorSetParams,
+    count: u32,
+    pool_flags: vk::DescriptorPoolCreateFlags,
 ) -> (vk::DescriptorPool, Vec<vk::DescriptorSet>) {
-    let pool_sizes = set_layout.counts.pool_sizes(params.count);
+    let pool_sizes = set_layout.counts.pool_sizes(count);
     let create_info = vk::DescriptorPoolCreateInfo {
-        max_sets: params.count,
+        flags: pool_flags,
+        max_sets: count,
         pool_size_count: pool_sizes.len() as _,
         p_pool_sizes: pool_sizes.as_ptr(),
         ..Default::default()
     };
     let descriptor_pool = objs.create_descriptor_pool(&create_info);
 
-    let mut sets = vec![vk::null(); params.count as usize];
-    let layouts = vec![set_layout.inner; params.count as usize];
+    let mut sets = vec![vk::null(); count as usize];
+    let layouts = vec![set_layout.inner; count as usize];
     let alloc_info = vk::DescriptorSetAllocateInfo {
         descriptor_pool,
-        descriptor_set_count: params.count,
+        descriptor_set_count: count,
         p_set_layouts: layouts.as_ptr(),
         ..Default::default()
     };
