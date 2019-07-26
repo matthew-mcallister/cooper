@@ -1,52 +1,79 @@
-//! TODO: Consider testing with LunarG device simulator
 #![feature(crate_visibility_modifier)]
+#![feature(seek_convenience)]
 #![feature(try_blocks)]
+use std::fmt;
 
 macro_rules! c_str {
     ($str:expr) => {
-        concat!($str, "\0") as *const str as *const std::os::raw::c_char;
+        concat!($str, "\0") as *const str as *const std::os::raw::c_char
     }
 }
 
-macro_rules! insert_nodup {
-    ($map:expr, $key:expr, $val:expr) => {
-        assert!(!$map.insert($key, $val).is_some());
-    }
-}
-
-macro_rules! impl_debug_union {
-    ($name:ident) => {
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, concat!(stringify!($name), " {{ *union* }}"))
-            }
-        }
+macro_rules! include_shader {
+    ($name:expr) => {
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            concat!("/generated/shaders/", $name),
+        ))
     }
 }
 
 mod descriptor;
-mod fixed;
-mod geom;
+mod frame;
 mod init;
+mod master;
 mod memory;
-mod pipeline;
-mod resource;
+mod object;
+mod render_path;
+mod sprite;
+mod stats;
+mod texture;
 
-crate use descriptor::*;
-crate use fixed::*;
-crate use geom::*;
+pub use descriptor::*;
+pub use frame::*;
 pub use init::*;
-crate use memory::*;
-crate use pipeline::*;
-crate use resource::*;
+pub use master::*;
+pub use memory::*;
+pub use object::*;
+pub use render_path::*;
+pub use sprite::*;
+pub use stats::*;
+pub use texture::*;
 
-fn bool32(b: bool) -> vk::Bool32 {
-    if b { vk::TRUE } else { vk::FALSE }
-}
-
-#[inline]
-fn align_to(alignment: vk::DeviceSize, offset: vk::DeviceSize) ->
-    vk::DeviceSize
-{
+#[inline(always)]
+#[allow(dead_code)]
+crate fn align(alignment: usize, offset: usize) -> usize {
     ((offset + alignment - 1) / alignment) * alignment
 }
+
+#[inline(always)]
+crate fn align_64(alignment: u64, offset: u64) -> u64 {
+    ((offset + alignment - 1) / alignment) * alignment
+}
+
+#[inline(always)]
+crate fn opt(cond: bool) -> Option<()> {
+    if cond { Some(()) } else { None }
+}
+
+// Vexing that this isn't in std
+#[inline(always)]
+crate fn slice_to_bytes<T: Sized>(slice: &[T]) -> &[u8] {
+    let len = slice.len() * std::mem::size_of::<T>();
+    unsafe { std::slice::from_raw_parts(slice as *const [T] as _, len) }
+}
+
+crate type AnyError = Box<dyn std::error::Error>;
+
+#[derive(Clone, Copy, Debug)]
+crate struct EnumValueError {
+    value: u32,
+}
+
+impl fmt::Display for EnumValueError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "unrecognized enum value: {}", self.value)
+    }
+}
+
+impl std::error::Error for EnumValueError {}

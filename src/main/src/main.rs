@@ -1,7 +1,7 @@
 #![feature(crate_visibility_modifier)]
 #![feature(non_exhaustive)]
 #![feature(try_blocks)]
-use std::error::Error;
+use std::ffi::CString;
 use std::sync::Arc;
 
 macro_rules! c_str {
@@ -10,33 +10,69 @@ macro_rules! c_str {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+const TITLE_BASE: &'static str = "Cooper Demo";
+
+fn make_title(fps: f32) -> CString {
+    let title = format!("{} | {:.2} fps", TITLE_BASE, fps);
+    CString::new(title).unwrap()
+}
+
+fn main() {
     unsafe { unsafe_main() }
 }
 
-unsafe fn unsafe_main() -> Result<(), Box<dyn Error>> {
-    let wconfig = window::Config {
-        title: c_str!("Demo"),
-        dims: window::Dimensions::new(1600, 900),
+unsafe fn unsafe_main() {
+    let title = CString::new(TITLE_BASE).unwrap();
+    let dims = (1280, 720).into();
+    let config = win::Config {
+        title: title.as_ptr(),
+        dims,
+        hints: Default::default(),
     };
-    let wsys = window::System::new()?;
-    let window = Arc::new(window::Window::new(wsys.clone(), wconfig)?);
+    let window = Arc::new(win::Window::new(
+        win::System::new().unwrap(),
+        config,
+    ).unwrap());
 
-    let rconfig = render::Config {
-        enable_validation: std::env::var("VULKAN_VALIDATE")
-            .map(|s| &s == "1")
-            .unwrap_or(false),
-    };
-    let mut renderer = render::System::new(rconfig, Arc::clone(&window))?;
+    let mut state = gfx::init_video(c_str!("cooper"), Arc::clone(&window));
+    state.load_textures();
 
-    let mut resources = renderer.resource_graph();
+    loop {
+        state.wait_for_next_frame();
 
-    let mut objects = renderer.create_objects();
+        state.set_sprite_count(2);
+        let sprites = state.sprites();
+        (*sprites)[0] = gfx::Sprite {
+            transform: gfx::SpriteTransform {
+                mat: [
+                    [0.35355339, -0.35355339],
+                    [0.35355339,  0.35355339],
+                ],
+                offset: [0.0, -0.35355339],
+            },
+            textures: [0, 0],
+        };
+        (*sprites)[1] = gfx::Sprite {
+            transform: gfx::SpriteTransform {
+                mat: [
+                    [0.28125, 0.0],
+                    [    0.0, 0.5],
+                ],
+                offset: [0.0, 0.0],
+            },
+            textures: [0, 0],
+        };
 
-    while !window.should_close() {
-        renderer.do_frame();
-        wsys.poll_events();
+        state.render();
+        state.present();
+
+        // Update FPS counter
+        if state.history_full() {
+            let title = make_title(state.compute_fps());
+            window.set_title(title.as_ptr());
+        }
+
+        window.sys().poll_events();
+        if window.should_close() { break; }
     }
-
-    Ok(())
 }

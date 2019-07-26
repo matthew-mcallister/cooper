@@ -1,8 +1,6 @@
 // TODO: asynchronous transfer (for computing mipmaps I guess?)
-use std::error::Error;
 use std::ffi::c_void;
 use std::io;
-use std::path::Path;
 use std::ptr;
 use std::sync::Arc;
 
@@ -506,12 +504,12 @@ impl TextureManager {
         self.upload.reserve(size).unwrap()
     }
 
-    pub unsafe fn load_image<R: io::Read + io::Seek>(
+    pub unsafe fn load_image(
         &mut self,
         extent: vk::Extent3D,
         format: vk::Format,
-        mut stream: R,
-    ) -> Result<u32, Box<dyn Error>> {
+        bytes: &[u8],
+    ) -> Result<u32, AnyError> {
         let create_info = vk::ImageCreateInfo {
             image_type: vk::ImageType::_2D,
             format,
@@ -541,9 +539,8 @@ impl TextureManager {
             self.storage.create_image(&create_info, &mut view_create_info);
         let image = image.inner;
 
-        let size = stream.stream_len()? as usize;
-        let stage = &mut *self.reserve(size);
-        stream.read_exact(stage)?;
+        let stage = &mut *self.reserve(bytes.len());
+        stage.copy_from_slice(bytes);
 
         self.upload.emit_pre_barrier(image, subresource_range);
         self.upload.emit_copy(image, &mut [vk::BufferImageCopy {
@@ -571,20 +568,21 @@ impl TextureManager {
             ..Default::default()
         });
 
-        self.upload.advance(size);
+        self.upload.advance(bytes.len());
 
         Ok(slot)
     }
 
-    pub unsafe fn load_png<P: AsRef<Path>>(&mut self, path: P) ->
-        Result<u32, Box<dyn Error>>
+    pub unsafe fn load_png<R: io::Read>(&mut self, mut src: R) ->
+        Result<u32, AnyError>
     {
-        let png = lodepng::decode32_file(path)?;
-        let stream = io::Cursor::new(slice_to_bytes(&png.buffer[..]));
+        let mut bytes = Vec::new();
+        src.read_to_end(&mut bytes)?;
+        let img = lodepng::decode32(bytes)?;
         self.load_image(
-            (png.width as u32, png.height as u32, 1).into(),
+            (img.width as u32, img.height as u32, 1).into(),
             vk::Format::R8G8B8A8_UNORM,
-            stream,
+            slice_to_bytes(&img.buffer),
         )
     }
 

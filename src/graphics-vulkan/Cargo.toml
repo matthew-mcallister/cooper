@@ -6,24 +6,13 @@ edition = "2018"
 publish = false
 
 [dependencies]
-alloc = { path = "../alloc", package = "cooper-alloc" }
-derivative = "1.0"
-derive_more = "0.14"
-enum-map = "0.5"
-fnv = "1.0"
-maplit = "1.0"
-memoffset = "0.3"
-slab = "0.4"
+lodepng = "2.4"
 window = { path = "../window", package = "cooper-window" }
 
-[dependencies.glfw]
-git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git"
-package = "glfw-ffi"
-
 [dependencies.vk]
-git = "https://gitlab.com/matthew-mcallister/vk-ffi.git"
+git = "https://gitlab.com/matthew-mcallister/vk-ffi"
 package = "vk-ffi"
 
 [dependencies.vkl]
-git = "https://gitlab.com/matthew-mcallister/vk-ffi.git"
+git = "https://gitlab.com/matthew-mcallister/vk-ffi"
 package = "vk-ffi-loader"

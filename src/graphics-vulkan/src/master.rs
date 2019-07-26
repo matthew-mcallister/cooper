@@ -1,6 +1,34 @@
+use std::fs;
+use std::io;
+use std::os::raw::c_char;
 use std::sync::Arc;
 
 use crate::*;
+
+pub unsafe fn init_video(
+    app_title: *const c_char,
+    window: Arc<window::Window>,
+) -> RenderState {
+    assert!(window.sys().vulkan_supported());
+    let config = InstanceConfig {
+        app_info: vk::ApplicationInfo {
+            p_application_name: app_title,
+            application_version: vk::make_version!(0, 1, 0),
+            api_version: vk::API_VERSION_1_1,
+            p_engine_name: c_str!("cooper"),
+            engine_version: vk::make_version!(0, 1, 0),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let instance = Arc::new(Instance::new(config).unwrap());
+    let surface =
+        Arc::new(Surface::new(Arc::clone(&instance), window).unwrap());
+    let pdev = device_for_surface(&surface).unwrap();
+    let device = Arc::new(Device::new(instance, pdev).unwrap());
+    let swapchain = Arc::new(Swapchain::new(surface, device).unwrap());
+    RenderState::new(swapchain)
+}
 
 const FRAME_HISTORY_SIZE: usize = 64;
 
@@ -8,36 +36,6 @@ const FRAME_HISTORY_SIZE: usize = 64;
 pub struct InitResources {
     pub objs: ObjectTracker,
     pub mapped_mem: MemoryPool,
-}
-
-pub unsafe fn init_video() -> Arc<Swapchain> {
-    println!("init_video");
-    let config = InstanceConfig {
-        app_info: vk::ApplicationInfo {
-            p_application_name: app_title(),
-            application_version: vk::make_version!(0, 1, 0),
-            api_version: vk::API_VERSION_1_1,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let instance = Arc::new(Instance::new(config).unwrap());
-
-    let title = CString::from_vec_unchecked(make_title(0.0).into());
-    let dims = (1280, 720).into();
-    let config = window::Config {
-        title: title.as_ptr(),
-        dims,
-        hints: Default::default(),
-    };
-    let surface =
-        Arc::new(Surface::new(Arc::clone(&instance), config).unwrap());
-
-    let pdev = device_for_surface(&surface).unwrap();
-
-    let device = Arc::new(Device::new(instance, pdev).unwrap());
-
-    Arc::new(Swapchain::new(surface, device).unwrap())
 }
 
 pub struct RenderState {
@@ -81,7 +79,7 @@ impl_debug!(RenderState {
 });
 
 // These are written as macros to appease the borrow checker (without
-// resorting to pointer-casting magic)
+// casting to a pointer)
 macro_rules! cur_frame {
     ($self:expr) => {
         &$self.frames[($self.frame_counter % 2) as usize]
@@ -96,7 +94,6 @@ macro_rules! cur_frame_mut {
 
 impl RenderState {
     pub unsafe fn new(swapchain: Arc<Swapchain>) -> Self {
-        println!("RenderState::new");
         let device = Arc::clone(&swapchain.device);
 
         let gfx_queue_family = 0;
@@ -137,10 +134,12 @@ impl RenderState {
 
     pub unsafe fn load_textures(&mut self) {
         // TODO: Load asynchronously
-        // Also, this is unusably slow
-        println!("RenderState::load_textures");
+        // TODO: Is PNG decoding a bottleneck here? i.e. would this go
+        // faster if it were parallelized?
         for _ in 0..256 {
-            self.textures.load_png("/tmp/test_pattern.png").unwrap();
+            let src = fs::File::open("/tmp/test_pattern.png").unwrap();
+            let src = io::BufReader::new(src);
+            self.textures.load_png(src).unwrap();
         }
         self.textures.flush();
     }
@@ -188,8 +187,7 @@ impl RenderState {
         unsafe { &mut (*frame.sprite_buf.data)[..count as _] as _ }
     }
 
-    pub unsafe fn render(&mut self)
-    {
+    pub unsafe fn render(&mut self) {
         let frame = cur_frame_mut!(self);
         frame.record();
         frame.submit(self.gfx_queue, self.present_sem);
@@ -216,6 +214,7 @@ impl RenderState {
         self.frame_counter % FRAME_HISTORY_SIZE as u64 == 0
     }
 
+    // TODO: This is not really the renderer's business
     pub unsafe fn compute_fps(&self) -> f32 {
         let total_time_ns: f32 = self.history.iter()
             .map(|frame| frame.time_ns)

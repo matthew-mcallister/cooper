@@ -9,8 +9,8 @@ publish = false
 derivative = "1.0"
 derive_more = "0.14"
 memoffset = "0.3"
-graphics = { path = "../graphics", package = "cooper-graphics" }
-window = { path = "../window", package = "cooper-window" }
+gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
+win = { path = "../window", package = "cooper-window" }
 
 [[bin]]
 name = "cooper"

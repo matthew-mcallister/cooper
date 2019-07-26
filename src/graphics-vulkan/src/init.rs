@@ -1,90 +1,146 @@
-//! This module includes the renderer initialization routine and the
-//! interaction with the window system.
-use std::error::Error;
+// TODO: User-friendly errors
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-const VALIDATION_LAYER: *const c_char =
-    c_str!("VK_LAYER_LUNARG_standard_validation");
+use crate::*;
 
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub enable_validation: bool,
+#[derive(Debug, Default)]
+pub struct InstanceConfig {
+    pub app_info: vk::ApplicationInfo,
+    pub layers: Vec<*const c_char>,
+    pub extensions: Vec<*const c_char>,
 }
 
 #[derive(Debug)]
 pub struct Instance {
-    // Keeps libvulkan loaded
-    crate _wsys: window::System,
-    crate table: Arc<vkl::InstanceTable>,
+    pub wsys: window::System,
+    pub entry: Arc<vkl::Entry>,
+    pub table: Arc<vkl::InstanceTable>,
+}
+
+impl Drop for Instance {
+    fn drop(&mut self) {
+        unsafe { self.table.destroy_instance(ptr::null()); }
+    }
 }
 
 impl Instance {
-    pub unsafe fn new(config: Config) -> Result<Self, vk::Result> {
+    pub unsafe fn new(config: InstanceConfig) ->
+        Result<Self, AnyError>
+    {
         let wsys = window::System::new()?;
-        if !wsys.vulkan_supported() {
-            Err(vk::Result::ERROR_INITIALIZATION_FAILED)?;
-        }
+        if !wsys.vulkan_supported() { Err("vulkan not available")?; }
 
         let get_instance_proc_addr = wsys.pfn_get_instance_proc_addr();
-        let entry = vkl::Entry::load(get_instance_proc_addr);
+        let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
-        let layers =
-            if config.enable_validation { &[VALIDATION_LAYER][..] }
-            else { &[][..] };
-        let exts =
-            if config.enable_wsi { wsys.required_extensions() }
-            else { &[][..] };
+        let (layers, mut extensions) = (config.layers, config.extensions);
+        extensions.extend(wsys.required_instance_extensions());
 
-        let app_info = vk::ApplicationInfo {
-            p_application_name: config.app_name,
-            application_version: vk::make_version!(0, 1, 0),
-            p_engine_name: c_str!("cooper"),
-            engine_version: vk::make_version!(0, 1, 0),
-            api_version: vk::API_VERSION_1_1,
-            ..Default::default()
-        };
         let create_info = vk::InstanceCreateInfo {
-            p_application_info: &app_info as _,
+            p_application_info: &config.app_info as _,
             enabled_layer_count: layers.len() as _,
             pp_enabled_layer_names: layers.as_ptr(),
-            enabled_extension_count: exts.len() as _,
-            pp_enabled_extension_names: exts.as_ptr(),
+            enabled_extension_count: extensions.len() as _,
+            pp_enabled_extension_names: extensions.as_ptr(),
             ..Default::default()
         };
+
         let mut inst = vk::null();
         entry.create_instance(&create_info as _, ptr::null(), &mut inst as _)
             .check()?;
-        let table = vkl::InstanceTable::load(inst, get_instance_proc_addr);
-        let table = Arc::new(table);
+        let table =
+            Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
-        Ok(Instance { _wsys: wsys, table })
+        Ok(Instance { wsys, entry, table })
+    }
+
+    pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
+        vk::enumerate2!(self.table, enumerate_physical_devices).unwrap()
+    }
+
+    pub unsafe fn get_queue_family_properties(&self, pdev: vk::PhysicalDevice)
+        -> Vec<vk::QueueFamilyProperties>
+    {
+        vk::enumerate2!(
+            @void self.table,
+            get_physical_device_queue_family_properties,
+            pdev,
+        )
+    }
+
+    pub unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
+        Box<vk::PhysicalDeviceProperties>
+    {
+        let mut res = Box::new(Default::default());
+        self.table.get_physical_device_properties(pdev, &mut *res as _);
+        res
     }
 }
 
 #[derive(Debug)]
 pub struct Surface {
-    crate win: Arc<window::Window>,
-    crate inner: vk::SurfaceKHR,
+    pub instance: Arc<Instance>,
+    pub window: Arc<window::Window>,
+    pub inner: vk::SurfaceKHR,
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        unsafe {
+            self.instance.table.destroy_surface_khr(self.inner, ptr::null());
+        }
+    }
 }
 
 impl Surface {
-    pub unsafe fn new(instance: &Instance, win: Arc<window::Window>) ->
-        Result<Self, vk::Result>
+    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
+        Result<Self, AnyError>
     {
-        let inner: vk::SurfaceKHR =
-            win.create_surface(instance.table.instance)?;
-        Ok(Surface { instance, win, inner })
+        let inner = window.create_surface(instance.table.instance)?;
+        Ok(Surface {
+            instance,
+            window,
+            inner,
+        })
     }
+}
+
+pub unsafe fn device_for_surface(surface: &Surface) ->
+    Result<vk::PhysicalDevice, AnyError>
+{
+    let instance = &*surface.instance;
+    let surface = surface.inner;
+
+    let pdevices = instance.get_physical_devices();
+    for pd in pdevices.into_iter() {
+        let qf = 0u32;
+        let props = instance.get_queue_family_properties(pd)[qf as usize];
+        let required_bits = vk::QueueFlags::GRAPHICS_BIT
+            | vk::QueueFlags::COMPUTE_BIT
+            | vk::QueueFlags::TRANSFER_BIT;
+        if !props.queue_flags.contains(required_bits) { continue; }
+
+        let mut surface_supp = 0;
+        instance.table.get_physical_device_surface_support_khr
+            (pd, qf, surface, &mut surface_supp as _)
+            .check()?;
+        if surface_supp != vk::TRUE { continue; }
+
+        return Ok(pd);
+    }
+
+    Err("no presentable graphics device".into())
 }
 
 #[derive(Debug)]
 pub struct Device {
-    crate pdev: vk::PhysicalDevice,
-    crate table: Arc<vkl::DeviceTable>,
-    crate queue_family: u32,
-    crate queue: vk::Queue,
+    pub instance: Arc<Instance>,
+    pub pdev: vk::PhysicalDevice,
+    pub props: Box<vk::PhysicalDeviceProperties>,
+    pub mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
+    pub table: Arc<vkl::DeviceTable>,
 }
 
 impl Drop for Device {
@@ -93,91 +149,128 @@ impl Drop for Device {
     }
 }
 
+macro_rules! check_for_features {
+    ($expected:expr, $actual:expr; $($member:ident,)*) => {
+        $(
+            if ($expected.$member == vk::TRUE) & ($actual.$member != vk::TRUE)
+            {
+                Err(concat!(
+                    "graphics device missing required feature:",
+                    stringify!($member),
+                ))?;
+            }
+        )*
+    }
+}
+
+unsafe fn check_for_features(
+    it: &vkl::InstanceTable,
+    pdev: vk::PhysicalDevice,
+    _desired_features: &vk::PhysicalDeviceFeatures,
+    desired_descriptor_indexing_features:
+        &vk::PhysicalDeviceDescriptorIndexingFeaturesEXT,
+) -> Result<(), AnyError> {
+    let mut descriptor_indexing_features =
+        vk::PhysicalDeviceDescriptorIndexingFeaturesEXT::default();
+    let mut features = vk::PhysicalDeviceFeatures2 {
+        p_next: &mut descriptor_indexing_features as *mut _ as _,
+        ..Default::default()
+    };
+    it.get_physical_device_features_2(pdev, &mut features as _);
+
+    // TODO: Add logic methods to Vk*Features in vulkan bindings
+    check_for_features!(
+        desired_descriptor_indexing_features, descriptor_indexing_features;
+        shader_sampled_image_array_non_uniform_indexing,
+        descriptor_binding_sampled_image_update_after_bind,
+        descriptor_binding_update_unused_while_pending,
+        descriptor_binding_partially_bound,
+        runtime_descriptor_array,
+    );
+
+    Ok(())
+}
+
 impl Device {
-    pub unsafe fn new(surface: &Surface) -> Result<Self, Box<dyn Error>> {
-        let it: &vkl::InstanceTable = &surface.instance.table;
-        let instance = it.instance;
+    pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
+        Result<Self, AnyError>
+    {
+        let it = &instance.table;
 
-        let pdevices = vk::enumerate2!(it, enumerate_physical_devices)?;
-        let (pdev, qf, _) = pdevices.into_iter()
-            .flat_map(|pd| {
-                // Iterate over all (pdevice, queue_family) pairs
-                let qf_props = vk::enumerate2!(
-                    @void it,
-                    get_physical_device_queue_family_properties,
-                    pd,
-                );
-                qf_props.into_iter()
-                    .enumerate()
-                    .map(move |(idx, props)| (pd, idx as u32, props))
-            })
-            .find(|&(pd, idx, props)| {
-                let required_bits = vk::QueueFlags::GRAPHICS_BIT
-                    | vk::QueueFlags::COMPUTE_BIT
-                    | vk::QueueFlags::TRANSFER_BIT;
-                if !props.queue_flags.contains(required_bits) { return false; }
+        // TODO: check that extensions are actually supported
+        let exts = [
+            vk::KHR_SWAPCHAIN_EXTENSION_NAME,
+            vk::EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        ];
 
-                let mut surface_supp = 0;
-                it.get_physical_device_surface_support_khr
-                    (pd, idx, surface.inner, &mut surface_supp as _)
-                    .check().unwrap();
-                surface_supp == vk::TRUE
-            }).ok_or("no presentable graphics device")?;
+        let features = Default::default();
+        let descriptor_indexing_features =
+            vk::PhysicalDeviceDescriptorIndexingFeaturesEXT {
+                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                descriptor_binding_update_unused_while_pending: vk::TRUE,
+                descriptor_binding_partially_bound: vk::TRUE,
+                runtime_descriptor_array: vk::TRUE,
+                ..Default::default()
+            };
+        check_for_features
+            (it, pdev, &features, &descriptor_indexing_features)?;
 
-        let queue_create_info = vk::DeviceQueueCreateInfo {
-            s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: Default::default(),
-            queue_family_index: qf,
+        let queue_infos = [vk::DeviceQueueCreateInfo {
+            queue_family_index: 0,
             queue_count: 1,
-            p_queue_priorities: &1.0f32 as _,
-        };
-        let features: vk::PhysicalDeviceFeatures = Default::default();
-        let exts = get_required_device_extensions();
+            p_queue_priorities: &1f32 as _,
+            ..Default::default()
+        }];
+
         let create_info = vk::DeviceCreateInfo {
-            s_type: vk::StructureType::DEVICE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: Default::default(),
-            queue_create_info_count: 1,
-            p_queue_create_infos: &queue_create_info as _,
-            enabled_layer_count: 0,
-            pp_enabled_layer_names: ptr::null(),
+            p_next: &descriptor_indexing_features as *const _ as _,
+            queue_create_info_count: queue_infos.len() as _,
+            p_queue_create_infos: queue_infos.as_ptr(),
             enabled_extension_count: exts.len() as _,
             pp_enabled_extension_names: exts.as_ptr(),
             p_enabled_features: &features as _,
+            ..Default::default()
         };
         let mut dev = vk::null();
         it.create_device(pdev, &create_info as _, ptr::null(), &mut dev as _)
             .check()?;
 
         let get_device_proc_addr = std::mem::transmute({
-            it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr")).unwrap()
+            it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr"))
         });
         let table =
             Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
-        let mut queue = vk::null();
-        table.get_device_queue(qf, 0, &mut queue as _);
+        let props = instance.get_properties(pdev);
+        let mut mem_props: Box<vk::PhysicalDeviceMemoryProperties> =
+            Default::default();
+        it.get_physical_device_memory_properties(pdev, &mut *mem_props as _);
 
         Ok(Device {
-            instance: Arc::clone(&surface.instance),
+            instance,
             pdev,
+            props,
+            mem_props,
             table,
-            queue_family: qf,
-            queue,
         })
+    }
+
+    pub unsafe fn get_queue(&self, qf: u32, idx: u32) -> vk::Queue {
+        let mut queue = vk::null();
+        self.table.get_device_queue(qf, idx, &mut queue as _);
+        queue
     }
 }
 
 #[derive(Debug)]
 pub struct Swapchain {
-    crate surface: Arc<Surface>,
-    crate dev: Arc<Device>,
-    crate dt: Arc<vkl::DeviceTable>,
-    crate inner: vk::SwapchainKHR,
-    crate extent: vk::Rect2D,
-    crate images: Vec<vk::Image>,
-    crate image_views: Vec<vk::ImageView>,
+    pub surface: Arc<Surface>,
+    pub device: Arc<Device>,
+    pub inner: vk::SwapchainKHR,
+    pub format: vk::Format,
+    pub extent: vk::Extent2D,
+    pub images: Vec<vk::Image>,
 }
 
 impl Drop for Swapchain {
@@ -187,55 +280,62 @@ impl Drop for Swapchain {
 }
 
 impl Swapchain {
-    pub unsafe fn new(surface: Arc<Surface>, dev: Arc<Device>) ->
-        Result<Self, Box<dyn Error>>
+    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
+        Result<Self, AnyError>
     {
         let mut result = Swapchain {
             surface,
-            dt: Arc::clone(&dev.table),
-            dev,
+            device,
             inner: vk::null(),
+            format: Default::default(),
+            extent: Default::default(),
             images: Vec::new(),
-            image_views: Vec::new(),
         };
         result.recreate()?;
 
         Ok(result)
     }
 
-    unsafe fn destroy(&self) {
-        for &view in self.image_views.iter()
-            { self.dt.destroy_image_view(view, ptr::null()); }
-        self.dt.destroy_swapchain_khr(self.inner, ptr::null());
+    pub fn rectangle(&self) -> vk::Rect2D {
+        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
     }
 
-    pub unsafe fn recreate(&mut self) -> Result<(), Box<dyn Error>> {
-        self.destroy();
+    unsafe fn destroy(&self) {
+        self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
+    }
 
-        let it: &vkl::InstanceTable = &self.dev.instance.table;
-        let pdev = self.dev.pdev;
+    pub unsafe fn recreate(&mut self) -> Result<(), AnyError> {
+        let dt = &self.device.table;
+        let it: &vkl::InstanceTable = &self.device.instance.table;
+        let pdev = self.device.pdev;
 
         let mut caps: vk::SurfaceCapabilitiesKHR = Default::default();
         it.get_physical_device_surface_capabilities_khr
             (pdev, self.surface.inner, &mut caps as _)
             .check()?;
 
-        let min_image_count = if caps.max_image_count > 0 {
-            u32::min(caps.min_image_count + 1, caps.max_image_count)
-        } else { caps.min_image_count + 1 };
+        let max_image_count =
+            if caps.max_image_count == 0 { u32::max_value() }
+            else { caps.max_image_count };
+        let min_image_count =
+            std::cmp::min(caps.min_image_count + 1, max_image_count);
 
         // TODO: Is this a compatibility concern?
-        let format = vk::SurfaceFormatKHR {
-            format: vk::Format::B8G8R8A8_SRGB,
-            color_space: vk::ColorSpace::SRGB_NONLINEAR_KHR,
-        };
+        let format = vk::Format::B8G8R8A8_SRGB;
+        let color_space = vk::ColorSpaceKHR::SRGB_NONLINEAR_KHR;
         let formats = vk::enumerate2!(
-            self.dev.instance.table,
+            it,
             get_physical_device_surface_formats_khr,
             pdev,
             self.surface.inner,
         )?;
-        if !formats.contains(format) { Err("surface format not supported")?; }
+        if !formats.iter().any(|fmt| fmt.format == format &&
+            fmt.color_space == color_space)
+        {
+            Err("surface format not supported")?;
+        }
+
+        self.format = format;
 
         // The spec says that, on Wayland (and probably other platforms,
         // maybe embedded), the surface extent may be determined by the
@@ -280,36 +380,14 @@ impl Swapchain {
             clipped: vk::TRUE,
             old_swapchain: self.inner,
         };
-        self.dt.create_swapchain_khr
-            (&create_info as _, ptr::null(), &mut self.inner as _)
-            .check()?;
+        let mut new = vk::null();
+        dt.create_swapchain_khr
+            (&create_info as _, ptr::null(), &mut new as _).check()?;
 
+        self.destroy();
+        self.inner = new;
         self.images = vk::enumerate2!
-            (self.dt, get_swapchain_images_khr, self.inner)?;
-
-        for &image in self.images.iter() {
-            let create_info = vk::ImageViewCreateInfo {
-                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                p_next: ptr::null(),
-                flags: Default::default(),
-                image,
-                view_type: vk::ImageViewType::_2D,
-                format,
-                components: Default::default(),
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-            };
-            let mut image_view = vk::null();
-            self.dt.create_image_view
-                (&create_info as _, ptr::null(), &mut image_view as _)
-                .check()?;
-            self.image_views.push(image_view);
-        }
+            (dt, get_swapchain_images_khr, self.inner)?;
 
         Ok(())
     }

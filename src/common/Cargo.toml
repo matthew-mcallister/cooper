@@ -1,11 +1,10 @@
 [package]
-name = "cooper-graphics"
+name = "cooper-common"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
 
 [dependencies]
-nalgebra = "0.18"
-slab = "0.4"
-window = { path = "../window", package = "cooper-window" }
+derive_more = "0.15"
+num-traits = "0.2"

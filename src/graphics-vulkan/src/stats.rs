@@ -16,6 +16,7 @@ impl Timestamps {
     }
 }
 
+/// This type encapsulates performance measurement logic.
 #[repr(C)]
 #[derive(Debug)]
 pub struct FrameTimer {
