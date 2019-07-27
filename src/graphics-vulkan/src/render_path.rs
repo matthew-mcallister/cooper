@@ -34,6 +34,34 @@ impl RenderPath {
     ) -> RenderPath {
         init_render_path(swapchain, res)
     }
+
+    // TODO: This needs to be a custom derive macro or something, but at
+    // least it's good enough for debugging.
+    pub unsafe fn assign_debug_names(&self) {
+        macro_rules! assign {
+            ($dev:expr, $exp:expr, @$str:expr) => {
+                assign!($dev, $exp, "RenderPath::", $str);
+            };
+            ($dev:expr, $exp:expr, #$str:expr) => {
+                assign!($dev, $exp, "Framebuffer::", $str);
+            };
+            ($dev:expr, $exp:expr, $($str:expr),*) => {
+                $dev.set_debug_name($exp, c_str!($($str,)*));
+            };
+        }
+        let dev = &self.swapchain.device;
+        assign!(dev, self.render_pass, @"render_pass");
+        assign!(dev, self.texture_set_layout.inner, @"texture_set_layout");
+        assign!(dev, self.texture_set, @"texture_set");
+        assign!(dev, self.sprite_set_layout.inner, @"sprite_set_layout");
+        assign!(dev, self.sprite_pipeline_layout, @"sprite_pipeline_layout");
+        assign!(dev, self.sprite_pipeline, @"sprite_pipeline");
+        for fb in self.framebuffers.iter() {
+            assign!(dev, fb.image, #"image");
+            assign!(dev, fb.view, #"view");
+            assign!(dev, fb.inner, #"inner");
+        }
+    }
 }
 
 const MAX_TEXTURE_DESCRIPTORS: u32 = 8192;
@@ -234,7 +262,7 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>, res: &mut InitResources)
     };
     let sprite_pipeline = objs.create_graphics_pipeline(&create_info);
 
-    RenderPath {
+    let res = RenderPath {
         swapchain,
         render_pass,
         framebuffers,
@@ -244,5 +272,7 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>, res: &mut InitResources)
         sprite_set_layout,
         sprite_pipeline_layout,
         sprite_pipeline,
-    }
+    };
+    res.assign_debug_names();
+    res
 }

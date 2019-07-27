@@ -1,26 +1,14 @@
 use std::fs;
 use std::io;
-use std::os::raw::c_char;
 use std::sync::Arc;
 
 use crate::*;
 
 pub unsafe fn init_video(
-    app_title: *const c_char,
+    config: Arc<GraphicsConfig>,
     window: Arc<window::Window>,
 ) -> RenderState {
     assert!(window.sys().vulkan_supported());
-    let config = InstanceConfig {
-        app_info: vk::ApplicationInfo {
-            p_application_name: app_title,
-            application_version: vk::make_version!(0, 1, 0),
-            api_version: vk::API_VERSION_1_1,
-            p_engine_name: c_str!("cooper"),
-            engine_version: vk::make_version!(0, 1, 0),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
     let instance = Arc::new(Instance::new(config).unwrap());
     let surface =
         Arc::new(Surface::new(Arc::clone(&instance), window).unwrap());

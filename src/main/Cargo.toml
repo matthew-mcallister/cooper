@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 derivative = "1.0"
 derive_more = "0.14"
-memoffset = "0.3"
+memoffset = "0.5"
 gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
 win = { path = "../window", package = "cooper-window" }
 

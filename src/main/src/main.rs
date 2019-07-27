@@ -4,12 +4,6 @@
 use std::ffi::CString;
 use std::sync::Arc;
 
-macro_rules! c_str {
-    ($str:expr) => {
-        concat!($str, "\0") as *const str as *const std::os::raw::c_char
-    }
-}
-
 const TITLE_BASE: &'static str = "Cooper Demo";
 
 fn make_title(fps: f32) -> CString {
@@ -34,7 +28,13 @@ unsafe fn unsafe_main() {
         config,
     ).unwrap());
 
-    let mut state = gfx::init_video(c_str!("cooper"), Arc::clone(&window));
+    let config = Arc::new(gfx::GraphicsConfig {
+        app_name: TITLE_BASE.into(),
+        app_version: [0, 1, 0],
+        // TODO: Hide behind a CLI arg or env var
+        enable_debug_names: true,
+    });
+    let mut state = gfx::init_video(config, Arc::clone(&window));
     state.load_textures();
 
     loop {

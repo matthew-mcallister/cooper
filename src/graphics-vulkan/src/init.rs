@@ -1,4 +1,5 @@
 // TODO: User-friendly errors
+use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
@@ -6,10 +7,10 @@ use std::sync::Arc;
 use crate::*;
 
 #[derive(Debug, Default)]
-pub struct InstanceConfig {
-    pub app_info: vk::ApplicationInfo,
-    pub layers: Vec<*const c_char>,
-    pub extensions: Vec<*const c_char>,
+pub struct GraphicsConfig {
+    pub app_name: String,
+    pub app_version: [u32; 3],
+    pub enable_debug_names: bool,
 }
 
 #[derive(Debug)]
@@ -17,6 +18,7 @@ pub struct Instance {
     pub wsys: window::System,
     pub entry: Arc<vkl::Entry>,
     pub table: Arc<vkl::InstanceTable>,
+    pub config: Arc<GraphicsConfig>,
 }
 
 impl Drop for Instance {
@@ -26,22 +28,33 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    pub unsafe fn new(config: InstanceConfig) ->
-        Result<Self, AnyError>
-    {
+    pub unsafe fn new(config: Arc<GraphicsConfig>) -> Result<Self, AnyError> {
         let wsys = window::System::new()?;
         if !wsys.vulkan_supported() { Err("vulkan not available")?; }
 
         let get_instance_proc_addr = wsys.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
-        let (layers, mut extensions) = (config.layers, config.extensions);
+        let app_name = CString::new(config.app_name.clone()).unwrap();
+        let [major, minor, patch] = config.app_version;
+        let app_info = vk::ApplicationInfo {
+            p_application_name: app_name.as_ptr(),
+            application_version: vk::make_version!(major, minor, patch),
+            api_version: vk::API_VERSION_1_1,
+            p_engine_name: c_str!("cooper"),
+            engine_version: vk::make_version!(0, 1, 0),
+            ..Default::default()
+        };
+
+        // TODO: Detect if required extensions are unavailable
+        let mut extensions = Vec::new();
         extensions.extend(wsys.required_instance_extensions());
+        if config.enable_debug_names {
+            extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
 
         let create_info = vk::InstanceCreateInfo {
-            p_application_info: &config.app_info as _,
-            enabled_layer_count: layers.len() as _,
-            pp_enabled_layer_names: layers.as_ptr(),
+            p_application_info: &app_info as _,
             enabled_extension_count: extensions.len() as _,
             pp_enabled_extension_names: extensions.as_ptr(),
             ..Default::default()
@@ -53,7 +66,7 @@ impl Instance {
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
-        Ok(Instance { wsys, entry, table })
+        Ok(Instance { wsys, entry, table, config })
     }
 
     pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
@@ -137,6 +150,7 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
 #[derive(Debug)]
 pub struct Device {
     pub instance: Arc<Instance>,
+    pub config: Arc<GraphicsConfig>,
     pub pdev: vk::PhysicalDevice,
     pub props: Box<vk::PhysicalDeviceProperties>,
     pub mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
@@ -196,6 +210,7 @@ impl Device {
         Result<Self, AnyError>
     {
         let it = &instance.table;
+        let config = Arc::clone(&instance.config);
 
         // TODO: check that extensions are actually supported
         let exts = [
@@ -249,6 +264,7 @@ impl Device {
 
         Ok(Device {
             instance,
+            config,
             pdev,
             props,
             mem_props,
@@ -260,6 +276,16 @@ impl Device {
         let mut queue = vk::null();
         self.table.get_device_queue(qf, idx, &mut queue as _);
         queue
+    }
+
+    pub unsafe fn set_debug_name<T: CanDebug>(
+        &self,
+        obj: T,
+        name: *const c_char,
+    ) {
+        if self.config.enable_debug_names {
+            set_debug_name(&self.table, obj, name);
+        }
     }
 }
 

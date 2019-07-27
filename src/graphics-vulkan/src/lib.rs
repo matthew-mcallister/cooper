@@ -4,9 +4,12 @@
 use std::fmt;
 
 macro_rules! c_str {
-    ($str:expr) => {
-        concat!($str, "\0") as *const str as *const std::os::raw::c_char
-    }
+    ($($str:expr,)*) => {
+        concat!($($str,)* "\0") as *const str as *const std::os::raw::c_char
+    };
+    ($($str:expr),*) => {
+        c_str!($($str,)*)
+    };
 }
 
 macro_rules! include_shader {
@@ -18,6 +21,7 @@ macro_rules! include_shader {
     }
 }
 
+mod debug;
 mod descriptor;
 mod frame;
 mod init;
@@ -29,6 +33,7 @@ mod sprite;
 mod stats;
 mod texture;
 
+pub use debug::*;
 pub use descriptor::*;
 pub use frame::*;
 pub use init::*;
