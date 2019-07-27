@@ -235,6 +235,11 @@ unsafe fn init_render_path(swapchain: Arc<Swapchain>, res: &mut InitResources)
         ..Default::default()
     };
     let color_blend_attachments = [vk::PipelineColorBlendAttachmentState {
+        blend_enable: vk::TRUE,
+        src_color_blend_factor: vk::BlendFactor::ONE,
+        dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+        src_alpha_blend_factor: vk::BlendFactor::ONE,
+        dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
         color_write_mask: vk::ColorComponentFlags::R_BIT
             | vk::ColorComponentFlags::G_BIT
             | vk::ColorComponentFlags::B_BIT
