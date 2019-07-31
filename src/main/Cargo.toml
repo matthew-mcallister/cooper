@@ -6,11 +6,20 @@ edition = "2018"
 publish = false
 
 [dependencies]
-derivative = "1.0"
+common = { path = "../common", package = "cooper-common" }
+derivative = "1"
 derive_more = "0.14"
+fnv = "1"
+lodepng = "2.4"
 memoffset = "0.5"
 gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
+walkdir = "2"
 win = { path = "../window", package = "cooper-window" }
+
+# TODO: Remove
+[dependencies.vk]
+git = "https://gitlab.com/matthew-mcallister/vk-ffi"
+package = "vk-ffi"
 
 [[bin]]
 name = "cooper"

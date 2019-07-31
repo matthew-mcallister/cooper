@@ -1,6 +1,8 @@
 use std::ptr;
 use std::sync::Arc;
 
+use common::*;
+
 use crate::*;
 
 const VERT_SHADER_SRC: &'static [u8] = include_shader!("triangle_vert.spv");
@@ -46,7 +48,7 @@ impl RenderPath {
                 assign!($dev, $exp, "Framebuffer::", $str);
             };
             ($dev:expr, $exp:expr, $($str:expr),*) => {
-                $dev.set_debug_name($exp, c_str!($($str,)*));
+                $dev.set_debug_name($exp, c_str!($($str),*));
             };
         }
         let dev = &self.swapchain.device;

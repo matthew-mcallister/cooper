@@ -1,8 +1,9 @@
-// TODO: asynchronous transfer (for computing mipmaps I guess?)
+// TODO: This is painfully overly complicated
 use std::ffi::c_void;
-use std::io;
 use std::ptr;
 use std::sync::Arc;
+
+use common::*;
 
 use crate::*;
 
@@ -13,6 +14,9 @@ fn begin_one_time() -> vk::CommandBufferBeginInfo {
     }
 }
 
+// TODO: Replace this with a generic MemoryPool.
+// Treat it as a RAM cache so not everything is necessarily in VRAM.
+// Use it for vertex data and possibly buffers as well.
 #[derive(Debug)]
 struct StagingBuffer {
     dt: Arc<vkl::DeviceTable>,
@@ -102,6 +106,7 @@ pub struct ImageUpload {
     sub_state: [SubBufState; 2],
     buf: *mut [u8],
     offset: usize,
+    // We submit a single pipeline barrier for all pending transfers
     pre_barriers: Vec<vk::ImageMemoryBarrier>,
     post_barriers: Vec<vk::ImageMemoryBarrier>,
     rec_state: CommandBufferState,
@@ -509,7 +514,7 @@ impl TextureManager {
         extent: vk::Extent3D,
         format: vk::Format,
         bytes: &[u8],
-    ) -> Result<u32, AnyError> {
+    ) -> u32 {
         let create_info = vk::ImageCreateInfo {
             image_type: vk::ImageType::_2D,
             format,
@@ -570,20 +575,7 @@ impl TextureManager {
 
         self.upload.advance(bytes.len());
 
-        Ok(slot)
-    }
-
-    pub unsafe fn load_png<R: io::Read>(&mut self, mut src: R) ->
-        Result<u32, AnyError>
-    {
-        let mut bytes = Vec::new();
-        src.read_to_end(&mut bytes)?;
-        let img = lodepng::decode32(bytes)?;
-        self.load_image(
-            (img.width as u32, img.height as u32, 1).into(),
-            vk::Format::R8G8B8A8_UNORM,
-            slice_to_bytes(&img.buffer),
-        )
+        slot
     }
 
     pub unsafe fn flush(&mut self) {

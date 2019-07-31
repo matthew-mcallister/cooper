@@ -5,9 +5,12 @@ use num_traits as num;
 
 #[macro_export]
 macro_rules! c_str {
-    ($str:expr) => {
-        concat!($str, "\0") as *const str as *const std::os::raw::c_char
-    }
+    ($($str:expr),*) => {
+        c_str!($($str,)*)
+    };
+    ($($str:expr,)*) => {
+        concat!($($str,)* "\0") as *const str as *const std::os::raw::c_char
+    };
 }
 
 #[inline(always)]
@@ -15,6 +18,7 @@ pub fn align<T: Copy + num::Num>(alignment: T, offset: T) -> T {
     ((offset + alignment - num::one()) / alignment) * alignment
 }
 
+// A.k.a. guard
 #[inline(always)]
 pub fn opt(cond: bool) -> Option<()> {
     if cond { Some(()) } else { None }
@@ -82,5 +86,17 @@ macro_rules! impl_default {
                 $val
             }
         }
+    }
+}
+
+pub trait ResultExt<T, E> {
+    fn on_err(self, f: impl FnOnce(&E)) -> Self;
+}
+
+impl<T, E> ResultExt<T, E> for Result<T, E> {
+    #[inline(always)]
+    fn on_err(self, f: impl FnOnce(&E)) -> Self {
+        self.as_ref().err().map(f);
+        self
     }
 }

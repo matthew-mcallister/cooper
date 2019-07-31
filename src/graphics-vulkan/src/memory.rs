@@ -5,6 +5,8 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::Arc;
 
+use common::*;
+
 use crate::*;
 
 #[inline(always)]
@@ -289,11 +291,11 @@ impl DeviceAllocator for MemoryPool {
     {
         assert!(compatible_type(reqs.memory_type_bits, self.type_index));
         // Avoid leaving padding bytes as free blocks
-        let size = align_64(reqs.alignment, reqs.size);
+        let size = align(reqs.alignment, reqs.size);
 
         for idx in 0..self.free.len() {
             let block = &mut self.free[idx];
-            let offset = align_64(reqs.alignment, block.start);
+            let offset = align(reqs.alignment, block.start);
             if block.end - offset >= size {
                 // Found a spot
                 return self.carve_block(idx, offset..(offset + size));
@@ -302,7 +304,7 @@ impl DeviceAllocator for MemoryPool {
 
         // Didn't find a block; allocate a new chunk and put the
         // allocation there.
-        self.grow(align_64(self.base_size, size));
+        self.grow(align(self.base_size, size));
 
         let block = self.free.len() - 1;
         self.carve_block(block, 0..size)

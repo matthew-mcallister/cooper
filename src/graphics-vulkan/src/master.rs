@@ -1,5 +1,3 @@
-use std::fs;
-use std::io;
 use std::sync::Arc;
 
 use crate::*;
@@ -118,18 +116,6 @@ impl RenderState {
             frame_counter: 0,
             history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
         }
-    }
-
-    pub unsafe fn load_textures(&mut self) {
-        // TODO: Load asynchronously
-        // TODO: Is PNG decoding a bottleneck here? i.e. would this go
-        // faster if it were parallelized?
-        for _ in 0..256 {
-            let src = fs::File::open("/tmp/test_pattern.png").unwrap();
-            let src = io::BufReader::new(src);
-            self.textures.load_png(src).unwrap();
-        }
-        self.textures.flush();
     }
 
     pub unsafe fn acquire_framebuffer(&mut self) -> u32 {
