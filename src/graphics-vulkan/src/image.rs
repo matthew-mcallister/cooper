@@ -483,6 +483,7 @@ impl XferState {
             &submit_info as _,
             fence,
         ).check().unwrap();
+        self.rec_state = CommandBufferState::Pending;
     }
 
     unsafe fn flush(&mut self, submission_id: u32) {

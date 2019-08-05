@@ -44,6 +44,7 @@ fn load_textures(assets: &AssetManager, state: &mut gfx::RenderState) {
     unsafe {
         let id = state.images.add_image(extent, format);
         state.images.upload_data(id, data);
+        state.images.flush();
     }
 }
 
