@@ -12,7 +12,7 @@ use crate::*;
 pub struct GraphicsConfig {
     pub app_name: String,
     pub app_version: [u32; 3],
-    pub enable_debug_names: bool,
+    pub debug: bool,
 }
 
 #[derive(Debug)]
@@ -48,15 +48,20 @@ impl Instance {
             ..Default::default()
         };
 
-        // TODO: Detect if required extensions are unavailable
+        // TODO: Detect if required layers/extensions are unavailable
+        let mut layers = Vec::new();
         let mut extensions = Vec::new();
         extensions.extend(wsys.required_instance_extensions());
-        if config.enable_debug_names {
+
+        if config.debug {
+            layers.push(c_str!("VK_LAYER_LUNARG_standard_validation"));
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &app_info as _,
+            enabled_layer_count: layers.len() as _,
+            pp_enabled_layer_names: layers.as_ptr(),
             enabled_extension_count: extensions.len() as _,
             pp_enabled_extension_names: extensions.as_ptr(),
             ..Default::default()
@@ -285,7 +290,7 @@ impl Device {
         obj: T,
         name: *const c_char,
     ) {
-        if self.config.enable_debug_names {
+        if self.config.debug {
             set_debug_name(&self.table, obj, name);
         }
     }

@@ -74,7 +74,7 @@ unsafe fn unsafe_main() {
         app_name: TITLE_BASE.into(),
         app_version: [0, 1, 0],
         // TODO: Hide behind a CLI arg or env var
-        enable_debug_names: true,
+        debug: true,
     });
     let mut state = gfx::init_video(config, Arc::clone(&window));
 
