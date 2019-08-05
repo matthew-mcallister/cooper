@@ -38,10 +38,13 @@ fn load_textures(assets: &AssetManager, state: &mut gfx::RenderState) {
     source.read_to_end(&mut data).unwrap();
     let mut img = lodepng::decode32(&data).unwrap();
     premultiply_alpha(&mut img);
-    let extent = vk::Extent3D::new(img.width as _, img.height as _, 1);
+    let extent = vk::Extent2D::new(img.width as _, img.height as _);
     let format = vk::Format::R8G8B8A8_SRGB;
     let data = slice_to_bytes(&img.buffer[..]);
-    unsafe { state.textures.load_image(extent, format, data); }
+    unsafe {
+        let id = state.images.add_image(extent, format);
+        state.images.upload_data(id, data);
+    }
 }
 
 fn main() {

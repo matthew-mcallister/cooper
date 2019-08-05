@@ -13,6 +13,7 @@ macro_rules! c_str {
     };
 }
 
+// Returns the smallest multiple of `alignment` that is `>= offset`.
 #[inline(always)]
 pub fn align<T: Copy + num::Num>(alignment: T, offset: T) -> T {
     ((offset + alignment - num::one()) / alignment) * alignment

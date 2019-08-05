@@ -21,7 +21,7 @@ mod object;
 mod render_path;
 mod sprite;
 mod stats;
-mod texture;
+mod image;
 
 pub use debug::*;
 pub use descriptor::*;
@@ -33,4 +33,4 @@ pub use object::*;
 pub use render_path::*;
 pub use sprite::*;
 pub use stats::*;
-pub use texture::*;
+pub use image::*;

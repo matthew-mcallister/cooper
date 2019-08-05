@@ -33,7 +33,7 @@ impl SpriteBuffer {
     ) -> [Self; 2] {
         let objs = &mut res.objs;
         let mapped_mem = &mut res.mapped_mem;
-        assert!(mapped_mem.mapped());
+        assert!(mapped_mem.host_mapped());
 
         let buf_size = size as vk::DeviceSize *
             std::mem::size_of::<Sprite>() as vk::DeviceSize;

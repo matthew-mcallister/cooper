@@ -189,5 +189,5 @@ mod dir_bundle_tests {
 
 // TODO: For ZipAssetBundle (one per thread if multiple threads)
 //struct ZipEntryReader {
-//    shared_file: Rc<RefCell<File>>,
+//    shared_file: Rc<RefCell<ZipDecoder<File>>>,
 //}

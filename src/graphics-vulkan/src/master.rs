@@ -31,7 +31,7 @@ pub struct RenderState {
     pub gfx_queue_family: u32,
     pub res: Box<InitResources>,
     pub present_sem: vk::Semaphore,
-    pub textures: Box<TextureManager>,
+    pub images: Box<ImageManager>,
     pub frames: Box<[FrameState; 2]>,
     pub frame_counter: u64,
     pub history: Box<[FrameLog; FRAME_HISTORY_SIZE]>,
@@ -89,8 +89,9 @@ impl RenderState {
             .unwrap();
         let create_info = MemoryPoolCreateInfo {
             type_index,
-            mapped: true,
             base_size: 0x100_0000,
+            host_mapped: true,
+            ..Default::default()
         };
         let mapped_mem = MemoryPool::new(Arc::clone(&device), create_info);
 
@@ -100,8 +101,7 @@ impl RenderState {
         let present_sem = res.objs.create_semaphore();
 
         let path = Arc::new(RenderPath::new(Arc::clone(&swapchain), &mut res));
-        let textures = Box::new(TextureManager::new
-            (&mut res, Arc::clone(&path), gfx_queue_family));
+        let images = Box::new(ImageManager::new(Arc::clone(&path), &mut res));
         let frames = Box::new(FrameState::new_pair(path, &mut res));
 
         RenderState {
@@ -111,7 +111,7 @@ impl RenderState {
             gfx_queue_family,
             res,
             present_sem,
-            textures,
+            images,
             frames,
             frame_counter: 0,
             history: Box::new([Default::default(); FRAME_HISTORY_SIZE]),
