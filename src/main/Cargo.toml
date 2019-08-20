@@ -6,13 +6,15 @@ edition = "2018"
 publish = false
 
 [dependencies]
-common = { path = "../common", package = "cooper-common" }
+ccore = { path = "../core", package = "cooper-core" }
 derivative = "1"
 derive_more = "0.14"
 fnv = "1"
+gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
 lodepng = "2.4"
 memoffset = "0.5"
-gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
+na = { version = "0.18", package = "nalgebra" }
+prelude = { path = "../prelude", package = "cooper-prelude" }
 walkdir = "2"
 win = { path = "../window", package = "cooper-window" }
 

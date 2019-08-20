@@ -10,7 +10,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use common::*;
+use prelude::*;
 use derive_more::*;
 
 use crate::*;
@@ -94,8 +94,7 @@ impl AssetManager {
     }
 
     /// Returns `None` if there is no asset with the given name.
-    pub fn open(&self, name: &str) -> Option<io::Result<Box<dyn io::Read>>>
-    {
+    pub fn open(&self, name: &str) -> Option<io::Result<Box<dyn io::Read>>> {
         let src = self.assets.get(name)?.source;
         Some(self.bundles[src.bundle as usize].open(src.index))
     }

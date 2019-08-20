@@ -6,7 +6,8 @@ edition = "2018"
 publish = false
 
 [dependencies]
-common = { path = "../common", package = "cooper-common" }
+ccore = { path = "../core", package = "cooper-core" }
+prelude = { path = "../prelude", package = "cooper-prelude" }
 window = { path = "../window", package = "cooper-window" }
 
 [dependencies.vk]

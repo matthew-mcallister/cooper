@@ -1,10 +1,9 @@
 [package]
-name = "cooper-common"
+name = "cooper-prelude"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
 
 [dependencies]
-derive_more = "0.15"
 num-traits = "0.2"

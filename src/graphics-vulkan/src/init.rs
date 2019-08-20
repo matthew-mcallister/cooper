@@ -4,7 +4,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-use common::*;
+use prelude::*;
 
 use crate::*;
 

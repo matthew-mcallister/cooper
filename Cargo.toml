@@ -1,7 +1,9 @@
 [workspace]
 members = [
     "src/alloc",
+    "src/core",
     "src/graphics-vulkan",
     "src/main",
+    "src/prelude",
     "src/window",
 ]

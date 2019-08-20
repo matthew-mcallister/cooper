@@ -136,7 +136,7 @@ impl ImageManager {
         }
     }
 
-    pub unsafe fn add_image(
+    pub unsafe fn add(
         &mut self,
         extent: vk::Extent2D,
         format: vk::Format,
@@ -237,6 +237,10 @@ impl ImageManager {
 
         let xfer = xfer_state!(self);
         xfer.emit_image_copy(img);
+    }
+
+    pub unsafe fn evict(&mut self, _id: ImageId) {
+        panic!("unimplemented");
     }
 
     unsafe fn next_xfer(&mut self) {
@@ -483,7 +487,6 @@ impl XferState {
             &submit_info as _,
             fence,
         ).check().unwrap();
-        self.rec_state = CommandBufferState::Pending;
     }
 
     unsafe fn flush(&mut self, submission_id: u32) {

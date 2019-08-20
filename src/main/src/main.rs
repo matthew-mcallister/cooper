@@ -4,7 +4,7 @@
 use std::ffi::CString;
 use std::sync::Arc;
 
-use common::*;
+use prelude::*;
 
 mod asset;
 
@@ -42,7 +42,7 @@ fn load_textures(assets: &AssetManager, state: &mut gfx::RenderState) {
     let format = vk::Format::R8G8B8A8_SRGB;
     let data = slice_to_bytes(&img.buffer[..]);
     unsafe {
-        let id = state.images.add_image(extent, format);
+        let id = state.images.add(extent, format);
         state.images.upload_data(id, data);
         state.images.flush();
     }
