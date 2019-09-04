@@ -4,5 +4,6 @@ members = [
     "src/graphics-vulkan",
     "src/main",
     "src/prelude",
+    "src/unit",
     "src/window",
 ]

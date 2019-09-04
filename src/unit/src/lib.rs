@@ -1,7 +1,11 @@
+#![feature(set_stdio)]
+
 use enum_map::Enum;
 
+mod context;
 mod reporter;
 
+pub use context::*;
 pub use reporter::*;
 
 /// Provides the environment in which tests are run.
@@ -151,30 +155,5 @@ impl<D> TestDriver<D> {
             self.results.push(result);
         }
         self.reporter.after_all(&self.tests[..], &self.results[..]);
-    }
-}
-
-/// Test type used by `PlainTestContext`.
-pub type PlainTest = Test<fn()>;
-
-/// Enables running vanilla Rust unit tests. Each test is a function
-/// which takes no input and produces no output (except through
-/// side-effects). Test failure is signaled by panicking.
-#[derive(Debug)]
-pub struct PlainTestContext {
-    _priv: (),
-}
-
-impl PlainTestContext {
-    pub fn new() -> Self {
-        PlainTestContext { _priv: () }
-    }
-}
-
-impl TestContext<PlainTest> for PlainTestContext {
-    fn run(&mut self, test: &PlainTest) -> Result<(), Option<String>> {
-        // TODO: Capture stdout/stderr
-        std::panic::catch_unwind(test.data)
-            .map_err(|_| Some("**output not captured**".to_owned()))
     }
 }

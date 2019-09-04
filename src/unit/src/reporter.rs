@@ -141,13 +141,13 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
                 if res.outcome == Outcome::Xpassed {
                     writeln!(
                         self.out,
-                        "**test changed from failing to passing**",
+                        "test changed from failing to passing",
                     );
                 } else if let Some(ref msg) = res.output {
                     writeln!(self.out, "{}", msg);
                 }
-                writeln!(self.out);
             }
+            writeln!(self.out);
 
             // List failing tests
             writeln!(self.out, "failures:");
