@@ -92,9 +92,11 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
     for StandardTestReporter<W>
 {
     fn before_all(&mut self, tests: &[Test<D>]) {
+        writeln!(self.out);
+
         self.name_width = tests.iter()
             // FIXME: column width calculation not internationalized
-            .map(|test| test.name.len())
+            .map(|test| test.name().len())
             .max()
             .unwrap_or(0);
         writeln!(self.out, "running {} tests", tests.len());
@@ -106,7 +108,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
         write!(
             self.out,
             "test {:width$} ... ",
-            &test.name,
+            test.name(),
             width = self.name_width,
         );
     }
@@ -137,7 +139,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             writeln!(self.out, "failures:");
             writeln!(self.out);
             for (test, res) in critical.clone() {
-                writeln!(self.out, "---- {} ----", &test.name);
+                writeln!(self.out, "---- {} ----", test.name());
                 if res.outcome == Outcome::Xpassed {
                     writeln!(
                         self.out,
@@ -153,7 +155,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             writeln!(self.out, "failures:");
             writeln!(self.out);
             for (test, _res) in critical.clone() {
-                writeln!(self.out, "    {}", test.name);
+                writeln!(self.out, "    {}", test.name());
             }
             writeln!(self.out);
         }
@@ -182,6 +184,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             let count = self.summary.counts[outcome];
             write!(self.out, "{} {}; ", count, name);
         }
+        writeln!(self.out);
         writeln!(self.out);
     }
 }

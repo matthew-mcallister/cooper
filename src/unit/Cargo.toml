@@ -8,3 +8,11 @@ publish = false
 [dependencies]
 derive_more = "0.15"
 enum-map = "0.6"
+
+[[test]]
+name = "vanilla"
+harness = false
+
+[[test]]
+name = "module"
+harness = false

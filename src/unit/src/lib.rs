@@ -3,9 +3,12 @@
 use enum_map::Enum;
 
 mod context;
+#[macro_use]
+mod macros;
 mod reporter;
 
 pub use context::*;
+pub use macros::*;
 pub use reporter::*;
 
 /// Provides the environment in which tests are run.
@@ -52,14 +55,62 @@ pub trait TestReporter<T>: std::fmt::Debug {
     fn after_all(&mut self, tests: &[T], results: &[TestResult]);
 }
 
-/// The "base" test type used by the driver.
 // TODO: should_panic
+#[derive(Clone, Debug, Default)]
+pub struct TestAttrs {
+    ignore: bool,
+    xfail: bool,
+}
+
+impl TestAttrs {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn ignore(mut self) -> Self {
+        self.ignore = true;
+        self
+    }
+
+    pub fn xfail(mut self) -> Self {
+        self.xfail = true;
+        self
+    }
+
+    pub fn build_test<D>(self, name: String, data: D) -> Test<D> {
+        Test {
+            name,
+            attrs: self,
+            data,
+        }
+    }
+}
+
+/// The "base" test type used by the driver.
+// TODO: Interface should be a trait
 #[derive(Clone, Debug)]
 pub struct Test<D> {
-    pub name: String,
-    pub ignore: bool,
-    pub xfail: bool,
-    pub data: D,
+    name: String,
+    attrs: TestAttrs,
+    data: D,
+}
+
+impl<D> Test<D> {
+    pub fn name(&self) -> &str {
+        &self.name[..]
+    }
+
+    pub fn ignore(&self) -> bool {
+        self.attrs.ignore
+    }
+
+    pub fn xfail(&self) -> bool {
+        self.attrs.xfail
+    }
+
+    pub fn data(&self) -> &D {
+        &self.data
+    }
 }
 
 /// Collects tests for execution and allows configuring how tests are
@@ -67,14 +118,14 @@ pub struct Test<D> {
 // TODO: Filters
 // TODO: Optionally run tests in parallel
 #[derive(Debug, Default)]
-pub struct TestBuilder<T> {
+pub struct TestDriverBuilder<T> {
     tests: Vec<T>,
     reporter: Option<Box<dyn TestReporter<T>>>,
 }
 
-impl<T> TestBuilder<T> {
+impl<T> TestDriverBuilder<T> {
     pub fn new() -> Self {
-        TestBuilder {
+        TestDriverBuilder {
             tests: Vec::new(),
             reporter: None,
         }
@@ -100,7 +151,7 @@ impl<T> TestBuilder<T> {
     }
 }
 
-impl<D> TestBuilder<Test<D>> {
+impl<D> TestDriverBuilder<Test<D>> {
     pub fn build(self, context: Box<dyn TestContext<Test<D>>>) ->
         TestDriver<D>
     {
@@ -131,12 +182,12 @@ impl<D> TestDriver<D> {
             self.reporter.before_each(test);
 
             let (outcome, output);
-            if test.ignore {
+            if test.ignore() {
                 outcome = Outcome::Ignored;
                 output = None;
             } else {
                 let (on_pass, on_fail) =
-                    if test.xfail { (Outcome::Xpassed, Outcome::Xfailed) }
+                    if test.xfail() { (Outcome::Xpassed, Outcome::Xfailed) }
                     else { (Outcome::Passed, Outcome::Failed) };
                 match self.context.run(test) {
                     Ok(()) => {

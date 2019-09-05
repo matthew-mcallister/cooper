@@ -48,7 +48,7 @@ impl TestContext<PlainTest> for PlainTestContext {
             std::io::set_panic(Some(Box::new(Sink::clone(&output)))),
         );
 
-        let res = std::panic::catch_unwind(test.data);
+        let res = std::panic::catch_unwind(test.data());
 
         std::io::set_print(old_stdout);
         std::io::set_panic(old_stderr);

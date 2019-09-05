@@ -91,29 +91,15 @@ fn test_xpass() {
 }
 
 macro_rules! test {
-    ($fn:ident) => {
-        test!(@priv $fn, false, false)
-    };
-    (@ignore $fn:ident) => {
-        test!(@priv $fn, true, false)
-    };
-    (@xfail $fn:ident) => {
-        test!(@priv $fn, false, true)
-    };
-    (@ignore @xfail $fn:ident) => {
-        test!(@priv $fn, true, true)
-    };
-    (@priv $fn:ident, $ignore:expr, $xfail:expr) => {
-        Test {
-            name: concat!(module_path!(), "::", stringify!($fn)).to_owned(),
-            ignore: $ignore,
-            xfail: $xfail,
-            data: $fn,
-        }
-    };
+    ($(@$attr:ident)* $fn:ident) => {{
+        let name = concat!(module_path!(), "::", stringify!($fn)).to_owned();
+        TestAttrs::new()
+            $(.$attr())*
+            .build_test(name, $fn)
+    }}
 }
 
-fn add_tests(builder: &mut TestBuilder<PlainTest>) {
+fn add_tests(builder: &mut TestDriverBuilder<PlainTest>) {
     builder
         .add_test(test!(test_disjoint))
         .add_test(test!(test_subset_and_superset))
@@ -127,7 +113,7 @@ fn add_tests(builder: &mut TestBuilder<PlainTest>) {
 }
 
 fn main() {
-    let mut builder = TestBuilder::new();
+    let mut builder = TestDriverBuilder::new();
     add_tests(&mut builder);
     builder.build(Box::new(PlainTestContext::new())).run();
 }
