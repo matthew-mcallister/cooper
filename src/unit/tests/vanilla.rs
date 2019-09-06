@@ -78,6 +78,11 @@ fn test_ignore_xfail() {
     unimplemented!();
 }
 
+fn test_should_err() {
+    let s = HashSet::<u32>::new();
+    assert!(s.contains(&15));
+}
+
 fn test_failure() {
     let mut s = HashSet::new();
     s.insert(15u32);
@@ -107,6 +112,7 @@ fn add_tests(builder: &mut TestDriverBuilder<PlainTest>) {
         .add_test(test!(@ignore test_ignore))
         .add_test(test!(@xfail test_xfail))
         .add_test(test!(@ignore @xfail test_ignore_xfail))
+        .add_test(test!(@should_err test_should_err))
         // These two tests actually fail
         .add_test(test!(test_failure))
         .add_test(test!(@xfail test_xpass));

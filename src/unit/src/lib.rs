@@ -1,3 +1,4 @@
+#![feature(option_flattening)]
 #![feature(set_stdio)]
 
 use enum_map::Enum;
@@ -55,11 +56,11 @@ pub trait TestReporter<T>: std::fmt::Debug {
     fn after_all(&mut self, tests: &[T], results: &[TestResult]);
 }
 
-// TODO: should_panic
 #[derive(Clone, Debug, Default)]
 pub struct TestAttrs {
     ignore: bool,
     xfail: bool,
+    should_err: bool,
 }
 
 impl TestAttrs {
@@ -67,14 +68,25 @@ impl TestAttrs {
         Default::default()
     }
 
-    pub fn ignore(mut self) -> Self {
-        self.ignore = true;
-        self
+    pub fn ignore(self) -> Self {
+        TestAttrs {
+            ignore: true,
+            ..self
+        }
     }
 
-    pub fn xfail(mut self) -> Self {
-        self.xfail = true;
-        self
+    pub fn xfail(self) -> Self {
+        TestAttrs {
+            xfail: true,
+            ..self
+        }
+    }
+
+    pub fn should_err(self) -> Self {
+        TestAttrs {
+            should_err: true,
+            ..self
+        }
     }
 
     pub fn build_test<D>(self, name: String, data: D) -> Test<D> {
@@ -106,6 +118,10 @@ impl<D> Test<D> {
 
     pub fn xfail(&self) -> bool {
         self.attrs.xfail
+    }
+
+    pub fn should_err(&self) -> bool {
+        self.attrs.should_err
     }
 
     pub fn data(&self) -> &D {
@@ -186,19 +202,15 @@ impl<D> TestDriver<D> {
                 outcome = Outcome::Ignored;
                 output = None;
             } else {
-                let (on_pass, on_fail) =
-                    if test.xfail() { (Outcome::Xpassed, Outcome::Xfailed) }
-                    else { (Outcome::Passed, Outcome::Failed) };
-                match self.context.run(test) {
-                    Ok(()) => {
-                        outcome = on_pass;
-                        output = None;
-                    }
-                    Err(m) => {
-                        outcome = on_fail;
-                        output = m;
-                    },
-                }
+                let outcomes = if test.xfail() {
+                    [Outcome::Xfailed, Outcome::Xpassed]
+                } else {
+                    [Outcome::Failed, Outcome::Passed]
+                };
+                let res = self.context.run(test);
+                let passed = res.is_ok() ^ test.should_err();
+                outcome = outcomes[passed as usize];
+                output = res.err().flatten();
             }
             let result = TestResult { outcome, output };
 

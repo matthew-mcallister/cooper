@@ -140,13 +140,12 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             writeln!(self.out);
             for (test, res) in critical.clone() {
                 writeln!(self.out, "---- {} ----", test.name());
-                if res.outcome == Outcome::Xpassed {
-                    writeln!(
-                        self.out,
-                        "test changed from failing to passing",
-                    );
-                } else if let Some(ref msg) = res.output {
+                if let Some(ref msg) = res.output {
                     writeln!(self.out, "{}", msg);
+                } else if res.outcome == Outcome::Xpassed {
+                    writeln!(self.out, "test changed from failing to passing");
+                } else if test.should_err() {
+                    writeln!(self.out, "test failed to raise an error");
                 }
             }
             writeln!(self.out);

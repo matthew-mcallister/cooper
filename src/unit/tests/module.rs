@@ -21,9 +21,15 @@ mod tests {
         assert_eq!(mul(2, add(3, 4)), add(mul(2, 3), mul(2, 4)));
     }
 
+    #[allow(const_err)]
+    fn divide_by_zero_panics() {
+        assert_eq!(1 / 0, 0);
+    }
+
     declare_tests![
         is_associative,
         is_distributive,
+        (#[should_err] divide_by_zero_panics),
     ];
 }
 
