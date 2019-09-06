@@ -1,33 +1,33 @@
-//! This module implements a fairly thin wrapper around GLFW.
+//! This module implements a single-threaded wrapper around GLFW.
+
+#![feature(arbitrary_self_types)]
+#![feature(non_exhaustive)]
 #![feature(optin_builtin_traits)]
+
+use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
+use std::rc::Rc;
 
 use derive_more::*;
-
-macro_rules! c_str {
-    ($str:expr) => {
-        concat!($str, "\0") as *const str as *const std::os::raw::c_char
-    }
-}
+use prelude::*;
 
 #[inline(always)]
 fn bool2int(b: bool) -> c_int {
     if b { glfw::TRUE } else { glfw::FALSE }
 }
 
-/// An error caused by the windowing system. GLFW reports errors through
-/// callbacks, so the provided message will indicate where the error
-/// occurred in application source rather than in GLFW.
-#[derive(Clone, Constructor, Copy, Debug)]
-pub struct Error {
-    msg: &'static str,
+#[inline(always)]
+fn int2bool(i: c_int) -> bool {
+    i == glfw::TRUE
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
+/// An error caused by the window/input system.
+#[derive(Clone, Debug, Display)]
+#[display(fmt = "{}", desc)]
+pub struct Error {
+    code: c_int,
+    desc: Box<String>,
 }
 
 impl std::error::Error for Error {}
@@ -47,37 +47,46 @@ impl From<Dimensions> for vk::Extent2D {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub title: *const c_char,
-    pub dims: Dimensions,
-    pub hints: Hints,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Hints {
-    pub resizable: bool,
-}
-
-static mut GLFW_USE_COUNT: u32 = 0;
-
-/// Reference-counting wrapper to make sure GLFW is automatically
-/// initialized and terminated. Not thread safe.
+/// Initializes and terminates GLFW.
 #[derive(Debug)]
-pub struct System { _priv: () }
+#[non_exhaustive]
+pub struct System;
+
+impl !Sync for System {}
+impl !Send for System {}
+
+impl Drop for System {
+    fn drop(&mut self) {
+        unsafe { glfw::terminate(); }
+    }
+}
+
+static mut LAST_ERROR: Option<Error> = None;
+
+unsafe extern "C" fn error_cb(code: c_int, desc: *const c_char) {
+    assert!(!desc.is_null());
+    let desc = Box::new(CStr::from_ptr(desc).to_str().unwrap().to_owned());
+    LAST_ERROR = Some(Error { code, desc });
+}
+
+unsafe fn last_error() -> Option<Error> {
+    LAST_ERROR.take()
+}
 
 impl System {
-    pub unsafe fn new() -> Result<Self, Error> {
-        if glfw::init() != glfw::TRUE {
-            Err(Error::new("failed to initialize GLFW"))
+    /// This function should (allegedly) only be called from the main
+    /// thread.
+    pub unsafe fn init() -> Result<Rc<Self>, Error> {
+        glfw::set_error_callback(Some(error_cb as _));
+        if !int2bool(glfw::init()) {
+            Err(last_error().unwrap())
         } else {
-            GLFW_USE_COUNT += 1;
-            Ok(System { _priv: () })
+            Ok(Rc::new(System))
         }
     }
 
     pub fn vulkan_supported(&self) -> bool {
-        unsafe { glfw::vulkan_supported() == glfw::TRUE }
+        unsafe { int2bool(glfw::vulkan_supported()) }
     }
 
     pub fn required_instance_extensions(&self) -> &[*const c_char] {
@@ -95,17 +104,15 @@ impl System {
         queue_family: u32,
     ) -> bool {
         unsafe {
-            glfw::get_physical_device_presentation_support(
+            int2bool(glfw::get_physical_device_presentation_support(
                 instance.0 as _,
                 physical_device.0 as _,
                 queue_family,
-            ) == glfw::TRUE
+            ))
         }
     }
 
-    pub fn pfn_get_instance_proc_addr(&self) ->
-        vk::pfn::GetInstanceProcAddr
-    {
+    pub fn pfn_get_instance_proc_addr(&self) -> vk::pfn::GetInstanceProcAddr {
         unsafe {
             std::mem::transmute(glfw::get_instance_proc_address(
                 0 as _,
@@ -114,55 +121,58 @@ impl System {
         }
     }
 
-    pub fn poll_events(&self) {
-        unsafe { glfw::poll_events(); }
+    pub fn create_window(self: &Rc<Self>, info: CreateInfo) ->
+        Result<Window, Error>
+    {
+        Window::new(Rc::clone(self), info)
     }
 }
 
-impl !Send for System {}
-impl !Sync for System {}
-
-impl Drop for System {
-    fn drop(&mut self) {
-        unsafe {
-            GLFW_USE_COUNT -= 1;
-            if GLFW_USE_COUNT == 0 { glfw::terminate(); }
-        }
-    }
+#[derive(Clone, Debug)]
+pub struct CreateInfo {
+    pub title: String,
+    pub dims: Dimensions,
+    pub hints: Hints,
 }
 
-impl Clone for System {
-    fn clone(&self) -> Self {
-        unsafe {
-            GLFW_USE_COUNT += 1;
-            System { _priv: () }
-        }
-    }
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct Hints {
+    pub resizable: bool,
+    pub hidden: bool,
 }
 
 /// Wrapper around the GLFW window type.
 #[derive(Debug)]
 pub struct Window {
     inner: ptr::NonNull<glfw::Window>,
-    sys: System,
+    sys: Rc<System>,
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        unsafe { glfw::destroy_window(self.inner.as_ptr()); }
+    }
 }
 
 impl Window {
-    pub fn sys(&self) -> &System { &self.sys }
-
-    pub unsafe fn new(sys: System, config: Config) -> Result<Self, Error> {
-        glfw::window_hint(glfw::CLIENT_API, glfw::NO_API);
-        glfw::window_hint(glfw::RESIZABLE, bool2int(config.hints.resizable));
-        let inner = glfw::create_window(
-            config.dims.width,
-            config.dims.height,
-            config.title,
-            0 as _,
-            0 as _,
-        );
-        let inner = ptr::NonNull::new(inner)
-            .ok_or(Error::new("failed to create window"))?;
-        Ok(Window { inner, sys })
+    pub fn new(sys: Rc<System>, info: CreateInfo) -> Result<Self, Error> {
+        unsafe {
+            let title = CString::new(info.title).unwrap();
+            glfw::window_hint(glfw::CLIENT_API, glfw::NO_API);
+            glfw::window_hint(glfw::RESIZABLE, bool2int(info.hints.resizable));
+            glfw::window_hint(glfw::VISIBLE, bool2int(!info.hints.hidden));
+            let inner = glfw::create_window(
+                info.dims.width,
+                info.dims.height,
+                title.as_ptr(),
+                0 as _,
+                0 as _,
+            );
+            let inner = ptr::NonNull::new(inner)
+                .ok_or_else(|| last_error().unwrap())?;
+            Ok(Window { inner, sys })
+        }
     }
 
     pub unsafe fn create_surface(&self, instance: vk::Instance) ->
@@ -179,20 +189,34 @@ impl Window {
     }
 
     pub fn should_close(&self) -> bool {
-        unsafe {
-            glfw::window_should_close(self.inner.as_ptr()) == glfw::TRUE
-        }
+        unsafe { int2bool(glfw::window_should_close(self.inner.as_ptr())) }
     }
 
-    pub fn set_title(&self, title: *const c_char) {
-        unsafe {
-            glfw::set_window_title(self.inner.as_ptr(), title);
-        }
+    pub fn set_title(&self, title: impl Into<String>) {
+        let title = CString::new(title.into()).unwrap();
+        unsafe { glfw::set_window_title(self.inner.as_ptr(), title.as_ptr()); }
     }
 }
 
-impl Drop for Window {
-    fn drop(&mut self) {
-        unsafe { glfw::destroy_window(self.inner.as_ptr()); }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke_test() {
+        let system = unsafe { System::init().unwrap() };
+
+        let config = CreateInfo {
+            title: "smoke test".to_owned(),
+            dims: (320, 200).into(),
+            hints: Default::default()
+        };
+        let window = Window::new(system, config).unwrap();
+
+        assert!(!window.should_close());
+
+        window.set_title("tset ekoms");
+
+        assert_eq!();
     }
 }
