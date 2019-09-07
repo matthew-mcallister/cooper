@@ -4,6 +4,11 @@
 #![feature(non_exhaustive)]
 #![feature(optin_builtin_traits)]
 
+#[cfg(test)]
+macro_rules! test_type {
+    () => { unit::PlainTest }
+}
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
@@ -11,6 +16,7 @@ use std::rc::Rc;
 
 use derive_more::*;
 use prelude::*;
+use unit::*;
 
 #[inline(always)]
 fn bool2int(b: bool) -> c_int {
@@ -202,21 +208,44 @@ impl Window {
 mod tests {
     use super::*;
 
-    #[test]
     fn smoke_test() {
         let system = unsafe { System::init().unwrap() };
 
         let config = CreateInfo {
             title: "smoke test".to_owned(),
             dims: (320, 200).into(),
-            hints: Default::default()
+            hints: Default::default(),
         };
         let window = Window::new(system, config).unwrap();
 
         assert!(!window.should_close());
 
         window.set_title("tset ekoms");
-
-        assert_eq!();
     }
+
+    fn error_test() {
+        let system = unsafe { System::init().unwrap() };
+
+        let config = CreateInfo {
+            title: "error test".to_owned(),
+            dims: (-1, -1).into(),
+            hints: Default::default(),
+        };
+        Window::new(system, config).unwrap();
+    }
+
+    declare_tests![
+        smoke_test,
+        (#[should_err] error_test),
+    ];
+}
+
+collect_tests![tests];
+
+#[cfg(test)]
+pub fn main() {
+    let mut builder = TestDriverBuilder::new();
+    crate::__collect_tests(&mut builder);
+    let mut driver = builder.build(Box::new(PlainTestContext::new()));
+    driver.run();
 }

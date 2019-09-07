@@ -5,9 +5,13 @@ authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
 
+[lib]
+harness = false
+
 [dependencies]
 derive_more = "0.14"
 prelude = { path = "../prelude", package = "cooper-prelude" }
+unit = { path = "../unit", package = "cooper-unit" }
 
 [dependencies.glfw]
 git = "https://gitlab.com/matthew-mcallister/glfw-ffi.git"

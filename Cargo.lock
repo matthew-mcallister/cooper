@@ -110,6 +110,7 @@ name = "cooper-window"
 version = "0.1.0"
 dependencies = [
  "cooper-prelude 0.1.0",
+ "cooper-unit 0.1.0",
  "derive_more 0.14.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "glfw-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/glfw-ffi.git)",
  "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
