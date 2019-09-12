@@ -1,16 +1,9 @@
-use std::fmt;
-
 use derive_more::*;
 
-#[derive(Clone, Constructor, Copy, Debug)]
+#[derive(Clone, Constructor, Copy, Debug, Display)]
+#[display(fmt = "unrecognized enum value: {}", value)]
 pub struct EnumValueError {
     value: u32,
-}
-
-impl fmt::Display for EnumValueError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "unrecognized enum value: {}", self.value)
-    }
 }
 
 impl std::error::Error for EnumValueError {}
@@ -35,17 +28,6 @@ macro_rules! impl_enum {
                 } else {
                     Err(EnumValueError::new(value as _))
                 }
-            }
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! impl_default {
-    ($name:ident, $val:expr) => {
-        impl std::default::Default for $name {
-            fn default() -> Self {
-                $val
             }
         }
     }

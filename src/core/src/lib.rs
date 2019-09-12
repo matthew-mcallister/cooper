@@ -1,8 +1,13 @@
+#![feature(crate_visibility_modifier)]
 #![feature(try_blocks)]
 #![feature(untagged_unions)]
 
 #[macro_use]
 pub mod bitfield;
 #[macro_use]
-pub mod macros;
+mod macros;
+
+pub mod by_ptr;
+pub mod node;
 pub mod pool;
+pub mod request;
