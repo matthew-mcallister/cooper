@@ -1,4 +1,8 @@
-//! This crate implements a wrapper around GLFW.
+//! This crate implements a multithreaded layer over GLFW to provide a
+//! cross-platform interface to the host's windowing and input systems.
+//! It is based on an "event loop" model where one thread acts as an
+//! event handler and worker while others interact with it through proxy
+//! objects.
 
 #![feature(arbitrary_self_types)]
 #![feature(non_exhaustive)]
@@ -77,6 +81,8 @@ unsafe fn last_error() -> Option<Error> {
 
 type WindowPtr = ptr::NonNull<glfw::Window>;
 
+/// A thin wrapper around a GLFWwindow pointer. Only the event loop
+/// should access the inner pointer.
 #[derive(Clone, Copy, Debug, From, Into)]
 struct WindowHandle {
     inner: WindowPtr,
@@ -117,6 +123,11 @@ enum Response {
 
 type RequestSender = rq::RequestSender<Request, Response>;
 
+/// Creates an event loop (thus initializing GLFW) and a proxy object
+/// that can safely communicate with the loop from other threads.
+///
+/// # Safety
+///
 /// For maximum platform compatibility (and maybe fewer bugs), call this
 /// function from the "main" thread. It is unsafe to call twice.
 pub unsafe fn init() ->
@@ -134,7 +145,14 @@ pub unsafe fn init() ->
     Ok((evt, proxy))
 }
 
-/// Main thread worker type and entrypoint to the API.
+/// An asynchronous worker that runs on the main thread and performs
+/// API calls on behalf of other threads. Due to platform-specific
+/// windowing limitations, this object must be created and remain on the
+/// main thread. All actual platform API calls are made through this
+/// object, never through the thread-safe proxy objects.
+/// Other threads may send the main thread work requests over a shared
+/// channel; the main thread can respond by "pumping" the requests in a
+/// loop.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct EventLoop {
@@ -171,6 +189,7 @@ impl EventLoop {
     }
 }
 
+/// Logic for responding to requests from other threads.
 #[derive(Debug)]
 struct EventHandler;
 
@@ -291,7 +310,18 @@ impl VulkanPlatform {
     }
 }
 
-/// A type used to create windows from any thread.
+/// Thread-safe entrypoint to the window/input API that acts as proxy to
+/// the underlying event loop.
+///
+/// This type relies on the main thread to act as a worker and respond
+/// to requests for windowing operations. That is, the main thread is a
+/// client of the X server (or whatever), and other threads are clients
+/// of the main thread. This relationship holds for the `Window` type as
+/// well. The main thread must handle these requests using the
+/// `EventLoop` interface.
+///
+/// N.B.: In the current implementation, each time you wait for a
+/// response, it blocks the current thread.
 #[derive(Clone, Debug)]
 pub struct EventLoopProxy {
     sender: RequestSender,
@@ -321,16 +351,22 @@ impl EventLoopProxy {
 pub struct CreateInfo {
     pub title: String,
     pub dims: Dimensions,
-    pub hints: Hints,
+    pub hints: CreationHints,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 #[non_exhaustive]
-pub struct Hints {
+pub struct CreationHints {
     pub resizable: bool,
     pub hidden: bool,
 }
 
+/// A proxy object to a platform window created by the application
+/// which allows making calls to the underlying platform API.
+///
+/// Note that this interface must route API calls through the main
+/// thread, so methods won't succeed unless the main thread is actively
+/// handling requests. See the documentation for `EventLoopProxy`.
 #[derive(Debug)]
 pub struct Window {
     inner: WindowHandle,

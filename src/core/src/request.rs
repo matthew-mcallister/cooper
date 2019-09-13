@@ -91,6 +91,9 @@ impl<T, U> RequestSender<T, U> {
         self.inner.send(request)?;
         Ok(receiver.recv().map_err(|_| RequestError::Interrupted)?)
     }
+
+    // TODO: consider `fn wait_on_val<V: TryFrom<U>>(...) -> V` which
+    // automatically attempts to unpack the response type.
 }
 
 impl<H: RequestHandler> Service<H> {
