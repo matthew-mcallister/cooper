@@ -42,6 +42,7 @@ impl TestContext<PlainTest> for PlainTestContext {
     fn run(&mut self, test: &PlainTest) -> Result<(), Option<String>> {
         // Capture print macro calls to this buffer
         // TODO: see https://github.com/rust-lang/rust/issues/12309
+        // TODO: capture output of child threads created by tests
         let output = Sink::new(Arc::new(Mutex::new(Vec::<u8>::new())));
         let (old_stdout, old_stderr) = (
             std::io::set_print(Some(Box::new(Sink::clone(&output)))),

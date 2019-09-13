@@ -46,9 +46,15 @@ type Message2<H> = Message<
     <H as RequestHandler>::Response,
 >;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RequestSender<T, U> {
     inner: cc::Sender<Message<T, U>>,
+}
+
+impl<T, U> Clone for RequestSender<T, U> {
+    fn clone(&self) -> Self {
+        RequestSender { inner: self.inner.clone() }
+    }
 }
 
 pub trait RequestHandler {
@@ -106,6 +112,7 @@ impl<H: RequestHandler> Service<H> {
 
     fn handle_request(&mut self, req: Message2<H>) {
         let res = self.handler.handle(req.payload);
+        // TODO: Per-request timeout
         let _: Option<_> = try { req.res_chan?.send(res?) };
     }
 

@@ -2,10 +2,7 @@ use num_traits as num;
 
 #[macro_export]
 macro_rules! c_str {
-    ($($str:expr),*) => {
-        c_str!($($str,)*)
-    };
-    ($($str:expr,)*) => {
+    ($($str:expr),*$(,)*) => {
         concat!($($str,)* "\0") as *const str as *const std::os::raw::c_char
     };
 }
