@@ -10,7 +10,7 @@ use prelude::*;
 use crate::*;
 
 #[inline(always)]
-crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
+pub fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
     vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
         vk::MemoryPropertyFlags::HOST_COHERENT_BIT
 }
@@ -95,13 +95,17 @@ impl DeviceAlloc {
 /// This is a simple address-ordered FIFO allocator. It is somewhat
 /// low-level as it doesn't check for correct memory usage (i.e.
 /// linear/non-linear overlap).
+// TODO: Investigate storing a map from allocation size to same-sized
+// free blocks to reuse snugly fitting allocations.
 #[derive(Debug)]
 pub struct MemoryPool {
     device: Arc<Device>,
     type_index: u32,
     host_mapped: bool,
-    buffer_map_opts: Option<BufferMapOptions>,
+    buffer_map: Option<BufferMapOptions>,
     base_size: vk::DeviceSize,
+    capacity: vk::DeviceSize,
+    used: vk::DeviceSize,
     chunks: Vec<Chunk>,
     free: Vec<FreeBlock>,
 }
@@ -131,7 +135,7 @@ pub struct MemoryPoolCreateInfo {
     pub host_mapped: bool,
     /// If provided, wraps all memory in a VkBuffer. Allocations will
     /// alias a region of one of these buffers.
-    pub buffer_map_opts: Option<BufferMapOptions>,
+    pub buffer_map: Option<BufferMapOptions>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -164,8 +168,10 @@ impl MemoryPool {
             device,
             type_index: create_info.type_index,
             host_mapped: create_info.host_mapped,
-            buffer_map_opts: create_info.buffer_map_opts,
+            buffer_map: create_info.buffer_map,
             base_size: create_info.base_size,
+            capacity: 0,
+            used: 0,
             chunks: Vec::new(),
             free: Vec::new(),
         };
@@ -175,8 +181,8 @@ impl MemoryPool {
         res
     }
 
-    // Guarantees that each allocation is aligned to quantum bytes and
-    // is a multiple of quantum in length. This is transparent to the
+    // Guarantees that each allocation is aligned to `quantum` bytes and
+    // is a multiple of `quantum` in length. This is transparent to the
     // user, who sees exactly the size they requested.
     fn quantum(&self) -> vk::DeviceSize {
         // sizeof(vec4) seems like a good choice
@@ -188,12 +194,24 @@ impl MemoryPool {
     }
 
     pub fn buffer_mapped(&self) -> bool {
-        self.buffer_map_opts.is_some()
+        self.buffer_map.is_some()
+    }
+
+    pub fn buffer_map(&self) -> Option<&BufferMapOptions> {
+        self.buffer_map.as_ref()
     }
 
     pub fn flags(&self) -> vk::MemoryPropertyFlags {
         self.device.mem_props.memory_types[self.type_index as usize]
             .property_flags
+    }
+
+    pub fn used(&self) -> vk::DeviceSize {
+        self.used
+    }
+
+    pub fn capacity(&self) -> vk::DeviceSize {
+        self.capacity
     }
 
     pub unsafe fn grow(&mut self, size: vk::DeviceSize) {
@@ -216,7 +234,7 @@ impl MemoryPool {
         }
 
         let mut buffer = vk::null();
-        if let Some(ref opts) = &self.buffer_map_opts {
+        if let Some(ref opts) = &self.buffer_map {
             let create_info = vk::BufferCreateInfo {
                 size,
                 usage: opts.usage,
@@ -241,9 +259,13 @@ impl MemoryPool {
             start: 0,
             end: size,
         });
+
+        self.capacity += size;
     }
 
     fn carve_block(&mut self, index: usize, range: Range<vk::DeviceSize>) {
+        self.used += range.end - range.start;
+
         let old_block = self.free[index];
         debug_assert!(old_block.start <= range.start &&
             range.end <= old_block.end);
@@ -259,11 +281,12 @@ impl MemoryPool {
         // Insert padding block if necessary
         let chunk_idx = old_block.chunk;
         if range.start > old_block.start {
-            self.free.insert(index, FreeBlock {
+            let block = FreeBlock {
                 chunk: chunk_idx,
                 start: old_block.start,
                 end: range.start,
-            });
+            };
+            self.free.insert(index, block);
         }
     }
 
@@ -282,12 +305,13 @@ impl MemoryPool {
     }
 
     /// Allocates a chunk of memory without binding a resource to it.
-    pub unsafe fn allocate(&mut self, reqs: &vk::MemoryRequirements) ->
-        DeviceAlloc
-    {
-        assert!(compatible_type(reqs.memory_type_bits, self.type_index));
-        let alignment = std::cmp::max(reqs.alignment, self.quantum());
-        let padded_size = align(reqs.size, self.quantum());
+    pub unsafe fn allocate(
+        &mut self,
+        size: vk::DeviceSize,
+        alignment: vk::DeviceSize,
+    ) -> DeviceAlloc {
+        let alignment = std::cmp::max(alignment, self.quantum());
+        let padded_size = align(size, self.quantum());
         let (chunk_idx, offset) = (0..self.free.len())
             .find_map(|idx| self.try_alloc(idx, padded_size, alignment))
             .or_else(|| {
@@ -304,7 +328,7 @@ impl MemoryPool {
             info: AllocInfo {
                 memory: chunk.memory,
                 offset,
-                size: reqs.size,
+                size,
                 buffer: chunk.buffer,
                 buf_offset: offset,
                 ptr,
@@ -313,15 +337,24 @@ impl MemoryPool {
         }
     }
 
+    pub unsafe fn alloc_with_reqs(&mut self, reqs: vk::MemoryRequirements) ->
+        DeviceAlloc
+    {
+        assert!(compatible_type(reqs.memory_type_bits, self.type_index));
+        self.allocate(reqs.size, reqs.alignment)
+    }
+
     /// Frees a memory allocation, if possible. If any resource is still
     /// bound to that memory, it may alias a future allocation that
     /// overlaps the same range.
-    pub unsafe fn free(&mut self, alloc: &DeviceAlloc) {
+    pub unsafe fn free(&mut self, alloc: DeviceAlloc) {
         let chunk = alloc.chunk_idx;
         assert!(chunk < self.chunks.len() as u32);
         let info = alloc.info();
         let start = info.offset;
         let end = align(self.quantum(), info.end());
+
+        self.used -= end - start;
 
         // TODO: Optimize search and insertion
         let mut idx = self.free.len();
@@ -370,7 +403,7 @@ impl MemoryPool {
     {
         let mut reqs = Default::default();
         self.dt().get_buffer_memory_requirements(buffer, &mut reqs as _);
-        let alloc = self.allocate(&reqs);
+        let alloc = self.alloc_with_reqs(reqs);
 
         let &AllocInfo { memory, offset, .. } = alloc.info();
         self.dt().bind_buffer_memory(buffer, memory, offset).check().unwrap();
@@ -385,7 +418,7 @@ impl MemoryPool {
     {
         let mut reqs = Default::default();
         self.dt().get_image_memory_requirements(image, &mut reqs as _);
-        let alloc = self.allocate(&reqs);
+        let alloc = self.alloc_with_reqs(reqs);
 
         let &AllocInfo { memory, offset, .. } = alloc.info();
         self.dt().bind_image_memory(image, memory, offset).check().unwrap();
@@ -393,3 +426,54 @@ impl MemoryPool {
         alloc
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use vk::traits::*;
+    use super::*;
+
+    unsafe fn smoke_test(swapchain: Arc<Swapchain>) {
+        let device = Arc::clone(&swapchain.device);
+
+        let flags = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
+        let type_index = find_memory_type(&device, flags).unwrap();
+        let create_info = MemoryPoolCreateInfo {
+            type_index,
+            base_size: 0x100_0000,
+            ..Default::default()
+        };
+        let mut memory = MemoryPool::new(device, create_info);
+
+        let alloc0 = memory.allocate(0x1000, 0x100);
+        let alloc1 = memory.allocate(0x1000, 0x100);
+
+        assert!(memory.capacity() > 0x2000);
+
+        let info0 = alloc0.info();
+        let info1 = alloc1.info();
+
+        assert!(!info0.memory.is_null());
+        assert_eq!(info0.memory, info1.memory);
+
+        assert_eq!(info0.size, 0x1000);
+        assert_eq!(info1.size, info0.size);
+
+        assert_eq!(info0.offset, 0);
+        assert_eq!(info1.offset, info0.size);
+
+        assert!(info0.ptr.is_null());
+        assert!(info0.buffer.is_null());
+
+        assert_eq!(memory.used(), 0x2000);
+        memory.free(alloc0);
+        assert_eq!(memory.used(), 0x1000);
+        memory.free(alloc1);
+        assert_eq!(memory.used(), 0);
+    }
+
+    unit::declare_tests![
+        smoke_test,
+    ];
+}
+
+unit::collect_tests![tests];

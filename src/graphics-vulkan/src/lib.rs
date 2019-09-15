@@ -10,12 +10,15 @@ macro_rules! test_type {
 
 mod debug;
 mod init;
+mod memory;
 
 pub use debug::*;
 pub use init::*;
+pub use memory::*;
 
 unit::collect_tests![
     init,
+    memory,
 ];
 
 #[cfg(test)]
