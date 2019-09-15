@@ -1,6 +1,5 @@
 // TODO: User-friendly errors
-use std::ffi::CString;
-use std::os::raw::c_char;
+use std::ffi::{CString, CStr};
 use std::ptr;
 use std::sync::Arc;
 
@@ -17,7 +16,7 @@ pub struct GraphicsConfig {
 
 #[derive(Debug)]
 pub struct Instance {
-    pub wsys: window::System,
+    pub vk: window::VulkanPlatform,
     pub entry: Arc<vkl::Entry>,
     pub table: Arc<vkl::InstanceTable>,
     pub config: Arc<GraphicsConfig>,
@@ -30,11 +29,13 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    pub unsafe fn new(config: Arc<GraphicsConfig>) -> Result<Self, AnyError> {
-        let wsys = window::System::new()?;
-        if !wsys.vulkan_supported() { Err("vulkan not available")?; }
+    pub unsafe fn new(
+        vk: window::VulkanPlatform,
+        config: Arc<GraphicsConfig>,
+    ) -> Result<Self, AnyError> {
+        if !vk.supported() { Err("vulkan not available")?; }
 
-        let get_instance_proc_addr = wsys.pfn_get_instance_proc_addr();
+        let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
         let app_name = CString::new(config.app_name.clone()).unwrap();
@@ -51,7 +52,7 @@ impl Instance {
         // TODO: Detect if required layers/extensions are unavailable
         let mut layers = Vec::new();
         let mut extensions = Vec::new();
-        extensions.extend(wsys.required_instance_extensions());
+        extensions.extend(vk.required_instance_extensions());
 
         if config.debug {
             layers.push(c_str!("VK_LAYER_LUNARG_standard_validation"));
@@ -73,7 +74,7 @@ impl Instance {
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
-        Ok(Instance { wsys, entry, table, config })
+        Ok(Instance { vk, entry, table, config })
     }
 
     pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
@@ -97,12 +98,25 @@ impl Instance {
         self.table.get_physical_device_properties(pdev, &mut *res as _);
         res
     }
+
+    pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
+        Result<Arc<Device>, AnyError>
+    {
+        Ok(Arc::new(Device::new(Arc::clone(self), pdev)?))
+    }
+
+    pub unsafe fn create_surface(
+        self: &Arc<Self>,
+        window: &Arc<window::Window>,
+    ) -> Result<Arc<Surface>, AnyError> {
+        Ok(Arc::new(Surface::new(Arc::clone(self), Arc::clone(window))?))
+    }
 }
 
 #[derive(Debug)]
 pub struct Surface {
-    pub instance: Arc<Instance>,
     pub window: Arc<window::Window>,
+    pub instance: Arc<Instance>,
     pub inner: vk::SurfaceKHR,
 }
 
@@ -120,8 +134,8 @@ impl Surface {
     {
         let inner = window.create_surface(instance.table.instance)?;
         Ok(Surface {
-            instance,
             window,
+            instance,
             inner,
         })
     }
@@ -166,7 +180,10 @@ pub struct Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
-        unsafe { self.table.destroy_device(ptr::null()); }
+        unsafe {
+            self.table.device_wait_idle();
+            self.table.destroy_device(ptr::null());
+        }
     }
 }
 
@@ -199,7 +216,7 @@ unsafe fn check_for_features(
     };
     it.get_physical_device_features_2(pdev, &mut features as _);
 
-    // TODO: Add logic methods to Vk*Features in vulkan bindings
+    // TODO: Add boolean methods to Vk*Features in vulkan bindings
     check_for_features!(
         desired_descriptor_indexing_features, descriptor_indexing_features;
         shader_sampled_image_array_non_uniform_indexing,
@@ -285,14 +302,29 @@ impl Device {
         queue
     }
 
-    pub unsafe fn set_debug_name<T: CanDebug>(
-        &self,
-        obj: T,
-        name: *const c_char,
-    ) {
+    pub unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
+    where
+        T: DebugUtils,
+        A: AsRef<CStr>,
+    {
         if self.config.debug {
-            set_debug_name(&self.table, obj, name);
+            set_debug_name(&self.table, obj, name.as_ref().as_ptr());
         }
+    }
+
+    pub unsafe fn create_semaphore(&self) -> vk::Semaphore {
+        let create_info = Default::default();
+        let mut obj = vk::null();
+        self.table.create_semaphore
+            (&create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        obj
+    }
+
+    pub unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>) ->
+        Result<Arc<Swapchain>, AnyError>
+    {
+        Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))
     }
 }
 
@@ -425,3 +457,19 @@ impl Swapchain {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use crate::*;
+
+    fn smoke_test(_swapchain: Arc<Swapchain>) {
+        // Do nothing
+    }
+
+    unit::declare_tests![
+        smoke_test,
+    ];
+}
+
+unit::collect_tests![tests];

@@ -1,25 +1,56 @@
 use std::io;
+use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Mutex};
 
 use derive_more::*;
 
 use crate::*;
 
-/// Test type used by `PlainTestContext`.
-pub type PlainTest = Test<fn()>;
-
-/// Enables running vanilla Rust unit tests. Each test is a function
-/// which takes no input and produces no output (except through
-/// side-effects). Test failure is signaled by panicking.
-#[derive(Debug)]
-pub struct PlainTestContext {
-    _priv: (),
+/// This helper trait can be implemented on a type that handles the low-level
+/// task of running tests. It is automatically implemented for most types that
+/// implement `Fn(&D)`. If this type uses internal mutability, it must be
+/// marked as `RefUnwindSafe`, as it will be referenced from inside
+/// `catch_panic`.
+pub trait PanicInvocationHelper<D>: RefUnwindSafe + std::fmt::Debug
+{
+    /// Runs the test.
+    fn invoke(&self, test: &D);
 }
 
-impl PlainTestContext {
-    pub fn new() -> Self {
-        PlainTestContext { _priv: () }
+impl<D, F> PanicInvocationHelper<D> for F
+    where F: Fn(&D) + std::panic::RefUnwindSafe + std::fmt::Debug
+{
+    fn invoke(&self, test: &D) {
+        self(test)
     }
+}
+
+/// The test type of the vanilla Rust test runner.
+pub type PlainTest = Test<fn()>;
+
+/// Runs tests where failure is signaled by panicking. This type wraps a
+/// "test invocation helper", which is at minimum responsible for
+/// running the test, but may optionally do things such as
+/// setup/teardown or observing the test's side effects.
+///
+/// In order to use this wrapper on `Test<D>`, `F` must implement two
+/// key traits:
+///
+/// - `PanicInvocationHelper`: This impl should actually *run* the test.
+///   Notice that this trait borrows immutably---see below.
+/// - `RefUnwindSafe`: This marker trait is required to use
+///   `std::panic::catch_panic` to recover from a failed test.
+///
+/// Rust attempts to facilitate writing exception-safe code by limiting
+/// the use of side-effects within a `catch_panic` call---thus, the
+/// invocation helper cannot be borrowed mutably and must rely on
+/// internal mutability for stateful setup/teardown. If taking this
+/// route, the second trait constraint may need to be implemented
+/// manually.
+#[derive(Constructor, Debug)]
+#[non_exhaustive]
+pub struct PanicTestContext<F> {
+    inner: F,
 }
 
 /// Allows writing to a shared buffer as a byte stream.
@@ -38,8 +69,12 @@ impl io::Write for Sink {
     }
 }
 
-impl TestContext<PlainTest> for PlainTestContext {
-    fn run(&mut self, test: &PlainTest) -> Result<(), Option<String>> {
+impl<D, F> TestContext<Test<D>> for PanicTestContext<F>
+where
+    D: std::panic::RefUnwindSafe,
+    F: PanicInvocationHelper<D>,
+{
+    fn run(&mut self, test: &Test<D>) -> Result<(), Option<String>> {
         // Capture print macro calls to this buffer
         // TODO: see https://github.com/rust-lang/rust/issues/12309
         // TODO: capture output of child threads created by tests
@@ -49,7 +84,7 @@ impl TestContext<PlainTest> for PlainTestContext {
             std::io::set_panic(Some(Box::new(Sink::clone(&output)))),
         );
 
-        let res = std::panic::catch_unwind(test.data());
+        let res = std::panic::catch_unwind(|| self.inner.invoke(test.data()));
 
         std::io::set_print(old_stdout);
         std::io::set_panic(old_stderr);

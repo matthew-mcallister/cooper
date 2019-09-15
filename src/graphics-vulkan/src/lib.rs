@@ -1,36 +1,27 @@
+#![feature(arbitrary_self_types)]
 #![feature(crate_visibility_modifier)]
 #![feature(seek_convenience)]
 #![feature(try_blocks)]
 
-macro_rules! include_shader {
-    ($name:expr) => {
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            concat!("/generated/shaders/", $name),
-        ))
-    }
+#[cfg(test)]
+macro_rules! test_type {
+    () => { crate::testing::VulkanTest }
 }
 
 mod debug;
-mod descriptor;
-mod frame;
 mod init;
-mod master;
-mod memory;
-mod object;
-mod render_path;
-mod sprite;
-mod stats;
-mod image;
 
 pub use debug::*;
-pub use descriptor::*;
-pub use frame::*;
 pub use init::*;
-pub use master::*;
-pub use memory::*;
-pub use object::*;
-pub use render_path::*;
-pub use sprite::*;
-pub use stats::*;
-pub use image::*;
+
+unit::collect_tests![
+    init,
+];
+
+#[cfg(test)]
+mod testing;
+
+#[cfg(test)]
+fn main() {
+    testing::run_tests();
+}

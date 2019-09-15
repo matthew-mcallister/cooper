@@ -355,7 +355,6 @@ pub struct CreateInfo {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-#[non_exhaustive]
 pub struct CreationHints {
     pub resizable: bool,
     pub hidden: bool,

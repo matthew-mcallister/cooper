@@ -1,7 +1,8 @@
 use std::os::raw::c_char;
 
-/// Supplies useful information for using debug extensions.
-pub trait CanDebug: vk::traits::HandleType {
+/// Adds type information to Vulkan object types from the debug_utils
+/// extension.
+pub trait DebugUtils: vk::traits::HandleType {
     /// Returns the debug object type.
     fn object_type() -> vk::ObjectType;
 }
@@ -9,7 +10,7 @@ pub trait CanDebug: vk::traits::HandleType {
 macro_rules! impl_debug_marker_name {
     ($($type:ident = $value:ident;)*) => {
         $(
-            impl CanDebug for vk::$type {
+            impl DebugUtils for vk::$type {
                 fn object_type() -> vk::ObjectType {
                     vk::ObjectType::$value
                 }
@@ -18,6 +19,7 @@ macro_rules! impl_debug_marker_name {
     }
 }
 
+// TODO: Ideally this would be generated from the registry
 impl_debug_marker_name! {
     Instance = INSTANCE;
     PhysicalDevice = PHYSICAL_DEVICE;
@@ -58,7 +60,7 @@ impl_debug_marker_name! {
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
 }
 
-pub unsafe fn set_debug_name<T: CanDebug>(
+pub unsafe fn set_debug_name<T: DebugUtils>(
     device: &vkl::DeviceTable,
     object: T,
     name: *const c_char,

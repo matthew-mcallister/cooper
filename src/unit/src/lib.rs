@@ -1,3 +1,4 @@
+#![feature(non_exhaustive)]
 #![feature(option_flattening)]
 #![feature(set_stdio)]
 
@@ -132,7 +133,6 @@ impl<D> Test<D> {
 /// Collects tests for execution and allows configuring how tests are
 /// processed.
 // TODO: Filters
-// TODO: Optionally run tests in parallel
 #[derive(Debug, Default)]
 pub struct TestDriverBuilder<T> {
     tests: Vec<T>,
@@ -219,4 +219,6 @@ impl<D> TestDriver<D> {
         }
         self.reporter.after_all(&self.tests[..], &self.results[..]);
     }
+
+    // TODO: fn run_parallel()
 }
