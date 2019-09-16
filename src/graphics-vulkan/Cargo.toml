@@ -11,6 +11,7 @@ harness = false
 [dependencies]
 ccore = { path = "../core", package = "cooper-core" }
 derive_more = "0.15"
+fnv = "1.0"
 prelude = { path = "../prelude", package = "cooper-prelude" }
 unit = { path = "../unit", package = "cooper-unit" }
 window = { path = "../window", package = "cooper-window" }

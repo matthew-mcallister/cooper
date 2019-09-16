@@ -75,6 +75,7 @@ dependencies = [
  "cooper-unit 0.1.0",
  "cooper-window 0.1.0",
  "derive_more 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
  "vk-ffi-loader 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]
