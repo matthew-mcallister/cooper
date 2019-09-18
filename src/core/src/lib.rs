@@ -7,7 +7,6 @@ pub mod bitfield;
 #[macro_use]
 mod macros;
 
-pub mod by_ptr;
 pub mod node;
 pub mod pool;
 pub mod request;

@@ -7,10 +7,11 @@ use prelude::*;
 use self::Payload::*;
 
 /// Refers to an element of an object pool.
+// TODO: sizeof(Option<PoolId>) should be 8
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct PoolId {
-    idx: u32,
-    gen: u32,
+    crate idx: u32,
+    crate gen: u32,
 }
 
 bitfield! {
@@ -40,6 +41,14 @@ enum Payload<T> {
 }
 
 impl<T> Payload<T> {
+    #[inline]
+    fn value(self) -> Option<T> {
+        match self {
+            Occupied(value) => Some(value),
+            _ => None,
+        }
+    }
+
     #[inline]
     fn next(self) -> Option<u32> {
         match self {
@@ -134,13 +143,8 @@ impl<T> Slot<T> {
         unsafe { Some(&mut self.payload.value) }
     }
 
-    // TODO: check if this skips copying the payload when T is not Drop
     #[inline]
-    fn put(&mut self, payload: Payload<T>) {
-        self.swap(payload);
-    }
-
-    fn swap(&mut self, payload: Payload<T>) -> Payload<T> {
+    fn replace(&mut self, payload: Payload<T>) -> Payload<T> {
         unsafe {
             let result = self.copy_payload();
             match payload {
@@ -190,7 +194,7 @@ impl<T> Slot<T> {
 #[derive(Debug)]
 pub struct Pool<T> {
     slots: Vec<Slot<T>>,
-    size: u32,
+    len: u32,
     next: u32,
 }
 
@@ -198,7 +202,7 @@ impl<T> Default for Pool<T> {
     fn default() -> Self {
         Pool {
             slots: Default::default(),
-            size: Default::default(),
+            len: Default::default(),
             next: Default::default(),
         }
     }
@@ -213,12 +217,12 @@ impl<T> Pool<T> {
         Pool {
             slots: Vec::with_capacity(size as _),
             next: 0,
-            size: 0,
+            len: 0,
         }
     }
 
-    pub fn size(&self) -> u32 {
-        self.size
+    pub fn len(&self) -> u32 {
+        self.len
     }
 
     fn get_slot(&self, id: PoolId) -> Option<&Slot<T>> {
@@ -241,8 +245,8 @@ impl<T> Pool<T> {
         self.get_slot_mut(id)?.value_mut()
     }
 
-    // TODO: Add might be made thread safe (via CAS) except possibly for
-    // the case where the pool is at capacity.
+    // TODO: Add might be made thread safe (via CAS or probing) except
+    // possibly for the case where the pool is at capacity.
     //
     // My best idea yet is a thread-safe "try_add" method that may fail
     // under racy circumstances; the caller can fall back on locking.
@@ -258,22 +262,21 @@ impl<T> Pool<T> {
             idx = self.next;
             let slot = &mut self.slots[idx as usize];
             gen = slot.gen();
-            let new_next = slot.swap(Occupied(value)).next().unwrap();
+            let new_next = slot.replace(Occupied(value)).next().unwrap();
             self.next = new_next;
         }
-        self.size += 1;
+        self.len += 1;
         PoolId { idx, gen }
     }
 
-    pub fn remove(&mut self, id: PoolId) {
-        let _: Option<_> = try {
-            let next = self.next;
-            let slot = self.get_slot_mut(id)?;
-            slot.put(Vacant(next));
-            slot.invalidate();
-            self.next = id.idx;
-            self.size -= 1;
-        };
+    pub fn remove(&mut self, id: PoolId) -> Option<T> {
+        let next = self.next;
+        let slot = self.get_slot_mut(id)?;
+        let value = slot.replace(Vacant(next)).value().unwrap();
+        slot.invalidate();
+        self.next = id.idx;
+        self.len -= 1;
+        Some(value)
     }
 
     pub fn contains(&self, id: PoolId) -> bool {
@@ -293,15 +296,15 @@ impl<T> Pool<T> {
             })
     }
 
-    pub fn iter_mut(&self) -> impl Iterator<Item = (PoolId, &T)> {
-        self.slots.iter()
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (PoolId, &mut T)> {
+        self.slots.iter_mut()
             .enumerate()
             .filter_map(|(idx, slot)| {
-                let value = slot.value()?;
                 let id = PoolId {
                     idx: idx as u32,
                     gen: slot.gen(),
                 };
+                let value = slot.value_mut()?;
                 Some((id, value))
             })
     }
@@ -326,7 +329,6 @@ mod tests {
 
     use super::*;
 
-    // TODO: More tests, obviously
     #[test]
     fn smoke_tests() {
         let mut pool: Pool<u32> = Pool::new();
@@ -335,26 +337,26 @@ mod tests {
         let id = PoolId { idx: 0, gen: 0 };
         assert!(pool.get(id).is_none());
         assert!(!pool.contains(id));
-        assert_eq!(pool.size(), 0);
+        assert_eq!(pool.len(), 0);
 
         // Can push and read back
         let id = pool.add(24);
         assert_eq!(pool[id], 24);
         assert!(pool.contains(id));
-        assert_eq!(pool.size(), 1);
+        assert_eq!(pool.len(), 1);
         let id2 = pool.add(42);
         assert_eq!(pool[id], 24);
         assert_eq!(pool[id2], 42);
-        assert_eq!(pool.size(), 2);
+        assert_eq!(pool.len(), 2);
 
         // Can successfully remove
         pool.remove(id);
         assert!(!pool.contains(id));
-        assert_eq!(pool.size(), 1);
+        assert_eq!(pool.len(), 1);
         pool.remove(id2);
         assert!(!pool.contains(id));
         assert!(!pool.contains(id2));
-        assert_eq!(pool.size(), 0);
+        assert_eq!(pool.len(), 0);
 
         // Can mutate
         let id = pool.add(7);
