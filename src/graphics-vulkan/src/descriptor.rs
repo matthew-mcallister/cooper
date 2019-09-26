@@ -243,6 +243,8 @@ impl Suballocator {
 #[derive(Debug)]
 pub struct DescriptorAllocator {
     device: Arc<Device>,
+    // TODO: RwLock + HashMap + Mutex is technically inferior to a true
+    // concurrent hash map. Should we switch?
     sub_alloc: RwLock<FnvHashMap<Id<SetLayout>, Mutex<Suballocator>>>,
     layout_table: Arc<RwLock<NodeArray<SetLayout>>>,
 }
@@ -268,6 +270,13 @@ impl Allocator {
             return sub.allocate();
         };
 
+        // Acquire lock and re-check condition to avoid racing to insert
+        // the new sub.
+        let mut sub_alloc = self.sub_alloc.write().unwrap();
+        if let Some(sub) = sub_alloc.get(&layout) {
+            return sub.lock().unwrap().allocate();
+        }
+
         // Create a new sub for this layout.
         let mut sub = Suballocator::new(
             Arc::clone(&self.device),
@@ -277,7 +286,7 @@ impl Allocator {
         // Lucky for us, we can perform the allocation before inserting.
         let set = sub.allocate();
 
-        self.sub_alloc.write().unwrap().insert(layout, Mutex::new(sub));
+        sub_alloc.insert(layout, Mutex::new(sub));
 
         set
     }
@@ -367,8 +376,59 @@ mod tests {
         thread2.join().unwrap();
     }
 
+    unsafe fn test_for_races(swapchain: Arc<Swapchain>) {
+        let device = Arc::clone(&swapchain.device);
+
+        let layouts = Arc::new(RwLock::new(NodeArray::new()));
+
+        let bindings = [vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+            ..Default::default()
+        }];
+        let args = DescriptorSetLayoutCreateArgs {
+            bindings: &bindings[..],
+            ..Default::default()
+        };
+        let layout = SetLayout::new(Arc::clone(&device), &args);
+        let layout = layouts.write().unwrap().add(layout);
+
+        let allocator = Arc::new(DescriptorAllocator::new(device, layouts));
+
+        // Spawn two threads that allocate and deallocate in a loop for
+        // a while. Not surefire, but better than nothing.
+
+        const NUM_ITERS: usize = 50;
+
+        let descriptors = Arc::clone(&allocator);
+        let thread1 = thread::spawn(move || {
+            for _ in 0..NUM_ITERS {
+                let set0 = descriptors.allocate(layout);
+                thread::sleep(std::time::Duration::from_micros(50));
+                descriptors.free(set0);
+            }
+        });
+
+        let descriptors = Arc::clone(&allocator);
+        let thread2 = thread::spawn(move || {
+            for _ in 0..NUM_ITERS {
+                let set1 = descriptors.allocate(layout);
+                let set2 = descriptors.allocate(layout);
+                thread::sleep(std::time::Duration::from_micros(50));
+                descriptors.free(set1);
+                descriptors.free(set2);
+            }
+        });
+
+        thread1.join().unwrap();
+        thread2.join().unwrap();
+    }
+
     unit::declare_tests![
         smoke_test,
+        test_for_races,
     ];
 }
 
