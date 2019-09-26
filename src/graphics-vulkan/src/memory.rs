@@ -392,6 +392,18 @@ impl MemoryPool {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.free.clear();
+        self.used = 0;
+        for (i, chunk) in self.chunks.iter().enumerate() {
+            self.free.push(FreeBlock {
+                chunk: i as _,
+                start: 0,
+                end: chunk.size,
+            });
+        }
+    }
+
     fn dt(&self) -> &vkl::DeviceTable {
         &self.device.table
     }
@@ -447,7 +459,7 @@ mod tests {
         let alloc0 = memory.allocate(0x1000, 0x100);
         let alloc1 = memory.allocate(0x1000, 0x100);
 
-        assert!(memory.capacity() > 0x2000);
+        assert!(memory.capacity() >= 0x2000);
 
         let info0 = alloc0.info();
         let info1 = alloc1.info();
@@ -468,6 +480,12 @@ mod tests {
         memory.free(alloc0);
         assert_eq!(memory.used(), 0x1000);
         memory.free(alloc1);
+        assert_eq!(memory.used(), 0);
+
+        memory.allocate(0x1000, 0x100);
+        memory.allocate(0x1000, 0x100);
+        assert_eq!(memory.used(), 0x2000);
+        memory.clear();
         assert_eq!(memory.used(), 0);
     }
 
