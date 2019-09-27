@@ -16,7 +16,7 @@ use prelude::*;
 
 use crate::*;
 
-pub type VulkanTestData = unsafe fn(Arc<Swapchain>);
+pub type VulkanTestData = unsafe fn(TestVars);
 pub type VulkanTest = unit::Test<VulkanTestData>;
 
 #[derive(Constructor, Debug)]
@@ -24,10 +24,16 @@ pub struct VulkanTestContext {
     proxy: window::EventLoopProxy,
 }
 
+#[derive(Debug)]
+pub struct TestVars {
+    pub swapchain: Arc<Swapchain>,
+    pub queues: Vec<Vec<Arc<Queue>>>,
+}
+
 const WINDOW_DIMS: (i32, i32) = (320, 200);
 
 impl VulkanTestContext {
-    unsafe fn init_swapchain(&self) -> Result<Arc<Swapchain>, AnyError> {
+    unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
         const NAME: &'static str = "cooper unit test";
         let info = window::CreateInfo {
             title: NAME.to_owned(),
@@ -49,8 +55,12 @@ impl VulkanTestContext {
             Arc::new(Instance::new(window.vk_platform().clone(), config)?);
         let surface = instance.create_surface(&window)?;
         let pdev = device_for_surface(&surface)?;
-        let device = instance.create_device(pdev)?;
-        Ok(device.create_swapchain(&surface)?)
+        let (device, queues) = instance.create_device(pdev)?;
+        let swapchain = device.create_swapchain(&surface)?;
+        Ok(TestVars {
+            swapchain,
+            queues,
+        })
     }
 }
 
@@ -58,14 +68,14 @@ impl unit::PanicInvocationHelper<VulkanTestData> for VulkanTestContext {
     fn invoke(&self, f: &VulkanTestData) {
         // Recreate the full state so that every test has a clean slate.
         unsafe {
-            let swapchain = self.init_swapchain().unwrap_or_else(|e| {
+            let vars = self.init_vars().unwrap_or_else(|e| {
                 panic!("failed to initialize video: {}", e);
             });
 
             // TODO: Today, just run the test and see that it doesn't
             // crash. Tomorrow, mark the test as failed if the
             // validation layer reports any errors or warnings.
-            f(swapchain);
+            f(vars);
         }
     }
 }

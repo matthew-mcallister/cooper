@@ -310,7 +310,8 @@ mod tests {
     use vk::traits::*;
     use super::*;
 
-    unsafe fn smoke_test(swapchain: Arc<Swapchain>) {
+    unsafe fn smoke_test(vars: testing::TestVars) {
+        let swapchain = vars.swapchain;
         let device = Arc::clone(&swapchain.device);
         let set_layouts = Arc::new(RwLock::new(NodeArray::new()));
 
@@ -376,7 +377,8 @@ mod tests {
         thread2.join().unwrap();
     }
 
-    unsafe fn test_for_races(swapchain: Arc<Swapchain>) {
+    unsafe fn test_for_races(vars: testing::TestVars) {
+        let swapchain = vars.swapchain;
         let device = Arc::clone(&swapchain.device);
 
         let layouts = Arc::new(RwLock::new(NodeArray::new()));

@@ -1,7 +1,7 @@
 // TODO: User-friendly errors
 use std::ffi::{CString, CStr};
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use prelude::*;
 
@@ -100,9 +100,9 @@ impl Instance {
     }
 
     pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
-        Result<Arc<Device>, AnyError>
+        Result<(Arc<Device>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
-        Ok(Arc::new(Device::new(Arc::clone(self), pdev)?))
+        Ok(Device::new(Arc::clone(self), pdev)?)
     }
 
     pub unsafe fn create_surface(
@@ -178,6 +178,36 @@ pub struct Device {
     pub table: Arc<vkl::DeviceTable>,
 }
 
+#[derive(Debug)]
+pub struct QueueFamily {
+    pub index: u32,
+    pub properties: vk::QueueFamilyProperties,
+}
+
+#[derive(Debug)]
+pub struct Queue {
+    pub device: Arc<Device>,
+    pub inner: vk::Queue,
+    pub family: Arc<QueueFamily>,
+    mutex: Mutex<()>,
+}
+
+impl Queue {
+    pub unsafe fn submit(
+        &self,
+        submissions: &[vk::SubmitInfo],
+        fence: vk::Fence,
+    ) {
+        let _lock = self.mutex.lock();
+        self.device.table.queue_submit(
+            self.inner,
+            submissions.len() as _,
+            submissions.as_ptr(),
+            fence,
+        );
+    }
+}
+
 impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
@@ -231,7 +261,7 @@ unsafe fn check_for_features(
 
 impl Device {
     pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
-        Result<Self, AnyError>
+        Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         let it = &instance.table;
         let config = Arc::clone(&instance.config);
@@ -286,20 +316,39 @@ impl Device {
             Default::default();
         it.get_physical_device_memory_properties(pdev, &mut *mem_props as _);
 
-        Ok(Device {
+        let device = Arc::new(Device {
             instance,
             config,
             pdev,
             props,
             mem_props,
             table,
-        })
+        });
+
+        let queues = device.get_queues();
+
+        Ok((device, queues))
     }
 
-    pub unsafe fn get_queue(&self, qf: u32, idx: u32) -> vk::Queue {
-        let mut queue = vk::null();
-        self.table.get_device_queue(qf, idx, &mut queue as _);
-        queue
+    unsafe fn get_queues(self: &Arc<Self>) -> Vec<Vec<Arc<Queue>>> {
+        let props = self.instance.get_queue_family_properties(self.pdev);
+
+        let family = Arc::new(QueueFamily {
+            index: 0,
+            properties: props[0],
+        });
+
+        let mut inner = vk::null();
+        self.table.get_device_queue(0, 0, &mut inner as _);
+
+        let queue = Arc::new(Queue {
+            device: Arc::clone(self),
+            inner,
+            family,
+            mutex: Mutex::new(()),
+        });
+
+        vec![vec![queue]]
     }
 
     pub unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
@@ -460,10 +509,9 @@ impl Swapchain {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use crate::*;
 
-    fn smoke_test(_swapchain: Arc<Swapchain>) {
+    fn smoke_test(_vars: testing::TestVars) {
         // Do nothing
     }
 

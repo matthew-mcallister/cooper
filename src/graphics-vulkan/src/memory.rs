@@ -444,7 +444,8 @@ mod tests {
     use vk::traits::*;
     use super::*;
 
-    unsafe fn smoke_test(swapchain: Arc<Swapchain>) {
+    unsafe fn smoke_test(vars: testing::TestVars) {
+        let swapchain = vars.swapchain;
         let device = Arc::clone(&swapchain.device);
 
         let flags = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
