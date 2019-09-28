@@ -14,6 +14,7 @@ mod descriptor;
 mod image;
 mod init;
 mod memory;
+mod shader;
 mod staging;
 mod xfer;
 
@@ -22,6 +23,7 @@ pub use descriptor::*;
 pub use image::*;
 pub use init::*;
 pub use memory::*;
+pub use shader::*;
 pub use staging::*;
 pub use xfer::*;
 
@@ -29,6 +31,7 @@ unit::collect_tests![
     descriptor,
     init,
     memory,
+    shader,
     staging,
     xfer,
 ];
