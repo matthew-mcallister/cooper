@@ -150,8 +150,7 @@ impl Drop for Pool {
 #[derive(Debug)]
 struct Suballocator {
     device: Arc<Device>,
-    // TODO: deadlock hazard---eliminate this lock
-    layout_table: Arc<RwLock<NodeArray<SetLayout>>>,
+    layout_table: Arc<NodeArray<SetLayout>>,
     free: Vec<Set>,
     layout: Id<SetLayout>,
     sub_pools: Vec<Pool>,
@@ -160,7 +159,7 @@ struct Suballocator {
 impl Suballocator {
     fn new(
         device: Arc<Device>,
-        layout_table: Arc<RwLock<NodeArray<SetLayout>>>,
+        layout_table: Arc<NodeArray<SetLayout>>,
         layout: Id<SetLayout>,
     ) -> Self {
         Suballocator {
@@ -180,7 +179,7 @@ impl Suballocator {
         // Create a descriptor pool
         let (layout, pool_sizes, flags);
         {
-            let layout_obj = &self.layout_table.read().unwrap()[layout_id];
+            let layout_obj = &self.layout_table[layout_id];
             layout = layout_obj.inner;
             pool_sizes = layout_obj.counts.pool_sizes(size);
             flags = layout_obj.pool_flags();
@@ -246,13 +245,13 @@ pub struct DescriptorAllocator {
     // TODO: RwLock + HashMap + Mutex is technically inferior to a true
     // concurrent hash map. Should we switch?
     sub_alloc: RwLock<FnvHashMap<Id<SetLayout>, Mutex<Suballocator>>>,
-    layout_table: Arc<RwLock<NodeArray<SetLayout>>>,
+    layout_table: Arc<NodeArray<SetLayout>>,
 }
 
 impl Allocator {
     pub fn new(
         device: Arc<Device>,
-        layout_table: Arc<RwLock<NodeArray<SetLayout>>>,
+        layout_table: Arc<NodeArray<SetLayout>>,
     ) -> Self {
         Allocator {
             device,
@@ -313,29 +312,42 @@ mod tests {
     unsafe fn smoke_test(vars: testing::TestVars) {
         let swapchain = vars.swapchain;
         let device = Arc::clone(&swapchain.device);
-        let set_layouts = Arc::new(RwLock::new(NodeArray::new()));
+        let mut layouts = NodeArray::new();
 
-        let layouts = Arc::clone(&set_layouts);
+        let bindings = [vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+            ..Default::default()
+        }];
+        let args = DescriptorSetLayoutCreateArgs {
+            bindings: &bindings[..],
+            ..Default::default()
+        };
+        let layout1 = SetLayout::new(Arc::clone(&device), &args);
+        let layout1 = layouts.add(layout1);
+
+        let bindings = [vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::COMPUTE_BIT,
+            ..Default::default()
+        }];
+        let args = DescriptorSetLayoutCreateArgs {
+            bindings: &bindings[..],
+            ..Default::default()
+        };
+        let layout2 = SetLayout::new(Arc::clone(&device), &args);
+        let layout2 = layouts.add(layout2);
+
+        let layouts = Arc::new(layouts);
         let allocator = Arc::new(DescriptorAllocator::new(device, layouts));
 
-        let device = Arc::clone(&swapchain.device);
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
+        let layout = layout1;
         let thread1 = thread::spawn(move || {
-            let bindings = [vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            }];
-            let args = DescriptorSetLayoutCreateArgs {
-                bindings: &bindings[..],
-                ..Default::default()
-            };
-            let layout = SetLayout::new(device, &args);
-            let layout = layouts.write().unwrap().add(layout);
-
             let set0 = descriptors.allocate(layout);
             let sets = [
                 descriptors.allocate(layout),
@@ -350,24 +362,9 @@ mod tests {
             assert_ne!(sets[2].inner, sets[0].inner);
         });
 
-        let device = Arc::clone(&swapchain.device);
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
+        let layout = layout2;
         let thread2 = thread::spawn(move || {
-            let bindings = [vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::COMPUTE_BIT,
-                ..Default::default()
-            }];
-            let args = DescriptorSetLayoutCreateArgs {
-                bindings: &bindings[..],
-                ..Default::default()
-            };
-            let layout = SetLayout::new(device, &args);
-            let layout = layouts.write().unwrap().add(layout);
-
             let set = descriptors.allocate(layout);
             assert!(!set.inner.is_null());
             descriptors.free(set);
@@ -381,7 +378,7 @@ mod tests {
         let swapchain = vars.swapchain;
         let device = Arc::clone(&swapchain.device);
 
-        let layouts = Arc::new(RwLock::new(NodeArray::new()));
+        let mut layouts = NodeArray::new();
 
         let bindings = [vk::DescriptorSetLayoutBinding {
             binding: 0,
@@ -395,8 +392,9 @@ mod tests {
             ..Default::default()
         };
         let layout = SetLayout::new(Arc::clone(&device), &args);
-        let layout = layouts.write().unwrap().add(layout);
+        let layout = layouts.add(layout);
 
+        let layouts = Arc::new(layouts);
         let allocator = Arc::new(DescriptorAllocator::new(device, layouts));
 
         // Spawn two threads that allocate and deallocate in a loop for
