@@ -292,6 +292,8 @@ pub struct XferBatchState {
     staging: StagingBuffer,
 }
 
+const NUM_BATCHES: usize = 2;
+
 /// This type wraps a single transfer-capable queue, equipping it with
 /// staging memory and command buffers, and handling transfer details
 /// behind the scenes. It may wrap either a dedicated transfer queue
@@ -305,8 +307,8 @@ pub struct XferQueue {
     queue: Arc<Queue>,
     batch_size: usize,
     cmd_pool: vk::CommandPool,
-    // Double-buffered so we can copy while transferring
-    batches: [XferBatchState; 2],
+    // TODO: Is this tech debt...?
+    batches: [XferBatchState; NUM_BATCHES],
     serial: XferBatchSerial,
 }
 
@@ -375,19 +377,17 @@ impl XferQueue {
             (&create_info as _, ptr::null(), &mut cmd_pool as _)
             .check().unwrap();
 
-        let mut cmds = XferCmdBuffer::new(Arc::clone(&queue), cmd_pool, 2);
+        let cmds =
+            XferCmdBuffer::new(Arc::clone(&queue), cmd_pool, NUM_BATCHES);
 
         let device = &queue.device;
-        let batches = [
-            XferBatchState {
+        let mut batches: Vec<_> = cmds.into_iter()
+            .map(|cmds| XferBatchState {
                 staging: StagingBuffer::new(Arc::clone(&device), batch_size),
-                cmds: cmds.pop().unwrap(),
-            },
-            XferBatchState {
-                staging: StagingBuffer::new(Arc::clone(&device), batch_size),
-                cmds: cmds.pop().unwrap(),
-            },
-        ];
+                cmds,
+            })
+            .collect();
+        let batches = [batches.pop().unwrap(), batches.pop().unwrap()];
 
         XferQueue {
             queue,
@@ -451,8 +451,9 @@ impl XferQueue {
     /// Waits for all pending transfers to complete.
     pub unsafe fn flush(&mut self) {
         self.submit();
-        self.batches[0].cmds.wait();
-        self.batches[1].cmds.wait();
+        for batch in self.batches.iter_mut() {
+            batch.cmds.wait();
+        }
     }
 
     pub unsafe fn queued_xfers(&self) -> usize {
