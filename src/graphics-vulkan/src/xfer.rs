@@ -328,9 +328,21 @@ macro_rules! batches {
     }
 }
 
+macro_rules! batches_ro {
+    ($self:expr) => {
+        &$self.batches[$self.idx()]
+    }
+}
+
 macro_rules! cmds {
     ($self:expr) => {
         &mut batches!($self).cmds
+    }
+}
+
+macro_rules! cmds_ro {
+    ($self:expr) => {
+        &batches_ro!($self).cmds
     }
 }
 
@@ -425,7 +437,7 @@ impl XferQueue {
     }
 
     pub fn state(&self) -> XferState {
-        self.batches[self.idx()].cmds.state()
+        cmds_ro!(self).state()
     }
 
     pub unsafe fn poll(&mut self) {
@@ -442,6 +454,10 @@ impl XferQueue {
         self.batches[0].cmds.wait();
         self.batches[1].cmds.wait();
     }
+
+    pub unsafe fn queued_xfers(&self) -> usize {
+        cmds_ro!(self).img_pre_barriers.len()
+    }
 }
 
 #[cfg(test)]
@@ -457,7 +473,7 @@ mod tests {
         let mut image_mem = create_image_mem(device, 0x400_0000);
 
         let mut images: Vec<_> = (0..64).map(|_| {
-            let extent = vk::Extent3D::new(256, 256, 1);
+            let extent = vk::Extent3D::new(64, 64, 1);
             let format = vk::Format::R8G8B8A8_SRGB;
             let size = (extent.width * extent.height * 4) as _;
             let create_info = vk::ImageCreateInfo {
@@ -498,6 +514,7 @@ mod tests {
         for image in images.iter_mut() {
             let slice = xfer.stage_image(image)
                 .or_else(|| {
+                    assert_eq!(xfer.queued_xfers(), 16);
                     xfer.submit();
                     xfer.wait();
                     xfer.stage_image(image)
@@ -507,6 +524,8 @@ mod tests {
             (&mut *slice).iter_mut().for_each(|x| *x = 0);
         }
         xfer.flush();
+
+        assert_eq!(xfer.serial, NonZeroU32::new_unchecked(5));
 
         for image in images.into_iter() {
             dt.destroy_image(image.inner, ptr::null());
