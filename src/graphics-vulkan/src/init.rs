@@ -361,6 +361,18 @@ impl Device {
         }
     }
 
+    pub unsafe fn create_fence(&self, signaled: bool) -> vk::Fence {
+        let mut create_info = vk::FenceCreateInfo::default();
+        if signaled {
+            create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
+        }
+        let mut obj = vk::null();
+        self.table.create_fence
+            (&create_info as _, ptr::null(), &mut obj as _)
+            .check().unwrap();
+        obj
+    }
+
     pub unsafe fn create_semaphore(&self) -> vk::Semaphore {
         let create_info = Default::default();
         let mut obj = vk::null();
