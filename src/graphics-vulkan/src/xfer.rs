@@ -85,7 +85,7 @@ impl XferCmdBuffer {
             ..Default::default()
         };
         let mut l1_cbs = vec![vk::CommandBuffer::default(); len];
-        dt.allocate_command_buffers(&l1_alloc_info as _, l1_cbs.as_mut_ptr())
+        dt.allocate_command_buffers(&l1_alloc_info, l1_cbs.as_mut_ptr())
             .check().unwrap();
 
         let l2_alloc_info = vk::CommandBufferAllocateInfo {
@@ -93,7 +93,7 @@ impl XferCmdBuffer {
             ..l1_alloc_info
         };
         let mut l2_cbs = vec![vk::CommandBuffer::default(); len];
-        dt.allocate_command_buffers(&l2_alloc_info as _, l2_cbs.as_mut_ptr())
+        dt.allocate_command_buffers(&l2_alloc_info, l2_cbs.as_mut_ptr())
             .check().unwrap();
 
         l1_cbs.into_iter().zip(l2_cbs.into_iter())
@@ -118,10 +118,10 @@ impl XferCmdBuffer {
         let cmds = self.img_l2;
         let inheritance_info = Default::default();
         let begin_info = vk::CommandBufferBeginInfo {
-            p_inheritance_info: &inheritance_info as _,
+            p_inheritance_info: &inheritance_info,
             ..begin_one_time()
         };
-        self.dt.begin_command_buffer(cmds, &begin_info as _);
+        self.dt.begin_command_buffer(cmds, &begin_info);
     }
 
     fn _reset(&mut self) {
@@ -195,7 +195,7 @@ impl XferCmdBuffer {
 
         let copy_cmds = self.img_l2;
         let cmds = self.img_l1;
-        self.dt.begin_command_buffer(cmds, &begin_one_time() as _);
+        self.dt.begin_command_buffer(cmds, &begin_one_time());
         self.dt.cmd_pipeline_barrier(
             cmds,                                       // commandBuffer
             vk::PipelineStageFlags::HOST_BIT,           // srcStageMask
@@ -208,7 +208,7 @@ impl XferCmdBuffer {
             self.img_pre_barriers.len() as _,   // imageMemoryBarrierCount
             self.img_pre_barriers.as_ptr(),     // pImageMemoryBarriers
         );
-        self.dt.cmd_execute_commands(cmds, 1, &copy_cmds as _);
+        self.dt.cmd_execute_commands(cmds, 1, &copy_cmds);
         self.dt.cmd_pipeline_barrier(
             cmds,                                       // commandBuffer
             vk::PipelineStageFlags::TRANSFER_BIT,       // srcStageMask
@@ -236,7 +236,7 @@ impl XferCmdBuffer {
         assert_eq!(self.state, CmdBufferState::Executable);
 
         let fence = self.fence;
-        self.dt.reset_fences(1, &fence as _).check().unwrap();
+        self.dt.reset_fences(1, &fence).check().unwrap();
 
         let cmds = &[self.img_l1];
         let submit_info = vk::SubmitInfo {
@@ -280,7 +280,7 @@ impl XferCmdBuffer {
             return;
         }
         let fence = self.fence;
-        self.dt.wait_for_fences(1, &fence as _, vk::TRUE, u64::max_value())
+        self.dt.wait_for_fences(1, &fence, vk::TRUE, u64::max_value())
             .check().unwrap();
         self._reset();
     }
@@ -319,7 +319,7 @@ impl Drop for XferQueue {
             // object pools to avoid writing this kind of destructor.
             // Should mix well with scoped allocators.
             self.queue.device.table
-                .destroy_command_pool(self.cmd_pool as _, ptr::null());
+                .destroy_command_pool(self.cmd_pool, ptr::null());
         }
     }
 }
@@ -373,8 +373,7 @@ impl XferQueue {
             ..Default::default()
         };
         let mut cmd_pool = vk::null();
-        dt.create_command_pool
-            (&create_info as _, ptr::null(), &mut cmd_pool as _)
+        dt.create_command_pool(&create_info, ptr::null(), &mut cmd_pool)
             .check().unwrap();
 
         let cmds =
@@ -491,7 +490,7 @@ mod tests {
                 ..Default::default()
             };
             let mut inner = vk::null();
-            dt.create_image(&create_info as _, ptr::null(), &mut inner as _)
+            dt.create_image(&create_info, ptr::null(), &mut inner)
                 .check().unwrap();
 
             let view = vk::null();

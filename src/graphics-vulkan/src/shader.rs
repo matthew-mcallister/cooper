@@ -92,8 +92,7 @@ impl ShaderManager {
         };
 
         let mut inner = vk::null();
-        dt.create_shader_module
-            (&create_info as _, ptr::null(), &mut inner as _)
+        dt.create_shader_module(&create_info, ptr::null(), &mut inner)
             .check().unwrap();
 
         let name = def.name.clone();

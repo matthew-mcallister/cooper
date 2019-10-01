@@ -35,8 +35,7 @@ impl RenderPass {
         let attachments = attachments.to_vec();
 
         let mut render_pass = vk::null();
-        dt.create_render_pass
-            (create_info as _, ptr::null(), &mut render_pass as _)
+        dt.create_render_pass(create_info, ptr::null(), &mut render_pass)
             .check().unwrap();
 
         let num_subpasses = subpass_names.len();
@@ -100,8 +99,7 @@ impl AttachmentChain {
             };
             let mut view = vk::null();
             device.table.create_image_view
-                (&create_info as _, ptr::null(), &mut view as _)
-                .check().unwrap();
+                (&create_info, ptr::null(), &mut view).check().unwrap();
             view
         }).collect();
         AttachmentChain {
@@ -174,8 +172,7 @@ impl FramebufferChain {
             };
             let mut framebuffer = vk::null();
             render_pass.device.table.create_framebuffer
-                (&create_info as _, ptr::null(), &mut framebuffer as _)
-                .check().unwrap();
+                (&create_info, ptr::null(), &mut framebuffer).check().unwrap();
 
             framebuffer
         }).collect();

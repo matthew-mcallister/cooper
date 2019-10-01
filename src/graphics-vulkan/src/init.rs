@@ -60,7 +60,7 @@ impl Instance {
         }
 
         let create_info = vk::InstanceCreateInfo {
-            p_application_info: &app_info as _,
+            p_application_info: &app_info,
             enabled_layer_count: layers.len() as _,
             pp_enabled_layer_names: layers.as_ptr(),
             enabled_extension_count: extensions.len() as _,
@@ -69,8 +69,7 @@ impl Instance {
         };
 
         let mut inst = vk::null();
-        entry.create_instance(&create_info as _, ptr::null(), &mut inst as _)
-            .check()?;
+        entry.create_instance(&create_info, ptr::null(), &mut inst).check()?;
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
@@ -95,7 +94,7 @@ impl Instance {
         Box<vk::PhysicalDeviceProperties>
     {
         let mut res = Box::new(Default::default());
-        self.table.get_physical_device_properties(pdev, &mut *res as _);
+        self.table.get_physical_device_properties(pdev, &mut *res);
         res
     }
 
@@ -158,8 +157,7 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
 
         let mut surface_supp = 0;
         instance.table.get_physical_device_surface_support_khr
-            (pd, qf, surface, &mut surface_supp as _)
-            .check()?;
+            (pd, qf, surface, &mut surface_supp).check()?;
         if surface_supp != vk::TRUE { continue; }
 
         return Ok(pd);
@@ -244,7 +242,7 @@ unsafe fn check_for_features(
         p_next: &mut descriptor_indexing_features as *mut _ as _,
         ..Default::default()
     };
-    it.get_physical_device_features_2(pdev, &mut features as _);
+    it.get_physical_device_features_2(pdev, &mut features);
 
     // TODO: Add boolean methods to Vk*Features in vulkan bindings
     check_for_features!(
@@ -288,7 +286,7 @@ impl Device {
         let queue_infos = [vk::DeviceQueueCreateInfo {
             queue_family_index: 0,
             queue_count: 1,
-            p_queue_priorities: &1f32 as _,
+            p_queue_priorities: &1f32,
             ..Default::default()
         }];
 
@@ -298,11 +296,11 @@ impl Device {
             p_queue_create_infos: queue_infos.as_ptr(),
             enabled_extension_count: exts.len() as _,
             pp_enabled_extension_names: exts.as_ptr(),
-            p_enabled_features: &features as _,
+            p_enabled_features: &features,
             ..Default::default()
         };
         let mut dev = vk::null();
-        it.create_device(pdev, &create_info as _, ptr::null(), &mut dev as _)
+        it.create_device(pdev, &create_info, ptr::null(), &mut dev)
             .check()?;
 
         let get_device_proc_addr = std::mem::transmute({
@@ -314,7 +312,7 @@ impl Device {
         let props = instance.get_properties(pdev);
         let mut mem_props: Box<vk::PhysicalDeviceMemoryProperties> =
             Default::default();
-        it.get_physical_device_memory_properties(pdev, &mut *mem_props as _);
+        it.get_physical_device_memory_properties(pdev, &mut *mem_props);
 
         let device = Arc::new(Device {
             instance,
@@ -339,7 +337,7 @@ impl Device {
         });
 
         let mut inner = vk::null();
-        self.table.get_device_queue(0, 0, &mut inner as _);
+        self.table.get_device_queue(0, 0, &mut inner);
 
         let queue = Arc::new(Queue {
             device: Arc::clone(self),
@@ -367,8 +365,7 @@ impl Device {
             create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
         }
         let mut obj = vk::null();
-        self.table.create_fence
-            (&create_info as _, ptr::null(), &mut obj as _)
+        self.table.create_fence(&create_info, ptr::null(), &mut obj)
             .check().unwrap();
         obj
     }
@@ -376,8 +373,7 @@ impl Device {
     pub unsafe fn create_semaphore(&self) -> vk::Semaphore {
         let create_info = Default::default();
         let mut obj = vk::null();
-        self.table.create_semaphore
-            (&create_info as _, ptr::null(), &mut obj as _)
+        self.table.create_semaphore(&create_info, ptr::null(), &mut obj)
             .check().unwrap();
         obj
     }
@@ -448,7 +444,7 @@ impl Swapchain {
 
         let mut caps: vk::SurfaceCapabilitiesKHR = Default::default();
         it.get_physical_device_surface_capabilities_khr
-            (pdev, self.surface.inner, &mut caps as _)
+            (pdev, self.surface.inner, &mut caps)
             .check()?;
 
         let max_image_count =
@@ -518,8 +514,7 @@ impl Swapchain {
             old_swapchain: self.inner,
         };
         let mut new = vk::null();
-        dt.create_swapchain_khr
-            (&create_info as _, ptr::null(), &mut new as _).check()?;
+        dt.create_swapchain_khr(&create_info, ptr::null(), &mut new).check()?;
 
         self.destroy();
         self.inner = new;

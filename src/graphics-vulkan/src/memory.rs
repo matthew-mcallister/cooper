@@ -223,13 +223,13 @@ impl MemoryPool {
             ..Default::default()
         };
         let mut memory = vk::null();
-        dt.allocate_memory(&alloc_info, ptr::null(), &mut memory as _)
+        dt.allocate_memory(&alloc_info, ptr::null(), &mut memory)
             .check().expect("failed to allocate device memory");
 
         let mut ptr = 0usize as *mut c_void;
         if self.host_mapped {
             let flags = Default::default();
-            dt.map_memory(memory, 0, size, flags, &mut ptr as _)
+            dt.map_memory(memory, 0, size, flags, &mut ptr)
                 .check().expect("failed to map device memory");
         }
 
@@ -240,13 +240,12 @@ impl MemoryPool {
                 usage: opts.usage,
                 ..Default::default()
             };
-            dt.create_buffer
-                (&create_info as _, ptr::null(), &mut buffer as _)
+            dt.create_buffer(&create_info, ptr::null(), &mut buffer)
                 .check().unwrap();
 
             // Silence validation warnings
             let mut reqs = vk::MemoryRequirements::default();
-            dt.get_buffer_memory_requirements(buffer, &mut reqs as _);
+            dt.get_buffer_memory_requirements(buffer, &mut reqs);
             assert_eq!(reqs.size, size);
             assert!(compatible_type(reqs.memory_type_bits, self.type_index));
 
@@ -414,7 +413,7 @@ impl MemoryPool {
         DeviceAlloc
     {
         let mut reqs = Default::default();
-        self.dt().get_buffer_memory_requirements(buffer, &mut reqs as _);
+        self.dt().get_buffer_memory_requirements(buffer, &mut reqs);
         let alloc = self.alloc_with_reqs(reqs);
 
         let &AllocInfo { memory, offset, .. } = alloc.info();
@@ -429,7 +428,7 @@ impl MemoryPool {
         DeviceAlloc
     {
         let mut reqs = Default::default();
-        self.dt().get_image_memory_requirements(image, &mut reqs as _);
+        self.dt().get_image_memory_requirements(image, &mut reqs);
         let alloc = self.alloc_with_reqs(reqs);
 
         let &AllocInfo { memory, offset, .. } = alloc.info();

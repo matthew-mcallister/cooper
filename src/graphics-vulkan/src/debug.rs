@@ -71,5 +71,5 @@ pub unsafe fn set_debug_name<T: DebugUtils>(
         p_object_name: name,
         ..Default::default()
     };
-    device.set_debug_utils_object_name_ext(&info as _);
+    device.set_debug_utils_object_name_ext(&info);
 }

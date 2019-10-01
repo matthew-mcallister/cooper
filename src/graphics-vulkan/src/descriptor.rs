@@ -130,7 +130,7 @@ impl SetLayout {
         };
         let mut inner = vk::null();
         device.table.create_descriptor_set_layout
-            (&create_info as _, ptr::null(), &mut inner as _).check().unwrap();
+            (&create_info, ptr::null(), &mut inner).check().unwrap();
 
         SetLayout {
             device,
@@ -223,7 +223,7 @@ impl Suballocator {
         };
         let mut obj = vk::null();
         self.device.table.create_descriptor_pool
-            (&create_info as _, ptr::null(), &mut obj as _).check().unwrap();
+            (&create_info, ptr::null(), &mut obj).check().unwrap();
 
         let pool = Pool {
             device: Arc::clone(&self.device),
@@ -244,7 +244,7 @@ impl Suballocator {
             ..Default::default()
         };
         self.device.table.allocate_descriptor_sets
-            (&alloc_info as _, sets.as_mut_ptr()).check().unwrap();
+            (&alloc_info, sets.as_mut_ptr()).check().unwrap();
 
         let sets = sets.into_iter()
             .map(|inner| Set { layout: layout_id, pool: pool_idx, inner });

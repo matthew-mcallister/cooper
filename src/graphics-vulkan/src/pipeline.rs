@@ -59,8 +59,7 @@ impl PipelineLayoutManager {
         };
         let mut inner = vk::null();
         self.device.table.create_pipeline_layout
-            (&create_info as _, ptr::null(), &mut inner as _)
-            .check().unwrap();
+            (&create_info, ptr::null(), &mut inner).check().unwrap();
 
         let pipe_layout = PipelineLayout {
             inner,
