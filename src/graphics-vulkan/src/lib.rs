@@ -14,6 +14,7 @@ mod descriptor;
 mod image;
 mod init;
 mod memory;
+mod pipeline;
 mod render_pass;
 mod shader;
 mod staging;
@@ -24,6 +25,7 @@ pub use descriptor::*;
 pub use image::*;
 pub use init::*;
 pub use memory::*;
+pub use pipeline::*;
 pub use render_pass::*;
 pub use shader::*;
 pub use staging::*;
@@ -33,6 +35,7 @@ unit::collect_tests![
     descriptor,
     init,
     memory,
+    pipeline,
     render_pass,
     shader,
     staging,

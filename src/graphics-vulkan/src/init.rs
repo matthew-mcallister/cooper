@@ -422,8 +422,19 @@ impl Swapchain {
         Ok(result)
     }
 
-    pub fn rectangle(&self) -> vk::Rect2D {
+    pub fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
+    }
+
+    pub fn viewport(&self) -> vk::Viewport {
+        vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: self.extent.width as _,
+            height: self.extent.height as _,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }
     }
 
     unsafe fn destroy(&self) {

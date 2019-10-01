@@ -1,6 +1,8 @@
 use std::ptr;
 use std::sync::Arc;
 
+use fnv::FnvHashMap;
+
 use crate::*;
 
 #[derive(Debug)]
@@ -8,6 +10,7 @@ pub struct RenderPass {
     pub device: Arc<Device>,
     pub inner: vk::RenderPass,
     pub attachments: Vec<vk::AttachmentDescription>,
+    pub subpasses: FnvHashMap<String, u32>,
 }
 
 impl Drop for RenderPass {
@@ -23,6 +26,7 @@ impl RenderPass {
     pub unsafe fn new(
         device: Arc<Device>,
         create_info: &vk::RenderPassCreateInfo,
+        subpass_names: Vec<String>,
     ) -> RenderPass {
         let dt = &*device.table;
 
@@ -35,10 +39,18 @@ impl RenderPass {
             (create_info as _, ptr::null(), &mut render_pass as _)
             .check().unwrap();
 
+        let num_subpasses = subpass_names.len();
+        let subpasses: FnvHashMap<_, _> = subpass_names.into_iter()
+            .enumerate()
+            .map(|(idx, name)| (name, idx as _))
+            .collect();
+        assert_eq!(subpasses.len(), num_subpasses, "duplicate subpass name");
+
         RenderPass {
             device,
             inner: render_pass,
             attachments,
+            subpasses,
         }
     }
 }
@@ -180,45 +192,63 @@ impl FramebufferChain {
     }
 }
 
+pub type RenderPassManager = FnvHashMap<String, Arc<RenderPass>>;
+
+#[cfg(test)]
+crate unsafe fn create_test_render_passes(vars: &testing::TestVars) ->
+    (RenderPassManager, Arc<AttachmentChain>, FramebufferChain)
+{
+    let swapchain = Arc::clone(&vars.swapchain);
+
+    let mut render_passes = RenderPassManager::default();
+
+    let attachment_descs = [vk::AttachmentDescription {
+        format: swapchain.format,
+        samples: vk::SampleCountFlags::_1_BIT,
+        load_op: vk::AttachmentLoadOp::DONT_CARE,
+        store_op: vk::AttachmentStoreOp::STORE,
+        initial_layout: vk::ImageLayout::UNDEFINED,
+        final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+        ..Default::default()
+    }];
+    let subpass_attachment_refs = [vk::AttachmentReference {
+        attachment: 0,
+        layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+    }];
+    let subpasses = [vk::SubpassDescription {
+        pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+        color_attachment_count: subpass_attachment_refs.len() as _,
+        p_color_attachments: subpass_attachment_refs.as_ptr(),
+        ..Default::default()
+    }];
+    let subpass_names = vec!["lighting".to_owned()];
+    let create_info = vk::RenderPassCreateInfo {
+        attachment_count: attachment_descs.len() as _,
+        p_attachments: attachment_descs.as_ptr(),
+        subpass_count: subpasses.len() as _,
+        p_subpasses: subpasses.as_ptr(),
+        ..Default::default()
+    };
+    let rp = Arc::new(RenderPass::new(
+        Arc::clone(&swapchain.device),
+        &create_info,
+        subpass_names,
+    ));
+    render_passes.insert("main".to_owned(), Arc::clone(&rp));
+
+    let attachments = Arc::new(AttachmentChain::from_swapchain(&swapchain));
+    let framebufs = FramebufferChain::new(rp, vec![Arc::clone(&attachments)]);
+
+    (render_passes, attachments, framebufs)
+}
+
 #[cfg(test)]
 mod tests {
     use vk::traits::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let swapchain = vars.swapchain;
-
-        let attachment_descs = [vk::AttachmentDescription {
-            format: swapchain.format,
-            samples: vk::SampleCountFlags::_1_BIT,
-            load_op: vk::AttachmentLoadOp::DONT_CARE,
-            store_op: vk::AttachmentStoreOp::STORE,
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            ..Default::default()
-        }];
-        let subpass_attachment_refs = [vk::AttachmentReference {
-            attachment: 0,
-            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        }];
-        let subpasses = [vk::SubpassDescription {
-            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-            color_attachment_count: subpass_attachment_refs.len() as _,
-            p_color_attachments: subpass_attachment_refs.as_ptr(),
-            ..Default::default()
-        }];
-        let create_info = vk::RenderPassCreateInfo {
-            attachment_count: attachment_descs.len() as _,
-            p_attachments: attachment_descs.as_ptr(),
-            subpass_count: subpasses.len() as _,
-            p_subpasses: subpasses.as_ptr(),
-            ..Default::default()
-        };
-        let rp = RenderPass::new(Arc::clone(&swapchain.device), &create_info);
-
-        let attachments = AttachmentChain::from_swapchain(&swapchain);
-        let framebuffers =
-            FramebufferChain::new(Arc::new(rp), vec![Arc::new(attachments)]);
+        let (_, _, framebuffers) = create_test_render_passes(&vars);
 
         assert_ne!(framebuffers.len(), 0);
         assert!(!framebuffers.framebuffers.iter().any(|fb| fb.is_null()));

@@ -11,6 +11,7 @@ use self::{
     DescriptorAllocator as Allocator, DescriptorCounts as Counts,
     DescriptorPool as Pool, DescriptorSet as Set,
     DescriptorSetLayout as SetLayout,
+    DescriptorSetLayoutManager as SetLayoutManager,
 };
 
 macro_rules! insert_unique {
@@ -59,6 +60,36 @@ impl Drop for SetLayout {
             self.device.table
                 .destroy_descriptor_set_layout(self.inner, ptr::null());
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct DescriptorSetLayoutManager {
+    pub device: Arc<Device>,
+    pub layouts: NodeArray<SetLayout>,
+    pub id_by_name: FnvHashMap<String, Id<SetLayout>>,
+}
+
+impl SetLayoutManager {
+    pub fn new(device: Arc<Device>) -> Self {
+        SetLayoutManager {
+            device,
+            layouts: Default::default(),
+            id_by_name: Default::default(),
+        }
+    }
+
+    pub fn add(&mut self, name: String, set_layout: SetLayout) -> Id<SetLayout>
+    {
+        let id = self.layouts.add(set_layout);
+        assert!(self.id_by_name.insert(name, id).is_none());
+        id
+    }
+
+    pub fn by_name(&self, name: impl AsRef<str>) -> &SetLayout {
+        let name = name.as_ref();
+        let id = self.id_by_name[name];
+        &self.layouts[id]
     }
 }
 
@@ -150,7 +181,7 @@ impl Drop for Pool {
 #[derive(Debug)]
 struct Suballocator {
     device: Arc<Device>,
-    layout_table: Arc<NodeArray<SetLayout>>,
+    layout_man: Arc<SetLayoutManager>,
     free: Vec<Set>,
     layout: Id<SetLayout>,
     sub_pools: Vec<Pool>,
@@ -159,27 +190,25 @@ struct Suballocator {
 impl Suballocator {
     fn new(
         device: Arc<Device>,
-        layout_table: Arc<NodeArray<SetLayout>>,
+        layout_man: Arc<SetLayoutManager>,
         layout: Id<SetLayout>,
     ) -> Self {
         Suballocator {
             device,
-            layout_table,
+            layout_man,
             free: Vec::new(),
             layout,
             sub_pools: Vec::new(),
         }
     }
-}
 
-impl Suballocator {
     unsafe fn grow_by(&mut self, size: u32) {
         let layout_id = self.layout;
 
         // Create a descriptor pool
         let (layout, pool_sizes, flags);
         {
-            let layout_obj = &self.layout_table[layout_id];
+            let layout_obj = &self.layout_man.layouts[layout_id];
             layout = layout_obj.inner;
             pool_sizes = layout_obj.counts.pool_sizes(size);
             flags = layout_obj.pool_flags();
@@ -245,18 +274,18 @@ pub struct DescriptorAllocator {
     // TODO: RwLock + HashMap + Mutex is technically inferior to a true
     // concurrent hash map. Should we switch?
     sub_alloc: RwLock<FnvHashMap<Id<SetLayout>, Mutex<Suballocator>>>,
-    layout_table: Arc<NodeArray<SetLayout>>,
+    layout_man: Arc<SetLayoutManager>,
 }
 
 impl Allocator {
     pub fn new(
         device: Arc<Device>,
-        layout_table: Arc<NodeArray<SetLayout>>,
+        layout_man: Arc<SetLayoutManager>,
     ) -> Self {
         Allocator {
             device,
             sub_alloc: RwLock::new(FnvHashMap::default()),
-            layout_table,
+            layout_man,
         }
     }
 
@@ -279,7 +308,7 @@ impl Allocator {
         // Create a new sub for this layout.
         let mut sub = Suballocator::new(
             Arc::clone(&self.device),
-            Arc::clone(&self.layout_table),
+            Arc::clone(&self.layout_man),
             layout,
         );
         // Lucky for us, we can perform the allocation before inserting.
@@ -295,59 +324,62 @@ impl Allocator {
     }
 }
 
-// TODO: We might want an abstraction over descriptor set bindings.
-//
-// Desired features:
-// - Easily compose new descriptor set layouts
-// - Trade multiple set layouts for a single combined layout
-// - No longer hardcode which slots descriptors are bound to
+#[cfg(test)]
+crate unsafe fn create_test_set_layouts(vars: &testing::TestVars) ->
+    Arc<SetLayoutManager>
+{
+    let device = Arc::clone(&vars.swapchain.device);
+    let mut layouts = SetLayoutManager::new(Arc::clone(&device));
+
+    let bindings = [vk::DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
+        ..Default::default()
+    }];
+    let args = DescriptorSetLayoutCreateArgs {
+        bindings: &bindings[..],
+        ..Default::default()
+    };
+    let layout = SetLayout::new(Arc::clone(&device), &args);
+    layouts.add("scene_globals".to_owned(), layout);
+
+    let bindings = [vk::DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+        ..Default::default()
+    }];
+    let args = DescriptorSetLayoutCreateArgs {
+        bindings: &bindings[..],
+        ..Default::default()
+    };
+    let layout = SetLayout::new(Arc::clone(&device), &args);
+    layouts.add("material".to_owned(), layout);
+
+    Arc::new(layouts)
+}
 
 #[cfg(test)]
 mod tests {
     use std::thread;
-    use ccore::node::NodeArray;
     use vk::traits::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let swapchain = vars.swapchain;
-        let device = Arc::clone(&swapchain.device);
-        let mut layouts = NodeArray::new();
+        let device = Arc::clone(&vars.swapchain.device);
 
-        let bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-            ..Default::default()
-        }];
-        let args = DescriptorSetLayoutCreateArgs {
-            bindings: &bindings[..],
-            ..Default::default()
-        };
-        let layout1 = SetLayout::new(Arc::clone(&device), &args);
-        let layout1 = layouts.add(layout1);
-
-        let bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::COMPUTE_BIT,
-            ..Default::default()
-        }];
-        let args = DescriptorSetLayoutCreateArgs {
-            bindings: &bindings[..],
-            ..Default::default()
-        };
-        let layout2 = SetLayout::new(Arc::clone(&device), &args);
-        let layout2 = layouts.add(layout2);
-
-        let layouts = Arc::new(layouts);
-        let allocator = Arc::new(DescriptorAllocator::new(device, layouts));
+        let set_layouts = create_test_set_layouts(&vars);
+        let allocator = Arc::new(
+            DescriptorAllocator::new(device, Arc::clone(&set_layouts))
+        );
 
         let descriptors = Arc::clone(&allocator);
-        let layout = layout1;
+        let layouts = Arc::clone(&set_layouts);
         let thread1 = thread::spawn(move || {
+            let layout = layouts.id_by_name["scene_globals"];
             let set0 = descriptors.allocate(layout);
             let sets = [
                 descriptors.allocate(layout),
@@ -363,8 +395,9 @@ mod tests {
         });
 
         let descriptors = Arc::clone(&allocator);
-        let layout = layout2;
+        let layouts = Arc::clone(&set_layouts);
         let thread2 = thread::spawn(move || {
+            let layout = layouts.id_by_name["material"];
             let set = descriptors.allocate(layout);
             assert!(!set.inner.is_null());
             descriptors.free(set);
@@ -375,27 +408,12 @@ mod tests {
     }
 
     unsafe fn test_for_races(vars: testing::TestVars) {
-        let swapchain = vars.swapchain;
-        let device = Arc::clone(&swapchain.device);
+        let device = Arc::clone(&vars.swapchain.device);
 
-        let mut layouts = NodeArray::new();
-
-        let bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-            ..Default::default()
-        }];
-        let args = DescriptorSetLayoutCreateArgs {
-            bindings: &bindings[..],
-            ..Default::default()
-        };
-        let layout = SetLayout::new(Arc::clone(&device), &args);
-        let layout = layouts.add(layout);
-
-        let layouts = Arc::new(layouts);
-        let allocator = Arc::new(DescriptorAllocator::new(device, layouts));
+        let set_layouts = create_test_set_layouts(&vars);
+        let allocator = Arc::new(
+            DescriptorAllocator::new(device, Arc::clone(&set_layouts))
+        );
 
         // Spawn two threads that allocate and deallocate in a loop for
         // a while. Not surefire, but better than nothing.
@@ -403,8 +421,10 @@ mod tests {
         const NUM_ITERS: usize = 50;
 
         let descriptors = Arc::clone(&allocator);
+        let layouts = Arc::clone(&set_layouts);
         let thread1 = thread::spawn(move || {
             for _ in 0..NUM_ITERS {
+                let layout = layouts.id_by_name["scene_globals"];
                 let set0 = descriptors.allocate(layout);
                 thread::sleep(std::time::Duration::from_micros(50));
                 descriptors.free(set0);
@@ -412,8 +432,10 @@ mod tests {
         });
 
         let descriptors = Arc::clone(&allocator);
+        let layouts = Arc::clone(&set_layouts);
         let thread2 = thread::spawn(move || {
             for _ in 0..NUM_ITERS {
+                let layout = layouts.id_by_name["scene_globals"];
                 let set1 = descriptors.allocate(layout);
                 let set2 = descriptors.allocate(layout);
                 thread::sleep(std::time::Duration::from_micros(50));
