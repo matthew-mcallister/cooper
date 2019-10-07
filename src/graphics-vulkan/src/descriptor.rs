@@ -94,11 +94,10 @@ impl SetLayoutManager {
 }
 
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct DescriptorSetLayoutCreateArgs<'a> {
-    flags: vk::DescriptorSetLayoutCreateFlags,
-    bindings: &'a [vk::DescriptorSetLayoutBinding],
-    binding_flags: Option<&'a [vk::DescriptorBindingFlagsEXT]>,
+    pub flags: vk::DescriptorSetLayoutCreateFlags,
+    pub bindings: &'a [vk::DescriptorSetLayoutBinding],
+    pub binding_flags: Option<&'a [vk::DescriptorBindingFlagsEXT]>,
 }
 
 impl SetLayout {

@@ -18,7 +18,7 @@ macro_rules! include_shader {
 }
 
 #[derive(Debug)]
-pub struct ShaderDef {
+pub struct ShaderDesc {
     pub name: String,
     pub entry: CString,
     pub code: Vec<u8>,
@@ -26,13 +26,13 @@ pub struct ShaderDef {
 }
 
 #[macro_export]
-macro_rules! shader_def {
+macro_rules! shader_desc {
     (
         name: $name:expr,
         entry: $entry:expr,
         bindings: [$(($binding_idx:expr, $binding_name:expr)),*$(,)*]$(,)*
     ) => {
-        ShaderDef {
+        ShaderDesc {
             name: $name.to_owned(),
             entry: CString::new($entry.to_owned()).unwrap(),
             code: include_shader!(concat!($name, ".spv")).to_vec(),
@@ -44,12 +44,12 @@ macro_rules! shader_def {
 #[derive(Debug)]
 pub struct Shader {
     pub inner: vk::ShaderModule,
-    pub def: ShaderDef,
+    pub desc: ShaderDesc,
 }
 
 impl Shader {
     pub fn entry(&self) -> &CStr {
-        &*self.def.entry
+        &*self.desc.entry
     }
 }
 
@@ -80,10 +80,10 @@ impl ShaderManager {
         }
     }
 
-    pub unsafe fn create_shader(&mut self, def: ShaderDef) -> Id<Shader> {
+    pub unsafe fn create_shader(&mut self, desc: ShaderDesc) -> Id<Shader> {
         let dt = &self.device.table;
 
-        let code = &def.code;
+        let code = &desc.code;
         assert_eq!(code.len() % 4, 0);
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: code.len(),
@@ -95,11 +95,11 @@ impl ShaderManager {
         dt.create_shader_module(&create_info, ptr::null(), &mut inner)
             .check().unwrap();
 
-        let name = def.name.clone();
+        let name = desc.name.clone();
 
         let shader = Shader {
             inner,
-            def,
+            desc,
         };
 
         let id = self.shaders.add(shader);
@@ -121,15 +121,15 @@ crate unsafe fn create_test_shaders(vars: &testing::TestVars) ->
 {
     let device = Arc::clone(&vars.swapchain.device);
 
-    let defs = vec![
-        shader_def! {
+    let descs = vec![
+        shader_desc! {
             name: "cube_vert",
             entry: "main",
             bindings: [
                 (0, "scene_globals"),
             ],
         },
-        shader_def! {
+        shader_desc! {
             name: "cube_frag",
             entry: "main",
             bindings: [
@@ -139,8 +139,8 @@ crate unsafe fn create_test_shaders(vars: &testing::TestVars) ->
     ];
 
     let mut shader_man = ShaderManager::new(device);
-    for def in defs {
-        shader_man.create_shader(def);
+    for desc in descs {
+        shader_man.create_shader(desc);
     }
     Arc::new(shader_man)
 }
@@ -153,7 +153,7 @@ mod tests {
         let shade_man = create_test_shaders(&vars);
         assert_ne!(shade_man.shaders.len(), 0);
         for (name, &id) in shade_man.shaders_by_name.iter() {
-            assert_eq!(&name[..], &shade_man.shaders[id].def.name[..]);
+            assert_eq!(&name[..], &shade_man.shaders[id].desc.name[..]);
         }
     }
 

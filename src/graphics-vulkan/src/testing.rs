@@ -44,12 +44,12 @@ impl VulkanTestContext {
             },
         };
         let window = Arc::new(self.proxy.create_window(info)?);
-        let config = Arc::new(GraphicsConfig {
+        let config = GraphicsConfig {
             app_name: NAME.to_owned(),
             app_version: [0, 1, 0],
             debug: true,
             ..Default::default()
-        });
+        };
 
         let instance =
             Arc::new(Instance::new(window.vk_platform().clone(), config)?);

@@ -31,7 +31,7 @@ impl Drop for Instance {
 impl Instance {
     pub unsafe fn new(
         vk: window::VulkanPlatform,
-        config: Arc<GraphicsConfig>,
+        config: GraphicsConfig,
     ) -> Result<Self, AnyError> {
         if !vk.supported() { Err("vulkan not available")?; }
 
@@ -73,6 +73,7 @@ impl Instance {
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
+        let config = Arc::new(config);
         Ok(Instance { vk, entry, table, config })
     }
 
@@ -202,14 +203,20 @@ impl Queue {
             submissions.len() as _,
             submissions.as_ptr(),
             fence,
-        );
+        ).check().unwrap();
+    }
+
+    pub unsafe fn present(&self, present_info: &vk::PresentInfoKHR) ->
+        vk::Result
+    {
+        let _lock = self.mutex.lock();
+        self.device.table.queue_present_khr(self.inner, present_info)
     }
 }
 
 impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
-            self.table.device_wait_idle();
             self.table.destroy_device(ptr::null());
         }
     }
@@ -428,8 +435,8 @@ impl Swapchain {
             y: 0.0,
             width: self.extent.width as _,
             height: self.extent.height as _,
-            min_depth: 0.0,
-            max_depth: 1.0,
+            min_depth: 1.0,
+            max_depth: 0.0,
         }
     }
 
@@ -510,7 +517,7 @@ impl Swapchain {
             pre_transform: caps.current_transform,
             composite_alpha,
             present_mode: vk::PresentModeKHR::FIFO_KHR,
-            clipped: vk::TRUE,
+            clipped: vk::FALSE,
             old_swapchain: self.inner,
         };
         let mut new = vk::null();

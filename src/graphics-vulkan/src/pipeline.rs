@@ -101,14 +101,14 @@ pub struct GraphicsPipeline {
 /// Basically a cache of pipelines.
 #[derive(Debug)]
 pub struct GraphicsPipelineManager<F: GraphicsPipelineFactory> {
-    swapchain: Arc<Swapchain>,
+    device: Arc<Device>,
     factory: F,
     pipelines: FnvHashMap<F::Desc, Arc<GraphicsPipeline>>,
 }
 
 impl<F: GraphicsPipelineFactory> Drop for GraphicsPipelineManager<F> {
     fn drop(&mut self) {
-        let dt = &self.swapchain.device.table;
+        let dt = &self.device.table;
         unsafe {
             for pipeline in self.pipelines.values() {
                 dt.destroy_pipeline(pipeline.inner, ptr::null());
@@ -118,9 +118,9 @@ impl<F: GraphicsPipelineFactory> Drop for GraphicsPipelineManager<F> {
 }
 
 impl<F: GraphicsPipelineFactory> GraphicsPipelineManager<F> {
-    pub unsafe fn new(swapchain: Arc<Swapchain>, factory: F) -> Self {
+    pub unsafe fn new(device: Arc<Device>, factory: F) -> Self {
         GraphicsPipelineManager {
-            swapchain,
+            device,
             factory,
             pipelines: Default::default(),
         }
@@ -210,7 +210,7 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
                 let layout = &self.pipe_layouts.layouts[layout_id];
 
                 for shader in [&vert, &frag].iter() {
-                    for &(idx, ref name) in shader.def.set_bindings.iter() {
+                    for &(idx, ref name) in shader.desc.set_bindings.iter() {
                         let other_id = self.set_layouts.id_by_name[name];
                         assert_eq!(layout.set_layouts[idx as usize], other_id);
                     }
@@ -231,11 +231,11 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
         let (vertex_input_state, input_assembly_state) = match *desc {
             TestPipelineDesc::Cube => {
                 let vertex_input = Default::default();
-                let input_assmebly = vk::PipelineInputAssemblyStateCreateInfo {
+                let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
                     topology: vk::PrimitiveTopology::TRIANGLE_STRIP,
                     ..Default::default()
                 };
-                (vertex_input, input_assmebly)
+                (vertex_input, input_assembly)
             },
         };
 
@@ -310,6 +310,7 @@ mod tests {
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let swapchain = Arc::clone(&vars.swapchain);
+        let device = Arc::clone(&swapchain.device);
 
         let (render_passes, _, _) = create_test_render_passes(&vars);
         let shaders = create_test_shaders(&vars);
@@ -323,7 +324,7 @@ mod tests {
             pipe_layouts,
         };
 
-        let mut pipe_man = GraphicsPipelineManager::new(swapchain, factory);
+        let mut pipe_man = GraphicsPipelineManager::new(device, factory);
 
         let pipe1 = Arc::clone(pipe_man.get(&TestPipelineDesc::Cube));
         let pipe2 = Arc::clone(pipe_man.get(&TestPipelineDesc::Cube));

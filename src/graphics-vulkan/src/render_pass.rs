@@ -117,9 +117,11 @@ impl AttachmentChain {
     }
 }
 
+// TODO: Seems like the wrong abstraction; a trait might be better.
 #[derive(Debug)]
 pub struct FramebufferChain {
     pub render_pass: Arc<RenderPass>,
+    pub extent: vk::Extent2D,
     pub attachments: Vec<Arc<AttachmentChain>>,
     pub framebuffers: Vec<vk::Framebuffer>,
 }
@@ -179,6 +181,7 @@ impl FramebufferChain {
 
         FramebufferChain {
             render_pass,
+            extent,
             attachments,
             framebuffers,
         }
@@ -186,6 +189,10 @@ impl FramebufferChain {
 
     pub fn len(&self) -> usize {
         self.framebuffers.len()
+    }
+
+    pub fn rect(&self) -> vk::Rect2D {
+        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
     }
 }
 

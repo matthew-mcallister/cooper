@@ -45,7 +45,6 @@ impl AllocInfo {
         }
     }
 
-    #[allow(dead_code)]
     pub fn as_block<T: Sized>(&self) -> *mut T {
         assert_eq!(self.size as usize, std::mem::size_of::<T>());
         self.ptr as _
@@ -179,6 +178,10 @@ impl MemoryPool {
             res.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT));
         res.grow(create_info.base_size);
         res
+    }
+
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
     }
 
     // Guarantees that each allocation is aligned to `quantum` bytes and
