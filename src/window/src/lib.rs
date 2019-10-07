@@ -25,6 +25,7 @@ macro_rules! get_var {
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
+use std::time::{Duration, Instant};
 
 use ccore::request as rq;
 use crossbeam_channel as cc;
@@ -113,12 +114,16 @@ enum Request {
         window: WindowHandle,
         title: String,
     },
+    WindowShouldClose {
+        window: WindowHandle,
+    },
 }
 
 #[derive(Debug, From)]
 enum Response {
     WindowCreated(Result<WindowHandle, Error>),
     SurfaceCreated(Result<vk::SurfaceKHR, vk::Result>),
+    WindowShouldClose(bool),
 }
 
 type RequestSender = rq::RequestSender<Request, Response>;
@@ -130,19 +135,8 @@ type RequestSender = rq::RequestSender<Request, Response>;
 ///
 /// For maximum platform compatibility (and maybe fewer bugs), call this
 /// function from the "main" thread. It is unsafe to call twice.
-pub unsafe fn init() ->
-    Result<(EventLoop, EventLoopProxy), Error>
-{
-    glfw::set_error_callback(Some(error_cb as _));
-    if !int2bool(glfw::init()) {
-        return Err(last_error().unwrap());
-    }
-
-    let handler = EventHandler;
-    let (service, sender) = rq::Service::<EventHandler>::unbounded(handler);
-    let evt = EventLoop { service };
-    let proxy = EventLoopProxy { sender: sender.clone() };
-    Ok((evt, proxy))
+pub unsafe fn init() -> Result<(EventLoop, EventLoopProxy), Error> {
+    EventLoop::new()
 }
 
 /// An asynchronous worker that runs on the main thread and performs
@@ -157,6 +151,7 @@ pub unsafe fn init() ->
 #[non_exhaustive]
 pub struct EventLoop {
     service: rq::Service<EventHandler>,
+    ticker: cc::Receiver<Instant>,
 }
 
 impl !Sync for EventLoop {}
@@ -165,9 +160,10 @@ impl !Send for EventLoop {}
 impl Drop for EventLoop {
     fn drop(&mut self) {
         // Bring down the whole program if others are still using GLFW
-        // (this part could use some work)
+        // (the alternative is to leave GLFW initialized and let the
+        // other threads crash after they realize the channel is closed)
         match self.service.try_pump() {
-            Err(cc::TryRecvError::Disconnected) => {},
+            Err(cc::RecvError) => {},
             _ => {
                 const EXIT_CODE: i32 = 0xD0A;
                 std::process::exit(EXIT_CODE);
@@ -180,12 +176,45 @@ impl Drop for EventLoop {
 }
 
 impl EventLoop {
-    pub fn try_pump(&mut self) -> Result<(), cc::TryRecvError> {
-        self.service.try_pump()
+    unsafe fn new() -> Result<(Self, EventLoopProxy), Error> {
+        glfw::set_error_callback(Some(error_cb as _));
+        if !int2bool(glfw::init()) {
+            return Err(last_error().unwrap());
+        }
+
+        let (service, sender) = rq::Service::unbounded(EventHandler);
+
+        let ticker = cc::tick(Duration::from_millis(4));
+        let evt = EventLoop { service, ticker };
+
+        let proxy = EventLoopProxy { sender };
+
+        Ok((evt, proxy))
     }
 
+    pub fn set_poll_interval(&mut self, interval: Duration) {
+        self.ticker = cc::tick(interval);
+    }
+
+    /// Handles any pending requests and window system events.
+    pub fn try_pump(&mut self) -> Result<(), cc::RecvError> {
+        unsafe { glfw::poll_events(); }
+        self.service.try_pump()?;
+        Ok(())
+    }
+
+    /// Pumps requests and window system events according to the current
+    /// polling interval.
+    pub fn pump_with_timeout(&mut self) -> Result<(), cc::RecvError> {
+        unsafe { glfw::poll_events(); }
+        self.service.pump_with_fallback(&self.ticker)?;
+        Ok(())
+    }
+
+    /// Pumps requests and window system events until the channel is
+    /// disconnected.
     pub fn pump(&mut self) {
-        self.service.pump()
+        while let Ok(()) = self.pump_with_timeout() {}
     }
 }
 
@@ -251,6 +280,12 @@ impl rq::RequestHandler for EventHandler {
                     glfw::set_window_title(window.as_ptr(), title.as_ptr());
                 }
                 None
+            },
+            Request::WindowShouldClose { window } => {
+                unsafe {
+                    let res = glfw::window_should_close(window.as_ptr());
+                    Some(Response::WindowShouldClose(int2bool(res)))
+                }
             },
         }
     }
@@ -410,6 +445,14 @@ impl Window {
         };
         self.sender.send(request).unwrap();
     }
+
+    pub fn should_close(&self) -> bool {
+        let request = Request::WindowShouldClose {
+            window: self.inner,
+        };
+        let response = self.sender.wait_on(request).unwrap();
+        get_var!(response, Response::WindowShouldClose).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -450,8 +493,7 @@ mod tests {
         thd.join().unwrap();
     }
 
-    // TODO: Tests should be skipped (not fail) if GLFW is
-    // unavailable
+    // TODO: Tests should be skipped (not fail) if GLFW is unavailable
     declare_tests![
         smoke_test,
         (#[should_err] error_test),

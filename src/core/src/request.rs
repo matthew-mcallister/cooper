@@ -115,29 +115,50 @@ impl<H: RequestHandler> Service<H> {
 
     fn handle_request(&mut self, req: Message2<H>) {
         let res = self.handler.handle(req.payload);
-        // TODO: Per-request timeout
+        // TODO: response timeout
         let _: Option<_> = try { req.res_chan?.send(res?) };
     }
 
-    /// Handles waiting requests, if any.
-    pub fn try_pump(&mut self) -> Result<(), cc::TryRecvError>
-    {
-        let req = self.receiver.try_recv()?;
-        self.handle_request(req);
-        Ok(())
-    }
-
-    /// Pumps requests until the channel is disconnected.
-    pub fn pump(&mut self) {
-        while let Ok(req) = self.receiver.recv() {
-            self.handle_request(req);
+    /// Handles waiting requests, if any. Returns the number of requests
+    /// processed.
+    pub fn try_pump(&mut self) -> Result<u64, cc::RecvError> {
+        for i in 0.. {
+            match self.receiver.try_recv() {
+                Ok(req) => self.handle_request(req),
+                Err(cc::TryRecvError::Empty) => return Ok(i),
+                Err(cc::TryRecvError::Disconnected) =>
+                    return Err(cc::RecvError),
+            }
         }
+        unreachable!()
     }
 
-    /// Pumps messages for the specified duration. Returns `Ok` if the
-    /// timeout was reached and `Err` if the channel was disconnected.
-    pub fn pump_with_timeout(&mut self) -> Result<(), cc::RecvError> {
-        unimplemented!();
+    /// Pumps requests until the channel is disconnected. Returns the
+    /// number of requests processed.
+    pub fn pump(&mut self) -> u64 {
+        for i in 0.. {
+            if let Ok(req) = self.receiver.recv() {
+                self.handle_request(req);
+            } else {
+                return i;
+            }
+        }
+        unreachable!()
+    }
+
+    /// Pumps messages in a loop with a fallback channel---generally a
+    /// timer. Returns `Ok(_)` once the fallback is triggered, and
+    /// `Err(_)` if any channel was disconnected.
+    pub fn pump_with_fallback<R>(&mut self, fallback: &cc::Receiver<R>) ->
+        Result<(u64, R), cc::RecvError>
+    {
+        for i in 0.. {
+            cc::select! {
+                recv(&self.receiver) -> res => self.handle_request(res?),
+                recv(fallback) -> res => return Ok((i, res?)),
+            };
+        }
+        unreachable!()
     }
 }
 
