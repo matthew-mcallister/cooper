@@ -1,8 +1,8 @@
 use std::ptr;
 use std::sync::{Arc, Mutex, RwLock};
 
-use ccore::node::{Id, NodeArray};
 use fnv::FnvHashMap;
+use prelude::*;
 
 use crate::*;
 
@@ -13,12 +13,6 @@ use self::{
     DescriptorSetLayout as SetLayout,
     DescriptorSetLayoutManager as SetLayoutManager,
 };
-
-macro_rules! insert_unique {
-    ($map:expr; $key:expr => $val:expr) => {
-        assert!($map.insert($key, $val).is_none());
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct DescriptorCounts {
@@ -40,7 +34,7 @@ impl Counts {
         for binding in bindings.iter() {
             let ty = binding.descriptor_type;
             let count = binding.descriptor_count;
-            insert_unique!(inner; ty => count);
+            insert_unique!(inner, ty, count);
         }
         Counts { inner }
     }
@@ -48,48 +42,39 @@ impl Counts {
 
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
-    pub device: Arc<Device>,
     pub inner: vk::DescriptorSetLayout,
     pub flags: vk::DescriptorSetLayoutCreateFlags,
     pub counts: Counts,
 }
 
-impl Drop for SetLayout {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.table
-                .destroy_descriptor_set_layout(self.inner, ptr::null());
+impl DescriptorSetLayout {
+    pub fn pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
+        let mut flags = Default::default();
+
+        let update_after_bind =
+            vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL_BIT_EXT;
+        if self.flags.contains(update_after_bind) {
+            flags |= vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND_BIT_EXT;
         }
+
+        flags
     }
 }
 
 #[derive(Debug)]
 pub struct DescriptorSetLayoutManager {
-    pub device: Arc<Device>,
-    pub layouts: NodeArray<SetLayout>,
-    pub id_by_name: FnvHashMap<String, Id<SetLayout>>,
+    crate device: Arc<Device>,
+    layouts: FnvHashMap<String, DescriptorSetLayout>,
 }
 
-impl SetLayoutManager {
-    pub fn new(device: Arc<Device>) -> Self {
-        SetLayoutManager {
-            device,
-            layouts: Default::default(),
-            id_by_name: Default::default(),
+impl Drop for SetLayoutManager {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        unsafe {
+            for layout in self.layouts.values() {
+                dt.destroy_descriptor_set_layout(layout.inner, ptr::null());
+            }
         }
-    }
-
-    pub fn add(&mut self, name: String, set_layout: SetLayout) -> Id<SetLayout>
-    {
-        let id = self.layouts.add(set_layout);
-        assert!(self.id_by_name.insert(name, id).is_none());
-        id
-    }
-
-    pub fn by_name(&self, name: impl AsRef<str>) -> &SetLayout {
-        let name = name.as_ref();
-        let id = self.id_by_name[name];
-        &self.layouts[id]
     }
 }
 
@@ -100,11 +85,21 @@ pub struct DescriptorSetLayoutCreateArgs<'a> {
     pub binding_flags: Option<&'a [vk::DescriptorBindingFlagsEXT]>,
 }
 
-impl SetLayout {
-    pub unsafe fn new(
-        device: Arc<Device>,
+impl SetLayoutManager {
+    pub fn new(device: Arc<Device>) -> Self {
+        DescriptorSetLayoutManager {
+            device,
+            layouts: Default::default(),
+        }
+    }
+
+    pub unsafe fn create_layout(
+        &mut self,
+        name: String,
         params: &DescriptorSetLayoutCreateArgs,
-    ) -> Self {
+    ) {
+        let dt = &*self.device.table;
+
         let (p_next, _flag_create_info);
         if let Some(binding_flags) = params.binding_flags {
             assert_eq!(binding_flags.len(), params.bindings.len());
@@ -128,73 +123,66 @@ impl SetLayout {
             ..Default::default()
         };
         let mut inner = vk::null();
-        device.table.create_descriptor_set_layout
-            (&create_info, ptr::null(), &mut inner).check().unwrap();
+        dt.create_descriptor_set_layout(&create_info, ptr::null(), &mut inner)
+            .check().unwrap();
 
-        SetLayout {
-            device,
+        let layout = SetLayout {
             inner,
             flags: params.flags,
             counts: DescriptorCounts::from_bindings(params.bindings),
-        }
+        };
+        insert_unique!(self.layouts, name, layout);
     }
 
-    pub fn pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
-        let mut flags = Default::default();
-
-        let update_after_bind =
-            vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL_BIT_EXT;
-        if self.flags.contains(update_after_bind) {
-            flags |= vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND_BIT_EXT;
-        }
-
-        flags
+    pub fn get(&self, key: impl AsRef<str>) -> &SetLayout {
+        &self.layouts[key.as_ref()]
     }
 }
 
 #[derive(Debug)]
 pub struct DescriptorSet {
-    pub layout: Id<SetLayout>,
+    pub layout: String,
     pub pool: usize,
     pub inner: vk::DescriptorSet,
 }
 
 #[derive(Debug)]
 pub struct DescriptorPool {
-    pub device: Arc<Device>,
-    pub layout: Id<SetLayout>,
+    pub layout: String,
     pub size: u32,
     pub inner: vk::DescriptorPool,
-}
-
-impl Drop for Pool {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.table
-                .destroy_descriptor_pool(self.inner, ptr::null())
-        }
-    }
 }
 
 /// Allocates descriptors of a single layout.
 #[derive(Debug)]
 struct Suballocator {
-    device: Arc<Device>,
-    layout_man: Arc<SetLayoutManager>,
+    crate device: Arc<Device>,
+    layouts: Arc<SetLayoutManager>,
     free: Vec<Set>,
-    layout: Id<SetLayout>,
+    layout: String,
     sub_pools: Vec<Pool>,
+}
+
+impl Drop for Suballocator {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        unsafe {
+            for pool in self.sub_pools.iter() {
+                dt.destroy_descriptor_pool(pool.inner, ptr::null())
+            }
+        }
+    }
 }
 
 impl Suballocator {
     fn new(
         device: Arc<Device>,
-        layout_man: Arc<SetLayoutManager>,
-        layout: Id<SetLayout>,
+        layouts: Arc<SetLayoutManager>,
+        layout: String,
     ) -> Self {
         Suballocator {
             device,
-            layout_man,
+            layouts,
             free: Vec::new(),
             layout,
             sub_pools: Vec::new(),
@@ -202,16 +190,14 @@ impl Suballocator {
     }
 
     unsafe fn grow_by(&mut self, size: u32) {
-        let layout_id = self.layout;
+        let dt = &*self.device.table;
+        let layout_id = &self.layout;
 
         // Create a descriptor pool
-        let (layout, pool_sizes, flags);
-        {
-            let layout_obj = &self.layout_man.layouts[layout_id];
-            layout = layout_obj.inner;
-            pool_sizes = layout_obj.counts.pool_sizes(size);
-            flags = layout_obj.pool_flags();
-        };
+        let layout = &self.layouts.get(layout_id);
+        let vk_layout = layout.inner;
+        let pool_sizes = layout.counts.pool_sizes(size);
+        let flags = layout.pool_flags();
 
         let create_info = vk::DescriptorPoolCreateInfo {
             flags,
@@ -221,12 +207,11 @@ impl Suballocator {
             ..Default::default()
         };
         let mut obj = vk::null();
-        self.device.table.create_descriptor_pool
-            (&create_info, ptr::null(), &mut obj).check().unwrap();
+        dt.create_descriptor_pool(&create_info, ptr::null(), &mut obj)
+            .check().unwrap();
 
         let pool = Pool {
-            device: Arc::clone(&self.device),
-            layout: layout_id,
+            layout: layout_id.clone(),
             inner: obj,
             size,
         };
@@ -235,18 +220,22 @@ impl Suballocator {
 
         // Allocate sets from the pool
         let mut sets = vec![vk::null(); size as usize];
-        let layouts = vec![layout; size as usize];
+        let layouts = vec![vk_layout; size as usize];
         let alloc_info = vk::DescriptorSetAllocateInfo {
             descriptor_pool: obj,
             descriptor_set_count: size,
             p_set_layouts: layouts.as_ptr(),
             ..Default::default()
         };
-        self.device.table.allocate_descriptor_sets
-            (&alloc_info, sets.as_mut_ptr()).check().unwrap();
+        dt.allocate_descriptor_sets(&alloc_info, sets.as_mut_ptr())
+            .check().unwrap();
 
         let sets = sets.into_iter()
-            .map(|inner| Set { layout: layout_id, pool: pool_idx, inner });
+            .map(|inner| Set {
+                layout: layout_id.clone(),
+                pool: pool_idx,
+                inner,
+            });
         self.free.extend(sets);
     }
 
@@ -269,51 +258,50 @@ impl Suballocator {
 
 #[derive(Debug)]
 pub struct DescriptorAllocator {
-    device: Arc<Device>,
+    crate device: Arc<Device>,
     // TODO: RwLock + HashMap + Mutex is technically inferior to a true
     // concurrent hash map. Should we switch?
-    sub_alloc: RwLock<FnvHashMap<Id<SetLayout>, Mutex<Suballocator>>>,
-    layout_man: Arc<SetLayoutManager>,
+    sub_alloc: RwLock<FnvHashMap<String, Mutex<Suballocator>>>,
+    layouts: Arc<SetLayoutManager>,
 }
 
 impl Allocator {
-    pub fn new(
-        device: Arc<Device>,
-        layout_man: Arc<SetLayoutManager>,
-    ) -> Self {
+    pub fn new(device: Arc<Device>, layouts: Arc<SetLayoutManager>) -> Self {
         Allocator {
             device,
             sub_alloc: RwLock::new(FnvHashMap::default()),
-            layout_man,
+            layouts,
         }
     }
 
-    pub unsafe fn allocate(&self, layout: Id<SetLayout>) -> Set {
+    pub unsafe fn allocate(&self, layout: impl AsRef<str>) -> Set {
+        let layout = layout.as_ref();
+
         // Allocate from existing sub if present
         #[allow(unreachable_code)]
         let _: Option<_> = try {
             let map = self.sub_alloc.read().unwrap();
-            let mut sub = map.get(&layout)?.lock().unwrap();
+            let mut sub = map.get(layout)?.lock().unwrap();
             return sub.allocate();
         };
 
         // Acquire lock and re-check condition to avoid racing to insert
         // the new sub.
         let mut sub_alloc = self.sub_alloc.write().unwrap();
-        if let Some(sub) = sub_alloc.get(&layout) {
+        if let Some(sub) = sub_alloc.get(layout) {
             return sub.lock().unwrap().allocate();
         }
 
         // Create a new sub for this layout.
         let mut sub = Suballocator::new(
             Arc::clone(&self.device),
-            Arc::clone(&self.layout_man),
-            layout,
+            Arc::clone(&self.layouts),
+            layout.to_owned(),
         );
         // Lucky for us, we can perform the allocation before inserting.
         let set = sub.allocate();
 
-        sub_alloc.insert(layout, Mutex::new(sub));
+        sub_alloc.insert(layout.to_owned(), Mutex::new(sub));
 
         set
     }
@@ -334,19 +322,19 @@ crate unsafe fn create_test_set_layouts(vars: &testing::TestVars) ->
         binding: 0,
         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
         descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
+        stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+            | vk::ShaderStageFlags::FRAGMENT_BIT,
         ..Default::default()
     }];
     let args = DescriptorSetLayoutCreateArgs {
         bindings: &bindings[..],
         ..Default::default()
     };
-    let layout = SetLayout::new(Arc::clone(&device), &args);
-    layouts.add("scene_globals".to_owned(), layout);
+    layouts.create_layout("scene_globals".to_owned(), &args);
 
     let bindings = [vk::DescriptorSetLayoutBinding {
         binding: 0,
-        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
         descriptor_count: 1,
         stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
         ..Default::default()
@@ -355,8 +343,7 @@ crate unsafe fn create_test_set_layouts(vars: &testing::TestVars) ->
         bindings: &bindings[..],
         ..Default::default()
     };
-    let layout = SetLayout::new(Arc::clone(&device), &args);
-    layouts.add("material".to_owned(), layout);
+    layouts.create_layout("material".to_owned(), &args);
 
     Arc::new(layouts)
 }
@@ -376,9 +363,8 @@ mod tests {
         );
 
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
         let thread1 = thread::spawn(move || {
-            let layout = layouts.id_by_name["scene_globals"];
+            let layout = "scene_globals";
             let set0 = descriptors.allocate(layout);
             let sets = [
                 descriptors.allocate(layout),
@@ -394,10 +380,8 @@ mod tests {
         });
 
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
         let thread2 = thread::spawn(move || {
-            let layout = layouts.id_by_name["material"];
-            let set = descriptors.allocate(layout);
+            let set = descriptors.allocate("material");
             assert!(!set.inner.is_null());
             descriptors.free(set);
         });
@@ -419,11 +403,11 @@ mod tests {
 
         const NUM_ITERS: usize = 50;
 
+        let layout = "scene_globals";
+
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
         let thread1 = thread::spawn(move || {
             for _ in 0..NUM_ITERS {
-                let layout = layouts.id_by_name["scene_globals"];
                 let set0 = descriptors.allocate(layout);
                 thread::sleep(std::time::Duration::from_micros(50));
                 descriptors.free(set0);
@@ -431,10 +415,8 @@ mod tests {
         });
 
         let descriptors = Arc::clone(&allocator);
-        let layouts = Arc::clone(&set_layouts);
         let thread2 = thread::spawn(move || {
             for _ in 0..NUM_ITERS {
-                let layout = layouts.id_by_name["scene_globals"];
                 let set1 = descriptors.allocate(layout);
                 let set2 = descriptors.allocate(layout);
                 thread::sleep(std::time::Duration::from_micros(50));

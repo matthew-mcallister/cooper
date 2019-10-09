@@ -2,33 +2,49 @@ use std::ptr;
 use std::sync::Arc;
 
 use fnv::FnvHashMap;
+use prelude::*;
 
 use crate::*;
 
 #[derive(Debug)]
 pub struct RenderPass {
-    pub device: Arc<Device>,
     pub inner: vk::RenderPass,
     pub attachments: Vec<vk::AttachmentDescription>,
     pub subpasses: FnvHashMap<String, u32>,
 }
 
-impl Drop for RenderPass {
+#[derive(Debug)]
+pub struct RenderPassManager {
+    crate device: Arc<Device>,
+    render_passes: FnvHashMap<String, RenderPass>,
+}
+
+impl Drop for RenderPassManager {
     fn drop(&mut self) {
-        let dt = &self.device.table;
+        let dt = &*self.device.table;
         unsafe {
-            dt.destroy_render_pass(self.inner, ptr::null());
+            for render_pass in self.render_passes.values() {
+                dt.destroy_render_pass(render_pass.inner, ptr::null());
+            }
         }
     }
 }
 
-impl RenderPass {
-    pub unsafe fn new(
-        device: Arc<Device>,
+impl RenderPassManager {
+    pub fn new(device: Arc<Device>) -> Self {
+        RenderPassManager {
+            device,
+            render_passes: Default::default(),
+        }
+    }
+
+    pub unsafe fn create_render_pass(
+        &mut self,
+        name: String,
         create_info: &vk::RenderPassCreateInfo,
         subpass_names: Vec<String>,
-    ) -> RenderPass {
-        let dt = &*device.table;
+    ) {
+        let dt = &*self.device.table;
 
         let attachments = std::slice::from_raw_parts
             (create_info.p_attachments, create_info.attachment_count as _);
@@ -45,12 +61,24 @@ impl RenderPass {
             .collect();
         assert_eq!(subpasses.len(), num_subpasses, "duplicate subpass name");
 
-        RenderPass {
-            device,
+        let render_pass = RenderPass {
             inner: render_pass,
             attachments,
             subpasses,
-        }
+        };
+        insert_unique!(self.render_passes, name, render_pass);
+    }
+
+    pub fn get(&self, key: impl AsRef<str>) -> &RenderPass {
+        &self.render_passes[key.as_ref()]
+    }
+
+    pub unsafe fn create_framebuffers(
+        &self,
+        render_pass: String,
+        attachments: Vec<Arc<AttachmentChain>>,
+    ) -> FramebufferChain {
+        FramebufferChain::new(&self, render_pass, attachments)
     }
 }
 
@@ -120,7 +148,8 @@ impl AttachmentChain {
 // TODO: Seems like the wrong abstraction; a trait might be better.
 #[derive(Debug)]
 pub struct FramebufferChain {
-    pub render_pass: Arc<RenderPass>,
+    pub device: Arc<Device>,
+    pub render_pass: String,
     pub extent: vk::Extent2D,
     pub attachments: Vec<Arc<AttachmentChain>>,
     pub framebuffers: Vec<vk::Framebuffer>,
@@ -128,7 +157,7 @@ pub struct FramebufferChain {
 
 impl Drop for FramebufferChain {
     fn drop(&mut self) {
-        let dt = &*self.render_pass.device.table;
+        let dt = &*self.device.table;
         unsafe {
             for &framebuffer in self.framebuffers.iter() {
                 dt.destroy_framebuffer(framebuffer, ptr::null());
@@ -139,9 +168,15 @@ impl Drop for FramebufferChain {
 
 impl FramebufferChain {
     pub unsafe fn new(
-        render_pass: Arc<RenderPass>,
+        render_passes: &RenderPassManager,
+        render_pass: String,
         attachments: Vec<Arc<AttachmentChain>>,
     ) -> Self {
+        let device = Arc::clone(&render_passes.device);
+        let dt = &*device.table;
+        let render_pass_id = render_pass;
+        let render_pass = render_passes.get(&render_pass_id);
+
         assert_eq!(attachments.len(), render_pass.attachments.len());
         for (attachment, desc) in attachments.iter()
             .zip(render_pass.attachments.iter())
@@ -173,14 +208,15 @@ impl FramebufferChain {
                 ..Default::default()
             };
             let mut framebuffer = vk::null();
-            render_pass.device.table.create_framebuffer
-                (&create_info, ptr::null(), &mut framebuffer).check().unwrap();
+            dt.create_framebuffer(&create_info, ptr::null(), &mut framebuffer)
+                .check().unwrap();
 
             framebuffer
         }).collect();
 
         FramebufferChain {
-            render_pass,
+            device,
+            render_pass: render_pass_id,
             extent,
             attachments,
             framebuffers,
@@ -196,15 +232,14 @@ impl FramebufferChain {
     }
 }
 
-pub type RenderPassManager = FnvHashMap<String, Arc<RenderPass>>;
-
 #[cfg(test)]
 crate unsafe fn create_test_render_passes(vars: &testing::TestVars) ->
     (RenderPassManager, Arc<AttachmentChain>, FramebufferChain)
 {
     let swapchain = Arc::clone(&vars.swapchain);
 
-    let mut render_passes = RenderPassManager::default();
+    let mut render_passes =
+        RenderPassManager::new(Arc::clone(&swapchain.device));
 
     let attachment_descs = [vk::AttachmentDescription {
         format: swapchain.format,
@@ -233,15 +268,14 @@ crate unsafe fn create_test_render_passes(vars: &testing::TestVars) ->
         p_subpasses: subpasses.as_ptr(),
         ..Default::default()
     };
-    let rp = Arc::new(RenderPass::new(
-        Arc::clone(&swapchain.device),
-        &create_info,
-        subpass_names,
-    ));
-    render_passes.insert("main".to_owned(), Arc::clone(&rp));
+    render_passes
+        .create_render_pass("forward".to_owned(), &create_info, subpass_names);
 
     let attachments = Arc::new(AttachmentChain::from_swapchain(&swapchain));
-    let framebufs = FramebufferChain::new(rp, vec![Arc::clone(&attachments)]);
+    let framebufs = render_passes.create_framebuffers(
+        "forward".to_owned(),
+        vec![Arc::clone(&attachments)],
+    );
 
     (render_passes, attachments, framebufs)
 }

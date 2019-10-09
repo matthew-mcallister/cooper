@@ -31,28 +31,25 @@ unsafe fn init_resources(
     let set_layouts =
         Arc::new(DescriptorSetLayoutManager::new(Arc::clone(&device)));
 
-    let mut pipe_layouts = PipelineLayoutManager::new(
-        Arc::clone(&device),
-        Arc::clone(&set_layouts),
-    );
+    let mut pipe_layouts =
+        PipelineLayoutManager::new(Arc::clone(&set_layouts));
     pipe_layouts.create_layout("null".to_owned(), Vec::new());
     let pipe_layouts = Arc::new(pipe_layouts);
 
     let mut shaders = ShaderManager::new(Arc::clone(&device));
-    shaders.create_shader(ShaderDesc {
-        name: "triangle_vert".to_owned(),
+    shaders.create_shader("triangle_vert".to_owned(), ShaderDesc {
         entry: CString::new("main".to_owned()).unwrap(),
         code: include_shader!("triangle_vert.spv").to_vec(),
         set_bindings: Vec::new(),
     });
-    shaders.create_shader(ShaderDesc {
-        name: "triangle_frag".to_owned(),
+    shaders.create_shader("triangle_frag".to_owned(), ShaderDesc {
         entry: CString::new("main".to_owned()).unwrap(),
         code: include_shader!("triangle_frag.spv").to_vec(),
         set_bindings: Vec::new(),
     });
     let shaders = Arc::new(shaders);
 
+    let mut render_passes = RenderPassManager::new(Arc::clone(&device));
     let attachments = [vk::AttachmentDescription {
         format: swapchain.format,
         samples: vk::SampleCountFlags::_1_BIT,
@@ -79,18 +76,18 @@ unsafe fn init_resources(
         p_subpasses: subpasses.as_ptr(),
         ..Default::default()
     };
-    let render_pass = Arc::new(RenderPass::new(
-        Arc::clone(&device),
+    render_passes.create_render_pass(
+        "forward".to_owned(),
         &create_info,
         vec!["color".to_owned()],
-    ));
-    let mut render_passes = RenderPassManager::default();
-    render_passes.insert("forward".to_owned(), Arc::clone(&render_pass));
+    );
     let render_passes = Arc::new(render_passes);
 
     let attachments = Arc::new(AttachmentChain::from_swapchain(&swapchain));
-    let framebuffers =
-        Arc::new(FramebufferChain::new(render_pass, vec![attachments]));
+    let framebuffers = Arc::new(render_passes.create_framebuffers(
+        "forward".to_owned(),
+        vec![attachments],
+    ));
 
     GfxResources {
         window,
@@ -138,8 +135,8 @@ impl GraphicsPipelineFactory for PipelineFactory {
         let shaders = &self.res.shaders;
         let pipe_layouts = &self.res.pipe_layouts;
 
-        let vert = shaders.by_name("triangle_vert");
-        let frag = shaders.by_name("triangle_frag");
+        let vert = shaders.get("triangle_vert");
+        let frag = shaders.get("triangle_frag");
 
         let vert_stage = vk::PipelineShaderStageCreateInfo {
             stage: vk::ShaderStageFlags::VERTEX_BIT,
@@ -155,11 +152,14 @@ impl GraphicsPipelineFactory for PipelineFactory {
         };
         let stages = vec![vert_stage, frag_stage];
 
-        let layout_id = pipe_layouts.id_by_name["null"];
-        let layout = &pipe_layouts.layouts[layout_id];
+        let layout_id = "null";
+        let layout = pipe_layouts.get(layout_id).inner;
 
-        let render_pass = Arc::clone(&render_passes["forward"]);
-        let subpass = render_pass.subpasses["color"];
+        let render_pass_id = "forward";
+        let render_pass = render_passes.get(render_pass_id);
+        let subpass_id = "color";
+        let subpass = render_pass.subpasses[subpass_id];
+        let render_pass = render_pass.inner;
 
         let vertex_input_state = Default::default();
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
@@ -210,8 +210,8 @@ impl GraphicsPipelineFactory for PipelineFactory {
             p_rasterization_state: &rasterization_state,
             p_multisample_state: &multisample_state,
             p_color_blend_state: &color_blend_state,
-            layout: layout.inner,
-            render_pass: render_pass.inner,
+            layout,
+            render_pass,
             subpass,
             ..Default::default()
         };
@@ -229,9 +229,9 @@ impl GraphicsPipelineFactory for PipelineFactory {
 
         GraphicsPipeline {
             inner,
-            layout: layout_id,
-            render_pass,
-            subpass,
+            layout: layout_id.to_owned(),
+            render_pass: render_pass_id.to_owned(),
+            subpass: subpass_id.to_owned(),
         }
     }
 }
@@ -349,11 +349,11 @@ impl GfxState {
         };
         dt.begin_command_buffer(cmds, &begin_info);
 
-        let render_pass = &self.res.render_passes["forward"];
+        let render_pass = self.res.render_passes.get("forward").inner;
         let framebuffer = self.cur_framebuffer();
         let render_area = self.res.framebuffers.rect();
         let begin_info = vk::RenderPassBeginInfo {
-            render_pass: render_pass.inner,
+            render_pass,
             framebuffer,
             render_area,
             ..Default::default()

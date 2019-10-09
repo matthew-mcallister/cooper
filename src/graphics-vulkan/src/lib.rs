@@ -1,3 +1,4 @@
+// TODO: Small string optimization
 #![feature(arbitrary_self_types)]
 #![feature(crate_visibility_modifier)]
 #![feature(non_exhaustive)]

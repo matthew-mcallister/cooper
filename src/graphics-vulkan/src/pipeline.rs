@@ -1,30 +1,30 @@
 use std::ptr;
 use std::sync::Arc;
 
-use ccore::node::*;
 use fnv::FnvHashMap;
+use prelude::*;
 
 use crate::*;
 
+// TODO: There's probably some way to automate using these.
 #[derive(Debug)]
 pub struct PipelineLayout {
     pub inner: vk::PipelineLayout,
-    pub set_layouts: Vec<Id<DescriptorSetLayout>>,
+    pub set_layouts: Vec<String>,
 }
 
 #[derive(Debug)]
 pub struct PipelineLayoutManager {
-    pub device: Arc<Device>,
-    pub set_layouts: Arc<DescriptorSetLayoutManager>,
-    pub layouts: NodeArray<PipelineLayout>,
-    pub id_by_name: FnvHashMap<String, Id<PipelineLayout>>,
+    crate device: Arc<Device>,
+    set_layouts: Arc<DescriptorSetLayoutManager>,
+    layouts: FnvHashMap<String, PipelineLayout>,
 }
 
 impl Drop for PipelineLayoutManager {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe {
-            for (_, layout) in self.layouts.iter() {
+            for layout in self.layouts.values() {
                 dt.destroy_pipeline_layout(layout.inner, ptr::null());
             }
         }
@@ -32,25 +32,25 @@ impl Drop for PipelineLayoutManager {
 }
 
 impl PipelineLayoutManager {
-    pub fn new(
-        device: Arc<Device>,
-        set_layouts: Arc<DescriptorSetLayoutManager>,
-    ) -> PipelineLayoutManager {
+    pub fn new(set_layouts: Arc<DescriptorSetLayoutManager>) ->
+        PipelineLayoutManager
+    {
         PipelineLayoutManager {
-            device,
+            device: Arc::clone(&set_layouts.device),
             set_layouts,
             layouts: Default::default(),
-            id_by_name: Default::default(),
         }
     }
 
     pub unsafe fn create_layout(
         &mut self,
         name: String,
-        set_layouts: Vec<Id<DescriptorSetLayout>>,
-    ) -> Id<PipelineLayout> {
+        set_layouts: Vec<String>,
+    ) {
+        let dt = &*self.device.table;
+
         let vk_set_layouts: Vec<_> = set_layouts.iter()
-            .map(|&id| self.set_layouts.layouts[id].inner)
+            .map(|id| self.set_layouts.get(&id).inner)
             .collect();
         let create_info = vk::PipelineLayoutCreateInfo {
             set_layout_count: vk_set_layouts.len() as _,
@@ -58,24 +58,18 @@ impl PipelineLayoutManager {
             ..Default::default()
         };
         let mut inner = vk::null();
-        self.device.table.create_pipeline_layout
-            (&create_info, ptr::null(), &mut inner).check().unwrap();
+        dt.create_pipeline_layout(&create_info, ptr::null(), &mut inner)
+            .check().unwrap();
 
-        let pipe_layout = PipelineLayout {
+        let layout = PipelineLayout {
             inner,
             set_layouts,
         };
-        let id = self.layouts.add(pipe_layout);
-
-        assert!(self.id_by_name.insert(name, id).is_none());
-
-        id
+        insert_unique!(self.layouts, name, layout);
     }
 
-    pub fn by_name(&self, name: impl AsRef<str>) -> &PipelineLayout {
-        let name = name.as_ref();
-        let id = self.id_by_name[name];
-        &self.layouts[id]
+    pub unsafe fn get(&self, key: impl AsRef<str>) -> &PipelineLayout {
+        &self.layouts[key.as_ref()]
     }
 }
 
@@ -93,22 +87,22 @@ pub trait GraphicsPipelineFactory {
 #[derive(Debug)]
 pub struct GraphicsPipeline {
     pub inner: vk::Pipeline,
-    pub layout: Id<PipelineLayout>,
-    pub render_pass: Arc<RenderPass>,
-    pub subpass: u32,
+    pub layout: String,
+    pub render_pass: String,
+    pub subpass: String,
 }
 
 /// Basically a cache of pipelines.
 #[derive(Debug)]
 pub struct GraphicsPipelineManager<F: GraphicsPipelineFactory> {
-    device: Arc<Device>,
+    crate device: Arc<Device>,
     factory: F,
     pipelines: FnvHashMap<F::Desc, Arc<GraphicsPipeline>>,
 }
 
 impl<F: GraphicsPipelineFactory> Drop for GraphicsPipelineManager<F> {
     fn drop(&mut self) {
-        let dt = &self.device.table;
+        let dt = &*self.device.table;
         unsafe {
             for pipeline in self.pipelines.values() {
                 dt.destroy_pipeline(pipeline.inner, ptr::null());
@@ -139,7 +133,7 @@ impl<F: GraphicsPipelineFactory> GraphicsPipelineManager<F> {
 
         let pipeline = self.factory.create_pipeline(desc);
 
-        self.pipelines.insert(desc.clone(), Arc::new(pipeline));
+        insert_unique!(self.pipelines, desc.clone(), Arc::new(pipeline));
         &self.pipelines[desc]
     }
 }
@@ -149,16 +143,12 @@ crate unsafe fn create_test_pipe_layouts(vars: &testing::TestVars) ->
     (Arc<DescriptorSetLayoutManager>, Arc<PipelineLayoutManager>)
 {
     let set_layouts = create_test_set_layouts(vars);
-    let mut pipe_layouts = PipelineLayoutManager::new(
-        Arc::clone(&vars.swapchain.device),
-        Arc::clone(&set_layouts),
-    );
+    let mut pipe_layouts =
+        PipelineLayoutManager::new(Arc::clone(&set_layouts));
 
-    let scene_globals = set_layouts.id_by_name["scene_globals"];
-    let material = set_layouts.id_by_name["material"];
     pipe_layouts.create_layout(
         "std_mesh".to_owned(),
-        vec![scene_globals, material],
+        vec!["scene_globals".to_owned(), "material".to_owned()],
     );
 
     (set_layouts, Arc::new(pipe_layouts))
@@ -187,10 +177,12 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
     // Simple, copypasta pipeline creation
     unsafe fn create_pipeline(&mut self, desc: &Self::Desc) -> GraphicsPipeline
     {
-        let (stages, layout, layout_id) = match *desc {
+        let dt = &*self.swapchain.device.table;
+
+        let (stages, layout_id) = match *desc {
             TestPipelineDesc::Cube => {
-                let vert = self.shaders.by_name("cube_vert");
-                let frag = self.shaders.by_name("cube_frag");
+                let vert = self.shaders.get("example_vert");
+                let frag = self.shaders.get("example_frag");
 
                 let vert_stage = vk::PipelineShaderStageCreateInfo {
                     stage: vk::ShaderStageFlags::VERTEX_BIT,
@@ -206,31 +198,56 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
                 };
                 let stages = vec![vert_stage, frag_stage];
 
-                let layout_id = self.pipe_layouts.id_by_name["std_mesh"];
-                let layout = &self.pipe_layouts.layouts[layout_id];
-
-                for shader in [&vert, &frag].iter() {
-                    for &(idx, ref name) in shader.desc.set_bindings.iter() {
-                        let other_id = self.set_layouts.id_by_name[name];
-                        assert_eq!(layout.set_layouts[idx as usize], other_id);
-                    }
-                }
-
-                (stages, layout, layout_id)
+                (stages, "std_mesh")
             },
         };
+        let layout = self.pipe_layouts.get(layout_id);
 
-        let (render_pass, subpass) = match *desc {
-            TestPipelineDesc::Cube => {
-                let render_pass = Arc::clone(&self.render_passes["main"]);
-                let subpass = render_pass.subpasses["lighting"];
-                (render_pass, subpass)
-            },
+        let (render_pass_id, subpass_id) = match *desc {
+            TestPipelineDesc::Cube => ("forward", "lighting"),
         };
+        let render_pass = self.render_passes.get(render_pass_id);
+        let subpass = render_pass.subpasses[subpass_id];
 
         let (vertex_input_state, input_assembly_state) = match *desc {
             TestPipelineDesc::Cube => {
-                let vertex_input = Default::default();
+                let bindings = [
+                    // Position
+                    vk::VertexInputBindingDescription {
+                        binding: 0,
+                        stride: std::mem::size_of::<[f32; 3]>() as _,
+                        input_rate: vk::VertexInputRate::VERTEX,
+                    },
+                    // Normal
+                    vk::VertexInputBindingDescription {
+                        binding: 1,
+                        stride: std::mem::size_of::<[f32; 3]>() as _,
+                        input_rate: vk::VertexInputRate::VERTEX,
+                    },
+                ];
+                let attrs = [
+                    // Position
+                    vk::VertexInputAttributeDescription {
+                        location: 0,
+                        binding: 0,
+                        format: vk::Format::R32G32B32_SFLOAT,
+                        offset: 0,
+                    },
+                    // Normal
+                    vk::VertexInputAttributeDescription {
+                        location: 1,
+                        binding: 1,
+                        format: vk::Format::R32G32B32_SFLOAT,
+                        offset: 0,
+                    },
+                ];
+				let vertex_input = vk::PipelineVertexInputStateCreateInfo {
+                    vertex_binding_description_count: bindings.len() as _,
+                    p_vertex_binding_descriptions: bindings.as_ptr(),
+                    vertex_attribute_description_count: attrs.len() as _,
+                    p_vertex_attribute_descriptions: attrs.as_ptr(),
+                    ..Default::default()
+                };
                 let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
                     topology: vk::PrimitiveTopology::TRIANGLE_STRIP,
                     ..Default::default()
@@ -260,13 +277,18 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
             ..Default::default()
         };
 
-        let color_blend_attchs = [Default::default()];
+        let color_blend_atts = [vk::PipelineColorBlendAttachmentState {
+            color_write_mask: vk::ColorComponentFlags::R_BIT
+                | vk::ColorComponentFlags::G_BIT
+                | vk::ColorComponentFlags::B_BIT
+                | vk::ColorComponentFlags::A_BIT,
+            ..Default::default()
+        }];
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
-            attachment_count: color_blend_attchs.len() as _,
-            p_attachments: color_blend_attchs.as_ptr(),
+            attachment_count: color_blend_atts.len() as _,
+            p_attachments: color_blend_atts.as_ptr(),
             ..Default::default()
         };
-        assert_eq!(color_blend_attchs.len(), render_pass.attachments.len());
 
         let create_info = vk::GraphicsPipelineCreateInfo {
             stage_count: stages.len() as _,
@@ -286,7 +308,7 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
 
         let mut inner = vk::null();
         let pipelines = std::slice::from_mut(&mut inner);
-        self.swapchain.device.table.create_graphics_pipelines(
+        dt.create_graphics_pipelines(
             vk::null(),                 // pipelineCache
             create_infos.len() as _,    // createInfoCount
             create_infos.as_ptr(),      // pCreateInfos
@@ -296,9 +318,9 @@ impl GraphicsPipelineFactory for TestPipelineFactory {
 
         GraphicsPipeline {
             inner,
-            layout: layout_id,
-            render_pass,
-            subpass,
+            layout: layout_id.to_owned(),
+            render_pass: render_pass_id.to_owned(),
+            subpass: subpass_id.to_owned(),
         }
     }
 }

@@ -7,6 +7,13 @@ macro_rules! c_str {
     };
 }
 
+#[macro_export]
+macro_rules! insert_unique {
+    ($map:expr, $key:expr, $val:expr) => {
+        assert!($map.insert($key, $val).is_none());
+    }
+}
+
 pub type AnyError = Box<dyn std::error::Error>;
 
 pub trait ResultExt<T, E> {

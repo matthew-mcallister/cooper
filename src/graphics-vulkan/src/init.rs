@@ -445,7 +445,7 @@ impl Swapchain {
     }
 
     pub unsafe fn recreate(&mut self) -> Result<(), AnyError> {
-        let dt = &self.device.table;
+        let dt = &*self.device.table;
         let it: &vkl::InstanceTable = &self.device.instance.table;
         let pdev = self.device.pdev;
 

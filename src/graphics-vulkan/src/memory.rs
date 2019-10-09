@@ -98,7 +98,7 @@ impl DeviceAlloc {
 // free blocks to reuse snugly fitting allocations.
 #[derive(Debug)]
 pub struct MemoryPool {
-    device: Arc<Device>,
+    crate device: Arc<Device>,
     type_index: u32,
     host_mapped: bool,
     buffer_map: Option<BufferMapOptions>,
@@ -218,7 +218,7 @@ impl MemoryPool {
     }
 
     pub unsafe fn grow(&mut self, size: vk::DeviceSize) {
-        let dt = &self.dt();
+        let dt = self.dt();
 
         let alloc_info = vk::MemoryAllocateInfo {
             allocation_size: size,
