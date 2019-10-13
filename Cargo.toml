@@ -3,6 +3,7 @@ members = [
     "src/core",
     "src/graphics-vulkan",
     "src/main",
+    "src/math",
     "src/prelude",
     "src/unit",
     "src/window",

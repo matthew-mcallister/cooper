@@ -1,0 +1,10 @@
+[package]
+name = "cooper-math"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+approx = "0.3"
+na = { package = "nalgebra", version = "0.18" }

@@ -33,6 +33,7 @@ struct XferCmdBuffer {
     dt: Arc<vkl::DeviceTable>,
     queue: Arc<Queue>,
     state: CmdBufferState,
+    // TODO: Switch to a single timeline semaphore
     fence: vk::Fence,
     /// primary; contains vkCmdPipelineBarrier + img_l2
     img_l1: vk::CommandBuffer,

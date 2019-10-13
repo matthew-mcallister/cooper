@@ -34,7 +34,7 @@ impl Counts {
         for binding in bindings.iter() {
             let ty = binding.descriptor_type;
             let count = binding.descriptor_count;
-            insert_unique!(inner, ty, count);
+            *inner.entry(ty).or_insert(0) += count;
         }
         Counts { inner }
     }
@@ -45,6 +45,7 @@ pub struct DescriptorSetLayout {
     pub inner: vk::DescriptorSetLayout,
     pub flags: vk::DescriptorSetLayoutCreateFlags,
     pub counts: Counts,
+    // TODO: Allocation policy
 }
 
 impl DescriptorSetLayout {

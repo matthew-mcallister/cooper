@@ -46,12 +46,19 @@ impl AllocInfo {
     }
 
     pub fn as_block<T: Sized>(&self) -> *mut T {
-        assert_eq!(self.size as usize, std::mem::size_of::<T>());
         self.ptr as _
     }
 
     pub fn end(&self) -> vk::DeviceSize {
         self.offset + self.size
+    }
+
+    pub fn buffer_info(&self) -> vk::DescriptorBufferInfo {
+        vk::DescriptorBufferInfo {
+            buffer: self.buffer,
+            offset: self.offset,
+            range: self.size,
+        }
     }
 }
 
@@ -85,20 +92,57 @@ pub struct DeviceAlloc {
     chunk_idx: u32,
 }
 
+macro_rules! delegate {
+    ($parent:ident, $child:ident, {$($field:ident: $type:ty),*$(,)*}) => {
+        impl $parent {
+            $(
+                pub fn $field(&self) -> $type {
+                    self.$child.$field
+                }
+            )*
+        }
+    }
+}
+
+delegate!(DeviceAlloc, info, {
+    memory: vk::DeviceMemory,
+    offset: vk::DeviceSize,
+    size: vk::DeviceSize,
+    buffer: vk::Buffer,
+    buf_offset: vk::DeviceSize,
+    ptr: *mut c_void,
+});
+
 impl DeviceAlloc {
     pub fn info(&self) -> &AllocInfo {
         &self.info
+    }
+
+    pub fn as_slice<T: Sized>(&self) -> *mut [T] {
+        self.info.as_slice()
+    }
+
+    pub fn as_block<T: Sized>(&self) -> *mut T {
+        self.info.as_block()
+    }
+
+    pub fn end(&self) -> vk::DeviceSize {
+        self.info.end()
+    }
+
+    pub fn buffer_info(&self) -> vk::DescriptorBufferInfo {
+        self.info.buffer_info()
     }
 }
 
 /// This is a simple address-ordered FIFO allocator. It is somewhat
 /// low-level as it doesn't check for correct memory usage (i.e.
 /// linear/non-linear overlap).
-// TODO: Investigate storing a map from allocation size to same-sized
-// free blocks to reuse snugly fitting allocations.
+// TODO: Maybe store a map from allocation size to free blocks.
+// TODO: Stack-frame-based allocation
 #[derive(Debug)]
 pub struct MemoryPool {
-    crate device: Arc<Device>,
+    device: Arc<Device>,
     type_index: u32,
     host_mapped: bool,
     buffer_map: Option<BufferMapOptions>,
@@ -163,7 +207,7 @@ impl MemoryPool {
         device: Arc<Device>,
         create_info: MemoryPoolCreateInfo,
     ) -> Self {
-        let mut res = MemoryPool {
+        let mem = MemoryPool {
             device,
             type_index: create_info.type_index,
             host_mapped: create_info.host_mapped,
@@ -174,10 +218,11 @@ impl MemoryPool {
             chunks: Vec::new(),
             free: Vec::new(),
         };
-        assert!(!res.host_mapped() ||
-            res.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT));
-        res.grow(create_info.base_size);
-        res
+        println!();
+        assert!(mem.type_index < mem.device.mem_props.memory_type_count);
+        assert!(!mem.host_mapped() ||
+            mem.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT));
+        mem
     }
 
     pub fn device(&self) -> &Arc<Device> {
@@ -246,11 +291,14 @@ impl MemoryPool {
             dt.create_buffer(&create_info, ptr::null(), &mut buffer)
                 .check().unwrap();
 
-            // Silence validation warnings
             let mut reqs = vk::MemoryRequirements::default();
             dt.get_buffer_memory_requirements(buffer, &mut reqs);
             assert_eq!(reqs.size, size);
-            assert!(compatible_type(reqs.memory_type_bits, self.type_index));
+            assert!(
+                compatible_type(reqs.memory_type_bits, self.type_index),
+                "type_index: {}, memory_type_bits: 0b{:b}",
+                self.type_index, reqs.memory_type_bits,
+            );
 
             dt.bind_buffer_memory(buffer, memory, 0).check().unwrap();
         }
@@ -312,6 +360,8 @@ impl MemoryPool {
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
     ) -> DeviceAlloc {
+        // TODO: make alignment comply with
+        // minStorageBufferOffsetAlignment etc.
         let alignment = std::cmp::max(alignment, self.quantum());
         let padded_size = align(size, self.quantum());
         let (chunk_idx, offset) = (0..self.free.len())

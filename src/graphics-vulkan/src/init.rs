@@ -55,7 +55,7 @@ impl Instance {
         extensions.extend(vk.required_instance_extensions());
 
         if config.debug {
-            layers.push(c_str!("VK_LAYER_LUNARG_standard_validation"));
+            layers.push(c_str!("VK_LAYER_KHRONOS_validation"));
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
@@ -477,16 +477,14 @@ impl Swapchain {
 
         self.format = format;
 
-        // The spec says that, on Wayland (and probably other platforms,
-        // maybe embedded), the surface extent may be determined by the
-        // swapchain extent rather than the other way around.
-        if (0xffff_ffff, 0xffff_ffff) == caps.current_extent.into()
-            { Err("surface extent undefined")?; }
+        // FIXME: On Wayland, the surface extent is defined by the
+        // application, so we need to pull window dimensions from config
+        // rather than the surface object.
+        assert_ne!(caps.current_extent, (0xffff_ffff, 0xffff_ffff).into());
 
-        // TODO: The spec says that you are unable to create a swapchain
-        // when this happens. Which platforms do this?
-        if (0, 0) == caps.current_extent.into()
-            { Err("surface has zero extent")?; }
+        // This can happen when a window is minimized, so don't try to
+        // create a swapchain for a minimized window.
+        assert_ne!(caps.current_extent, (0, 0).into());
 
         self.extent = caps.current_extent;
 

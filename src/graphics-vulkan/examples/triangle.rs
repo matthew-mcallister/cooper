@@ -7,24 +7,12 @@ use cooper_graphics_vulkan::*;
 #[macro_use]
 mod common;
 
-use common::{init_video, with_event_loop};
-
-#[derive(Debug)]
-struct GfxResources {
-    window: Arc<window::Window>,
-    swapchain: Arc<Swapchain>,
-    queues: Vec<Vec<Arc<Queue>>>,
-    set_layouts: Arc<DescriptorSetLayoutManager>,
-    pipe_layouts: Arc<PipelineLayoutManager>,
-    shaders: Arc<ShaderManager>,
-    render_passes: Arc<RenderPassManager>,
-    framebuffers: Arc<FramebufferChain>,
-}
+use common::*;
 
 unsafe fn init_resources(
     swapchain: Arc<Swapchain>,
     queues: Vec<Vec<Arc<Queue>>>,
-) -> GfxResources {
+) -> AppResources {
     let window = Arc::clone(&swapchain.surface.window);
     let device = Arc::clone(&swapchain.device);
 
@@ -89,7 +77,7 @@ unsafe fn init_resources(
         vec![attachments],
     ));
 
-    GfxResources {
+    AppResources {
         window,
         swapchain,
         queues,
@@ -101,23 +89,15 @@ unsafe fn init_resources(
     }
 }
 
-impl GfxResources {
-    unsafe fn new(swapchain: Arc<Swapchain>, queues: Vec<Vec<Arc<Queue>>>) ->
-        Self
-    {
-        init_resources(swapchain, queues)
-    }
-}
-
 type PipelineDesc = ();
 
 #[derive(Debug)]
 struct PipelineFactory {
-    res: Arc<GfxResources>,
+    res: Arc<AppResources>,
 }
 
 impl PipelineFactory {
-    fn new(res: Arc<GfxResources>) -> Self {
+    fn new(res: Arc<AppResources>) -> Self {
         PipelineFactory {
             res,
         }
@@ -237,37 +217,31 @@ impl GraphicsPipelineFactory for PipelineFactory {
 }
 
 #[derive(Debug)]
-struct GfxState {
+struct AppState {
     dt: Arc<vkl::DeviceTable>,
-    res: Arc<GfxResources>,
-    gfx_queue: Arc<Queue>,
+    base: AppBase,
+    res: Arc<AppResources>,
     pipelines: GraphicsPipelineManager<PipelineFactory>,
     cmd_pool: vk::CommandPool,
     cmds: vk::CommandBuffer,
-    present_image: u32,
-    acquire_sem: vk::Semaphore,
-    render_sem: vk::Semaphore,
-    render_fence: vk::Fence,
 }
 
-impl Drop for GfxState {
+impl Drop for AppState {
     fn drop(&mut self) {
-        let dt = &self.gfx_queue.device.table;
+        let dt = &*self.dt;
         unsafe {
             dt.device_wait_idle();
             dt.destroy_command_pool(self.cmd_pool, ptr::null());
-            dt.destroy_semaphore(self.acquire_sem, ptr::null());
-            dt.destroy_fence(self.render_fence, ptr::null());
-            dt.destroy_semaphore(self.render_sem, ptr::null());
         }
     }
 }
 
-unsafe fn init_state(res: GfxResources) -> GfxState {
-    let res = Arc::new(res);
+unsafe fn init_state(res: Arc<AppResources>) -> AppState {
     let gfx_queue = Arc::clone(&res.queues[0][0]);
     let device = Arc::clone(&gfx_queue.device);
     let dt = Arc::clone(&device.table);
+
+    let base = AppBase::new(Arc::clone(&res));
 
     let factory = PipelineFactory::new(Arc::clone(&res));
     let pipelines = GraphicsPipelineManager::new(Arc::clone(&device), factory);
@@ -280,55 +254,17 @@ unsafe fn init_state(res: GfxResources) -> GfxState {
     let mut cmd_pool = vk::null();
     dt.create_command_pool(&create_info, ptr::null(), &mut cmd_pool);
 
-    let acquire_sem = device.create_semaphore();
-    let render_sem = device.create_semaphore();
-    let render_fence = device.create_fence(true);
-
-    GfxState {
+    AppState {
         dt,
+        base,
         res,
-        gfx_queue,
         pipelines,
         cmd_pool,
         cmds: vk::null(),
-        present_image: 0,
-        acquire_sem,
-        render_sem,
-        render_fence,
     }
 }
 
-impl GfxState {
-    unsafe fn new(resources: GfxResources) -> Self {
-        init_state(resources)
-    }
-
-    fn cur_framebuffer(&self) -> vk::Framebuffer {
-        self.res.framebuffers.framebuffers[self.present_image as usize]
-    }
-
-    unsafe fn acquire_next_image(&mut self) {
-        let swapchain = &self.res.swapchain;
-        let dt = &*self.dt;
-        dt.acquire_next_image_khr(
-            swapchain.inner,            //swapchain
-            u64::max_value(),           //timeout
-            self.acquire_sem,           //semaphore
-            vk::null(),                 //fence
-            &mut self.present_image,    //pImageIndex
-        );
-    }
-
-    unsafe fn wait_for_render(&mut self) {
-        let fences = [self.render_fence];
-        self.dt.wait_for_fences(
-            fences.len() as _,  //fenceCount
-            fences.as_ptr(),    //pFences
-            vk::FALSE,          //waitAll
-            u64::max_value(),   //timeout
-        );
-    }
-
+impl AppState {
     unsafe fn record_cmds(&mut self) {
         let dt = &*self.dt;
 
@@ -350,7 +286,7 @@ impl GfxState {
         dt.begin_command_buffer(cmds, &begin_info);
 
         let render_pass = self.res.render_passes.get("forward").inner;
-        let framebuffer = self.cur_framebuffer();
+        let framebuffer = self.base.cur_framebuffer();
         let render_area = self.res.framebuffers.rect();
         let begin_info = vk::RenderPassBeginInfo {
             render_pass,
@@ -371,13 +307,10 @@ impl GfxState {
     }
 
     unsafe fn submit_cmds(&mut self) {
-        let fences = [self.render_fence];
-        self.dt.reset_fences(fences.len() as _, fences.as_ptr());
-
         let cmd_bufs = [self.cmds];
-        let wait_sems = [self.acquire_sem];
+        let wait_sems = [self.base.acquire_sem];
         let wait_masks = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT];
-        let sig_sems = [self.render_sem];
+        let sig_sems = [self.base.render_sem];
         let submit_infos = [vk::SubmitInfo {
             command_buffer_count: cmd_bufs.len() as _,
             p_command_buffers: cmd_bufs.as_ptr(),
@@ -388,35 +321,21 @@ impl GfxState {
             p_signal_semaphores: sig_sems.as_ptr(),
             ..Default::default()
         }];
-        self.gfx_queue.submit(&submit_infos[..], self.render_fence);
-    }
-
-    unsafe fn present(&mut self) {
-        let wait_sems = [self.render_sem];
-        let swapchains = [self.res.swapchain.inner];
-        let present_info = vk::PresentInfoKHR {
-            wait_semaphore_count: wait_sems.len() as _,
-            p_wait_semaphores: wait_sems.as_ptr(),
-            swapchain_count: swapchains.len() as _,
-            p_swapchains: swapchains.as_ptr(),
-            p_image_indices: &self.present_image,
-            ..Default::default()
-        };
-        self.gfx_queue.present(&present_info).check().unwrap();
+        self.base.gfx_queue.submit(&submit_infos[..], self.base.render_fence);
     }
 }
 
 unsafe fn render_main(ev_proxy: window::EventLoopProxy) {
     let (swapchain, queues) = init_video(&ev_proxy, "triangle demo");
-    let res = GfxResources::new(swapchain, queues);
-    let mut state = GfxState::new(res);
+    let res = Arc::new(init_resources(swapchain, queues));
+    let mut state = init_state(res);
 
     while !state.res.window.should_close() {
-        state.acquire_next_image();
-        state.wait_for_render();
+        state.base.acquire_next_image();
+        state.base.wait_for_render();
         state.record_cmds();
         state.submit_cmds();
-        state.present();
+        state.base.present();
     }
 }
 
