@@ -1,6 +1,8 @@
 use std::ptr;
 use std::sync::Arc;
 
+use ccore::name::*;
+
 use crate::*;
 
 #[derive(Debug)]
@@ -69,7 +71,7 @@ impl AttachmentChain {
 #[derive(Debug)]
 pub struct FramebufferChain {
     pub device: Arc<Device>,
-    pub pass: String,
+    pub pass: Name,
     pub extent: vk::Extent2D,
     pub attachments: Vec<Arc<AttachmentChain>>,
     pub framebuffers: Vec<vk::Framebuffer>,
@@ -88,13 +90,13 @@ impl Drop for FramebufferChain {
 
 unsafe fn create_framebuffer(
     core: &CoreData,
-    render_pass: String,
+    render_pass: Name,
     attachments: Vec<Arc<AttachmentChain>>,
 ) -> FramebufferChain {
     let device = Arc::clone(core.device());
     let dt = &*device.table;
     let render_pass_id = render_pass;
-    let render_pass = core.get_pass(&render_pass_id);
+    let render_pass = core.get_pass(render_pass_id);
 
     assert_eq!(attachments.len(), render_pass.attachments().len());
     for (attachment, desc) in attachments.iter()
@@ -145,7 +147,7 @@ unsafe fn create_framebuffer(
 impl FramebufferChain {
     pub unsafe fn new(
         core: &CoreData,
-        render_pass: String,
+        render_pass: Name,
         attachments: Vec<Arc<AttachmentChain>>,
     ) -> Self {
         create_framebuffer(core, render_pass, attachments)

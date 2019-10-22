@@ -1,6 +1,7 @@
 use std::ptr;
 use std::sync::Arc;
 
+use ccore::name::*;
 use fnv::FnvHashMap;
 use parking_lot::{Mutex, RwLock};
 
@@ -145,7 +146,7 @@ unsafe fn create_pool(device: &Device, layout: &Layout, size: u32) ->
 #[derive(Debug)]
 pub struct DescriptorSet {
     inner: vk::DescriptorSet,
-    key: String,
+    key: Name,
     pool: usize,
 }
 
@@ -154,8 +155,8 @@ impl DescriptorSet {
         self.inner
     }
 
-    pub fn layout(&self) -> &str {
-        &self.key
+    pub fn layout(&self) -> Name {
+        self.key
     }
 }
 
@@ -196,7 +197,7 @@ struct Suballocator {
     free: Vec<Set>,
     sub_pools: Vec<Subpool>,
     layout: *const Layout,
-    key: String,
+    key: Name,
 }
 
 impl Suballocator {
@@ -204,7 +205,7 @@ impl Suballocator {
         assert!(size > 0);
         let device = &*self.device;
         let layout = &*self.layout; // raw deref here
-        let key = &self.key;
+        let key = self.key;
 
         // Add new descriptor pool
         let pool_inner = layout.create_pool(device, size);
@@ -218,7 +219,7 @@ impl Suballocator {
         let sets = sets.into_iter()
             .map(|inner| Set {
                 inner,
-                key: key.clone(),
+                key,
                 pool: pool_idx,
             });
         self.free.extend(sets);
@@ -253,7 +254,7 @@ pub struct DescriptorAllocator {
     device: Arc<Device>,
     // TODO: RwLock + HashMap + Mutex is seemingly inferior to a true
     // concurrent hash map. Worth switching to?
-    sub_alloc: RwLock<FnvHashMap<String, Mutex<Suballocator>>>,
+    sub_alloc: RwLock<FnvHashMap<Name, Mutex<Suballocator>>>,
 }
 
 unsafe impl Send for DescriptorAllocator {}
@@ -280,28 +281,25 @@ impl Allocator {
         }
     }
 
-    crate unsafe fn allocate(&self, layout: impl AsRef<str>) -> Option<Set> {
+    crate unsafe fn allocate(&self, layout: Name) -> Option<Set> {
         Some(self.sub_alloc.read()
-            .get(layout.as_ref())?
+            .get(&layout)?
             .lock()
             .allocate())
     }
 
-    crate unsafe fn insert_alloc(
-        &self,
-        key: impl AsRef<str>,
-        layout: *const Layout,
-    ) -> Set {
-        let key = key.as_ref();
+    crate unsafe fn insert_alloc(&self, key: Name, layout: *const Layout) ->
+        Set
+    {
         self.sub_alloc.write()
-            .entry(key.to_owned())
+            .entry(key)
             .or_insert_with(|| {
                 Mutex::new(Suballocator {
                     device: Arc::clone(&self.device),
                     free: Vec::new(),
                     sub_pools: Vec::new(),
                     layout,
-                    key: key.to_owned(),
+                    key,
                 })
             })
             .get_mut()
@@ -320,6 +318,7 @@ impl Allocator {
 #[cfg(test)]
 mod tests {
     use std::thread;
+    use ccore::name::*;
     use vk::traits::*;
     use super::*;
 
@@ -329,7 +328,7 @@ mod tests {
 
         let core = Arc::clone(&core_data);
         let thread1 = thread::spawn(move || {
-            let layout = "scene_globals";
+            let layout = Name::new("scene_globals");
             let set0 = core.alloc_desc_set(layout);
             let sets = [
                 core.alloc_desc_set(layout),
@@ -346,7 +345,7 @@ mod tests {
 
         let core = Arc::clone(&core_data);
         let thread2 = thread::spawn(move || {
-            let set = core.alloc_desc_set("material");
+            let set = core.alloc_desc_set(Name::new("material"));
             assert!(!set.inner.is_null());
             core.free_desc_set(set);
         });
@@ -364,7 +363,7 @@ mod tests {
 
         const NUM_ITERS: usize = 50;
 
-        let layout = "scene_globals";
+        let layout = Name::new("scene_globals");
 
         let core = Arc::clone(&core_data);
         let thread1 = thread::spawn(move || {

@@ -1,13 +1,15 @@
 use std::ffi::{CStr, CString};
 use std::ptr;
 
+use ccore::name::*;
+
 use crate::*;
 
 #[derive(Clone, Debug)]
 pub struct ShaderDesc {
     pub entry: CString,
     pub code: Vec<u8>,
-    pub set_bindings: Vec<(u32, String)>,
+    pub set_bindings: Vec<(u32, Name)>,
 }
 
 #[derive(Debug)]
@@ -29,7 +31,7 @@ impl Shader {
         &self.desc.code
     }
 
-    pub fn set_bindings(&self) -> &[(u32, String)] {
+    pub fn set_bindings(&self) -> &[(u32, Name)] {
         &self.desc.set_bindings
     }
 }

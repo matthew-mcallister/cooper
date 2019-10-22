@@ -1,5 +1,6 @@
 use std::ptr;
 
+use ccore::name::*;
 use fnv::FnvHashMap;
 
 use crate::*;
@@ -8,7 +9,7 @@ use crate::*;
 pub struct RenderPass {
     inner: vk::RenderPass,
     attachments: Vec<vk::AttachmentDescription>,
-    subpasses: FnvHashMap<String, u32>,
+    subpasses: FnvHashMap<Name, u32>,
 }
 
 impl RenderPass {
@@ -20,15 +21,15 @@ impl RenderPass {
         &self.attachments
     }
 
-    pub fn get_subpass(&self, key: &str) -> u32 {
-        self.subpasses[key]
+    pub fn get_subpass(&self, key: Name) -> u32 {
+        self.subpasses[&key]
     }
 }
 
 pub unsafe fn create_render_pass(
     device: &Device,
     create_info: &vk::RenderPassCreateInfo,
-    subpass_names: Vec<String>,
+    subpass_names: Vec<Name>,
 ) -> RenderPass {
     let dt = &*device.table;
 

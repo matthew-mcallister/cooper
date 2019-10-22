@@ -1,11 +1,13 @@
 use std::ptr;
 
+use ccore::name::*;
+
 use crate::*;
 
 #[derive(Debug)]
 crate struct PipelineLayout {
     inner: vk::PipelineLayout,
-    set_layouts: Vec<String>,
+    set_layouts: Vec<Name>,
 }
 
 impl PipelineLayout {
@@ -13,19 +15,19 @@ impl PipelineLayout {
         self.inner
     }
 
-    crate fn set_layouts(&self) -> &[String] {
+    crate fn set_layouts(&self) -> &[Name] {
         &self.set_layouts
     }
 }
 
 crate unsafe fn create_pipeline_layout(
     core: &CoreData,
-    set_layouts: Vec<String>,
+    set_layouts: Vec<Name>,
 ) -> PipelineLayout {
     let dt = &*core.device().table;
 
     let vk_set_layouts: Vec<_> = set_layouts.iter()
-        .map(|id| core.get_set_layout(id).inner())
+        .map(|&id| core.get_set_layout(id).inner())
         .collect();
     let create_info = vk::PipelineLayoutCreateInfo {
         set_layout_count: vk_set_layouts.len() as _,
@@ -45,9 +47,9 @@ crate unsafe fn create_pipeline_layout(
 #[derive(Debug)]
 crate struct GraphicsPipeline {
     crate inner: vk::Pipeline,
-    crate layout: String,
-    crate pass: String,
-    crate subpass: String,
+    crate layout: Name,
+    crate pass: Name,
+    crate subpass: Name,
 }
 
 impl GraphicsPipeline {
@@ -55,15 +57,15 @@ impl GraphicsPipeline {
         self.inner
     }
 
-    crate fn layout(&self) -> &str {
-        &self.layout
+    crate fn layout(&self) -> Name {
+        self.layout
     }
 
-    crate fn pass(&self) -> &str {
-        &self.pass
+    crate fn pass(&self) -> Name {
+        self.pass
     }
 
-    crate fn subpass(&self) -> &str {
-        &self.subpass
+    crate fn subpass(&self) -> Name {
+        self.subpass
     }
 }

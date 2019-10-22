@@ -4,6 +4,7 @@ use std::ffi::CString;
 use std::ptr;
 use std::sync::Arc;
 
+use ccore::name::*;
 use fnv::FnvHashMap;
 use owning_ref::OwningRef;
 use parking_lot::RwLock;
@@ -14,11 +15,11 @@ use crate::*;
 pub struct CoreData {
     config: Config,
     device: Arc<Device>,
-    set_layouts: FnvHashMap<String, DescriptorSetLayout>,
+    set_layouts: FnvHashMap<Name, DescriptorSetLayout>,
     descriptors: DescriptorAllocator,
-    pipe_layouts: FnvHashMap<String, PipelineLayout>,
-    shaders: FnvHashMap<String, Shader>,
-    passes: FnvHashMap<String, RenderPass>,
+    pipe_layouts: FnvHashMap<Name, PipelineLayout>,
+    shaders: FnvHashMap<Name, Shader>,
+    passes: FnvHashMap<Name, RenderPass>,
     pipelines: RwLock<FnvHashMap<PipelineDesc, GraphicsPipeline>>,
 }
 
@@ -83,11 +84,11 @@ impl CoreData {
         &self.device
     }
 
-    crate fn get_set_layout(&self, name: &str) -> &DescriptorSetLayout {
-        &self.set_layouts[name]
+    crate fn get_set_layout(&self, name: Name) -> &DescriptorSetLayout {
+        &self.set_layouts[&name]
     }
 
-    crate fn alloc_desc_set(&self, set_layout: &str) -> DescriptorSet {
+    crate fn alloc_desc_set(&self, set_layout: Name) -> DescriptorSet {
         unsafe {
             if let Some(set) = self.descriptors.allocate(set_layout) {
                 return set;
@@ -102,16 +103,16 @@ impl CoreData {
         self.descriptors.free(set)
     }
 
-    crate fn get_pipe_layout(&self, name: &str) -> &PipelineLayout {
-        &self.pipe_layouts[name]
+    crate fn get_pipe_layout(&self, name: Name) -> &PipelineLayout {
+        &self.pipe_layouts[&name]
     }
 
-    crate fn get_shader(&self, name: &str) -> &Shader {
-        &self.shaders[name]
+    crate fn get_shader(&self, name: Name) -> &Shader {
+        &self.shaders[&name]
     }
 
-    crate fn get_pass(&self, name: &str) -> &RenderPass {
-        &self.passes[name]
+    crate fn get_pass(&self, name: Name) -> &RenderPass {
+        &self.passes[&name]
     }
 
     crate fn get_pipeline(&self, desc: &PipelineDesc) ->
@@ -158,7 +159,7 @@ unsafe fn create_set_layouts(core: &mut CoreData) {
         ..Default::default()
     };
     let layout = create_descriptor_set_layout(&device, &create_info, policy);
-    layouts.insert("scene_globals".into(), layout);
+    layouts.insert(Name::new("scene_globals"), layout);
 
     let bindings = [vk::DescriptorSetLayoutBinding {
         binding: 0,
@@ -173,15 +174,15 @@ unsafe fn create_set_layouts(core: &mut CoreData) {
         ..Default::default()
     };
     let layout = create_descriptor_set_layout(&device, &create_info, policy);
-    layouts.insert("material".into(), layout);
+    layouts.insert(Name::new("material"), layout);
 }
 
 unsafe fn create_pipe_layouts(core: &mut CoreData) {
     core.pipe_layouts.insert(
-        "std_material".to_owned(),
+        Name::new("std_material"),
         create_pipeline_layout(
             &core,
-            vec!["scene_globals".to_owned(), "material".to_owned()],
+            vec![Name::new("scene_globals"), Name::new("material")],
         ),
     );
 }
@@ -208,11 +209,11 @@ macro_rules! create_shaders {
                 entry: CString::new("main".to_owned()).unwrap(),
                 code: include_shader!(concat!($name, ".spv")).to_vec(),
                 set_bindings: vec![
-                    $(($binding_idx, $binding_name.to_owned()),)*
+                    $(($binding_idx, Name::new($binding_name)),)*
                 ],
             };
             let shader = create_shader($core.device(), desc);
-            $core.shaders.insert($name.to_owned(), shader);
+            $core.shaders.insert(Name::new($name), shader);
         )*
     }
 }
@@ -261,7 +262,7 @@ unsafe fn create_render_passes(core: &mut CoreData) {
         p_color_attachments: subpass_attachment_refs.as_ptr(),
         ..Default::default()
     }];
-    let subpass_names = vec!["lighting".to_owned()];
+    let subpass_names = vec![Name::new("lighting")];
     let create_info = vk::RenderPassCreateInfo {
         attachment_count: attachment_descs.len() as _,
         p_attachments: attachment_descs.as_ptr(),
@@ -270,7 +271,7 @@ unsafe fn create_render_passes(core: &mut CoreData) {
         ..Default::default()
     };
     passes.insert(
-        "forward".to_owned(),
+        Name::new("forward"),
         create_render_pass(device, &create_info, subpass_names),
     );
 }
@@ -285,8 +286,8 @@ unsafe fn create_graphics_pipeline(
 ) -> GraphicsPipeline {
     let dt = &*core.device().table;
 
-    let vert = core.get_shader("triangle_vert");
-    let frag = core.get_shader("triangle_frag");
+    let vert = core.get_shader(Name::new("triangle_vert"));
+    let frag = core.get_shader(Name::new("triangle_frag"));
 
     let vert_stage = vk::PipelineShaderStageCreateInfo {
         stage: vk::ShaderStageFlags::VERTEX_BIT,
@@ -302,12 +303,12 @@ unsafe fn create_graphics_pipeline(
     };
     let stages = vec![vert_stage, frag_stage];
 
-    let layout_id = "std_material";
+    let layout_id = Name::new("std_material");
     let layout = core.get_pipe_layout(layout_id).inner();
 
-    let render_pass_id = "forward";
+    let render_pass_id = Name::new("forward");
     let render_pass = core.get_pass(render_pass_id);
-    let subpass_id = "lighting";
+    let subpass_id = Name::new("lighting");
     let subpass = render_pass.get_subpass(subpass_id);
     let render_pass = render_pass.inner();
 
