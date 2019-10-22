@@ -1,5 +1,3 @@
-//! This module defines memory allocators. It is not responsible for
-//! populating memory, i.e. resource management.
 use std::ops::Range;
 use std::ffi::c_void;
 use std::ptr;
@@ -139,7 +137,8 @@ impl DeviceAlloc {
 /// low-level as it doesn't check for correct memory usage (i.e.
 /// linear/non-linear overlap).
 // TODO: Maybe store a map from allocation size to free blocks.
-// TODO: Stack-frame-based allocation
+// TODO: Stack-like allocation
+//
 #[derive(Debug)]
 pub struct MemoryPool {
     device: Arc<Device>,
@@ -401,7 +400,7 @@ impl MemoryPool {
     /// overlaps the same range.
     pub unsafe fn free(&mut self, alloc: DeviceAlloc) {
         let chunk = alloc.chunk_idx;
-        assert!(chunk < self.chunks.len() as u32);
+        assert_eq!(self.chunks[chunk as usize].memory, alloc.memory());
         let info = alloc.info();
         let start = info.offset;
         let end = align(self.quantum(), info.end());

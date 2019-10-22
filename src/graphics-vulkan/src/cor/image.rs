@@ -4,7 +4,9 @@ use crate::*;
 
 #[derive(Debug)]
 pub struct Image {
+    // May be null if image is not in use
     crate inner: vk::Image,
+    // May be null if image is not in use
     crate view: vk::ImageView,
     crate extent: vk::Extent3D,
     crate format: vk::Format,

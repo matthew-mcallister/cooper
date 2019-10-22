@@ -14,6 +14,8 @@ derive_more = "0.15"
 fnv = "1.0"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }
+owning_ref = "0.4"
+parking_lot = { version = "0.9", features = ["owning_ref"] }
 prelude = { path = "../prelude", package = "cooper-prelude" }
 unit = { path = "../unit", package = "cooper-unit" }
 window = { path = "../window", package = "cooper-window" }

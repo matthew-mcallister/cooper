@@ -1,46 +1,25 @@
-// TODO: Small string optimization
 #![feature(arbitrary_self_types)]
 #![feature(crate_visibility_modifier)]
 #![feature(non_exhaustive)]
 #![feature(seek_convenience)]
 #![feature(try_blocks)]
 
+#![allow(dead_code)]
+
 #[cfg(test)]
 macro_rules! test_type {
     () => { crate::testing::VulkanTest }
 }
 
-mod debug;
-mod descriptor;
-mod image;
-mod init;
-mod memory;
-mod pipeline;
-mod render_pass;
-mod shader;
-mod staging;
-mod xfer;
+mod cor;
+mod objects_core;
 
-pub use debug::*;
-pub use descriptor::*;
-pub use image::*;
-pub use init::*;
-pub use memory::*;
-pub use pipeline::*;
-pub use render_pass::*;
-pub use shader::*;
-pub use staging::*;
-pub use xfer::*;
+crate use cor::*;
+crate use objects_core::*;
 
 unit::collect_tests![
-    descriptor,
-    init,
-    memory,
-    pipeline,
-    render_pass,
-    shader,
-    staging,
-    xfer,
+    cor,
+    objects_core,
 ];
 
 #[cfg(test)]

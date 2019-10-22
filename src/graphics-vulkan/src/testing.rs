@@ -30,6 +30,12 @@ pub struct TestVars {
     pub queues: Vec<Vec<Arc<Queue>>>,
 }
 
+impl TestVars {
+    pub fn device(&self) -> &Arc<Device> {
+        &self.swapchain.device
+    }
+}
+
 const WINDOW_DIMS: (i32, i32) = (320, 200);
 
 impl VulkanTestContext {
@@ -44,7 +50,7 @@ impl VulkanTestContext {
             },
         };
         let window = Arc::new(self.proxy.create_window(info)?);
-        let config = GraphicsConfig {
+        let config = InitConfig {
             app_name: NAME.to_owned(),
             app_version: [0, 1, 0],
             debug: true,
@@ -64,8 +70,8 @@ impl VulkanTestContext {
     }
 }
 
-impl unit::PanicInvocationHelper<VulkanTestData> for VulkanTestContext {
-    fn invoke(&self, f: &VulkanTestData) {
+impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
+    fn invoke(&self, test: &unit::Test<VulkanTestData>) {
         // Recreate the full state so that every test has a clean slate.
         unsafe {
             let vars = self.init_vars().unwrap_or_else(|e| {
@@ -75,7 +81,7 @@ impl unit::PanicInvocationHelper<VulkanTestData> for VulkanTestContext {
             // TODO: Today, just run the test and see that it doesn't
             // crash. Tomorrow, mark the test as failed if the
             // validation layer reports any errors or warnings.
-            f(vars);
+            (test.data())(vars);
         }
     }
 }
