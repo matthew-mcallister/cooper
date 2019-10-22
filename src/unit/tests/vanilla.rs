@@ -119,7 +119,10 @@ fn add_tests(builder: &mut TestDriverBuilder<PlainTest>) {
 }
 
 fn main() {
+    use cooper_unit::*;
+    let context = PanicTestContext::new(PlainTestInvoker);
     let mut builder = TestDriverBuilder::new();
     add_tests(&mut builder);
-    builder.build(Box::new(PlainTestContext::new())).run();
+    let mut driver = builder.build(Box::new(context));
+    driver.run();
 }

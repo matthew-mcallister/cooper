@@ -6,27 +6,35 @@ use derive_more::*;
 
 use crate::*;
 
-/// This helper trait can be implemented on a type that handles the low-level
-/// task of running tests. It is automatically implemented for most types that
-/// implement `Fn(&D)`. If this type uses internal mutability, it must be
-/// marked as `RefUnwindSafe`, as it will be referenced from inside
-/// `catch_panic`.
-pub trait PanicInvocationHelper<D>: RefUnwindSafe + std::fmt::Debug
-{
+/// Implementors of this trait are responsible for running individual
+/// tests which may be caught panicking. It is automatically implemented
+/// for most types that implement `Fn(&D)`. If this type uses internal
+/// mutability, it must be marked as `RefUnwindSafe`, as it will be
+/// referenced from inside `catch_panic`.
+pub trait PanicTestInvoker<D>: RefUnwindSafe + std::fmt::Debug {
     /// Runs the test.
-    fn invoke(&self, test: &D);
+    fn invoke(&self, test: &Test<D>);
 }
 
-impl<D, F> PanicInvocationHelper<D> for F
-    where F: Fn(&D) + std::panic::RefUnwindSafe + std::fmt::Debug
+impl<D, F> PanicTestInvoker<D> for F
+    where F: Fn(&D) + RefUnwindSafe + std::fmt::Debug
 {
-    fn invoke(&self, test: &D) {
-        self(test)
+    fn invoke(&self, test: &Test<D>) {
+        self(test.data())
     }
 }
 
 /// The test type of the vanilla Rust test runner.
 pub type PlainTest = Test<fn()>;
+
+#[derive(Debug, Default)]
+pub struct PlainTestInvoker;
+
+impl PanicTestInvoker<fn()> for PlainTestInvoker {
+    fn invoke(&self, test: &PlainTest) {
+        (test.data())()
+    }
+}
 
 /// Runs tests where failure is signaled by panicking. This type wraps a
 /// "test invocation helper", which is at minimum responsible for
@@ -36,7 +44,7 @@ pub type PlainTest = Test<fn()>;
 /// In order to use this wrapper on `Test<D>`, `F` must implement two
 /// key traits:
 ///
-/// - `PanicInvocationHelper`: This impl should actually *run* the test.
+/// - `PanicTestInvoker`: This impl should actually *run* the test.
 ///   Notice that this trait borrows immutably---see below.
 /// - `RefUnwindSafe`: This marker trait is required to use
 ///   `std::panic::catch_panic` to recover from a failed test.
@@ -47,7 +55,7 @@ pub type PlainTest = Test<fn()>;
 /// internal mutability for stateful setup/teardown. If taking this
 /// route, the second trait constraint may need to be implemented
 /// manually.
-#[derive(Constructor, Debug)]
+#[derive(Constructor, Debug, Default)]
 #[non_exhaustive]
 pub struct PanicTestContext<F> {
     inner: F,
@@ -72,7 +80,7 @@ impl io::Write for Sink {
 impl<D, F> TestContext<Test<D>> for PanicTestContext<F>
 where
     D: std::panic::RefUnwindSafe,
-    F: PanicInvocationHelper<D>,
+    F: PanicTestInvoker<D>,
 {
     fn run(&mut self, test: &Test<D>) -> Result<(), Option<String>> {
         // Capture print macro calls to this buffer
@@ -84,7 +92,7 @@ where
             std::io::set_panic(Some(Box::new(Sink::clone(&output)))),
         );
 
-        let res = std::panic::catch_unwind(|| self.inner.invoke(test.data()));
+        let res = std::panic::catch_unwind(|| self.inner.invoke(test));
 
         std::io::set_print(old_stdout);
         std::io::set_panic(old_stderr);
