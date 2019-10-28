@@ -5,85 +5,110 @@ use ccore::name::*;
 
 use crate::*;
 
+// TODO: Attachments should probably be assigned a value that designates
+// their purpose, i.e. color, depth, or some g-buffer component.
 #[derive(Debug)]
-pub struct AttachmentChain {
-    pub device: Arc<Device>,
-    pub views: Vec<vk::ImageView>,
-    pub extent: vk::Extent2D,
-    pub format: vk::Format,
-    pub samples: vk::SampleCountFlags,
-    pub layers: u32,
+crate struct Attachment {
+    device: Arc<Device>,
+    view: vk::ImageView,
+    extent: vk::Extent2D,
+    format: vk::Format,
+    samples: vk::SampleCountFlags,
+    layers: u32,
 }
 
-impl Drop for AttachmentChain {
+impl Drop for Attachment {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe {
-            for &view in self.views.iter() {
-                dt.destroy_image_view(view, ptr::null());
-            }
+            dt.destroy_image_view(self.view, ptr::null());
         }
     }
 }
 
-impl AttachmentChain {
-    pub unsafe fn from_swapchain(swapchain: &Swapchain) -> Self {
-        let device = Arc::clone(&swapchain.device);
-        let extent = swapchain.extent;
-        let extent = vk::Extent2D::new(extent.width, extent.height);
-        let format = swapchain.format;
-        let samples = vk::SampleCountFlags::_1_BIT;
-        let layers = 1;
-        let views = swapchain.images.iter().map(|&image| {
-            let create_info = vk::ImageViewCreateInfo {
-                image,
-                view_type: vk::ImageViewType::_2D,
-                format,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-                ..Default::default()
-            };
-            let mut view = vk::null();
-            device.table.create_image_view
-                (&create_info, ptr::null(), &mut view).check().unwrap();
-            view
-        }).collect();
-        AttachmentChain {
-            device,
-            views,
+crate unsafe fn attachments_from_swapchain(swapchain: &Swapchain) ->
+    impl Iterator<Item = Attachment> + '_
+{
+    let device = Arc::clone(&swapchain.device);
+    let extent = swapchain.extent;
+    let format = swapchain.format;
+    let samples = vk::SampleCountFlags::_1_BIT;
+    let layers = 1;
+    swapchain.images.iter().map(move |&image| {
+        // TODO: Encapsulate images in an "Image" type and make this
+        // block a generic "from_image" function
+        let create_info = vk::ImageViewCreateInfo {
+            image,
+            view_type: vk::ImageViewType::_2D,
+            format,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        };
+        let mut view = vk::null();
+        device.table.create_image_view
+            (&create_info, ptr::null(), &mut view).check().unwrap();
+        Attachment {
+            device: Arc::clone(&device),
+            view,
             extent,
             format,
             samples,
             layers,
         }
+    })
+}
+
+impl Attachment {
+    crate unsafe fn from_swapchain(swapchain: &Swapchain) ->
+        impl Iterator<Item = Self> + '_
+    {
+        attachments_from_swapchain(swapchain)
     }
 
-    pub fn len(&self) -> usize {
-        self.views.len()
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    crate fn view(&self) -> vk::ImageView {
+        self.view
+    }
+
+    crate fn extent(&self) -> vk::Extent2D {
+        self.extent
+    }
+
+    crate fn format(&self) -> vk::Format {
+        self.format
+    }
+
+    crate fn samples(&self) -> vk::SampleCountFlags {
+        self.samples
+    }
+
+    crate fn layers(&self) -> u32 {
+        self.layers
     }
 }
 
 #[derive(Debug)]
-pub struct FramebufferChain {
-    pub device: Arc<Device>,
-    pub pass: Name,
-    pub extent: vk::Extent2D,
-    pub attachments: Vec<Arc<AttachmentChain>>,
-    pub framebuffers: Vec<vk::Framebuffer>,
+crate struct Framebuffer {
+    device: Arc<Device>,
+    pass: Name,
+    attachments: Vec<Arc<Attachment>>,
+    inner: vk::Framebuffer,
 }
 
-impl Drop for FramebufferChain {
+impl Drop for Framebuffer {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe {
-            for &framebuffer in self.framebuffers.iter() {
-                dt.destroy_framebuffer(framebuffer, ptr::null());
-            }
+            dt.destroy_framebuffer(self.inner, ptr::null());
         }
     }
 }
@@ -91,73 +116,80 @@ impl Drop for FramebufferChain {
 unsafe fn create_framebuffer(
     core: &CoreData,
     render_pass: Name,
-    attachments: Vec<Arc<AttachmentChain>>,
-) -> FramebufferChain {
-    let device = Arc::clone(core.device());
+    attachments: Vec<Arc<Attachment>>,
+) -> Framebuffer {
+    let device: Arc<Device> = Arc::clone(core.device());
     let dt = &*device.table;
     let render_pass_id = render_pass;
     let render_pass = core.get_pass(render_pass_id);
 
     assert_eq!(attachments.len(), render_pass.attachments().len());
-    for (attachment, desc) in attachments.iter()
+    for (attch, desc) in attachments.iter()
         .zip(render_pass.attachments().iter())
     {
-        assert_eq!(attachment.format, desc.format);
-        assert_eq!(attachment.samples, desc.samples);
+        assert_eq!(attch.format, desc.format);
+        assert_eq!(attch.samples, desc.samples);
     }
 
-    let len = attachments[0].len();
     let extent = attachments[0].extent;
     let layers = attachments[0].layers;
-    for chain in attachments.iter() {
-        assert_eq!(chain.len(), len);
-        assert_eq!(chain.extent, extent);
-        assert_eq!(chain.layers, layers);
+    for attch in attachments.iter() {
+        assert_eq!(attch.extent, extent);
+        assert_eq!(attch.layers, layers);
     }
 
-    let framebuffers: Vec<_> = (0..len).map(|idx| {
-        let attachments: Vec<_> = attachments.iter()
-            .map(|a| a.views[idx])
-            .collect();
-        let create_info = vk::FramebufferCreateInfo {
-            render_pass: render_pass.inner(),
-            attachment_count: attachments.len() as _,
-            p_attachments: attachments.as_ptr(),
-            width: extent.width,
-            height: extent.height,
-            layers,
-            ..Default::default()
-        };
-        let mut framebuffer = vk::null();
-        dt.create_framebuffer(&create_info, ptr::null(), &mut framebuffer)
-            .check().unwrap();
+    let vk_attachments: Vec<_> = attachments.iter().map(|a| a.view).collect();
+    let create_info = vk::FramebufferCreateInfo {
+        render_pass: render_pass.inner(),
+        attachment_count: vk_attachments.len() as _,
+        p_attachments: vk_attachments.as_ptr(),
+        width: extent.width,
+        height: extent.height,
+        layers,
+        ..Default::default()
+    };
+    let mut inner = vk::null();
+    dt.create_framebuffer(&create_info, ptr::null(), &mut inner)
+        .check().unwrap();
 
-        framebuffer
-    }).collect();
-
-    FramebufferChain {
+    Framebuffer {
         device,
         pass: render_pass_id,
-        extent,
         attachments,
-        framebuffers,
+        inner,
     }
 }
 
-impl FramebufferChain {
-    pub unsafe fn new(
+impl Framebuffer {
+    crate unsafe fn new(
         core: &CoreData,
         render_pass: Name,
-        attachments: Vec<Arc<AttachmentChain>>,
+        attachments: Vec<Arc<Attachment>>,
     ) -> Self {
         create_framebuffer(core, render_pass, attachments)
     }
 
-    pub fn len(&self) -> usize {
-        self.framebuffers.len()
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
     }
 
-    pub fn rect(&self) -> vk::Rect2D {
-        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
+    crate fn inner(&self) -> vk::Framebuffer {
+        self.inner
+    }
+
+    crate fn pass(&self) -> Name {
+        self.pass
+    }
+
+    crate fn attachments(&self) -> &[Arc<Attachment>] {
+        &self.attachments
+    }
+
+    crate fn extent(&self) -> vk::Extent2D {
+        self.attachments[0].extent
+    }
+
+    crate fn render_area(&self) -> vk::Rect2D {
+        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent())
     }
 }

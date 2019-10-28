@@ -50,15 +50,15 @@ impl VulkanTestContext {
             },
         };
         let window = Arc::new(self.proxy.create_window(info)?);
-        let config = InitConfig {
-            app_name: NAME.to_owned(),
-            app_version: [0, 1, 0],
+        let app = AppInfo {
+            name: NAME.to_owned(),
+            version: [0, 1, 0],
             debug: true,
             ..Default::default()
         };
 
         let instance =
-            Arc::new(Instance::new(window.vk_platform().clone(), config)?);
+            Arc::new(Instance::new(window.vk_platform().clone(), info)?);
         let surface = instance.create_surface(&window)?;
         let pdev = device_for_surface(&surface)?;
         let (device, queues) = instance.create_device(pdev)?;

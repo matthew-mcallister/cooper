@@ -8,20 +8,6 @@ use crate::*;
 pub type XferBatchSerial = NonZeroU32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CmdBufferState {
-    Initial,
-    Recording,
-    Executable,
-    Pending,
-}
-
-impl Default for CmdBufferState {
-    fn default() -> Self {
-        CmdBufferState::Initial
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XferState {
     Clean,
     Dirty,
@@ -78,7 +64,7 @@ impl XferCmdBuffer {
         cmd_pool: vk::CommandPool,
         len: usize,
     ) -> Vec<Self> {
-        let dt = Arc::clone(&queue.device.table);
+        let dt = Arc::clone(&queue.device().table);
 
         let l1_alloc_info = vk::CommandBufferAllocateInfo {
             command_pool: cmd_pool,
@@ -102,7 +88,7 @@ impl XferCmdBuffer {
                 dt: Arc::clone(&dt),
                 queue: Arc::clone(&queue),
                 state: Default::default(),
-                fence: queue.device.create_fence(true),
+                fence: queue.device().create_fence(true),
                 img_pre_barriers: Default::default(),
                 img_post_barriers: Default::default(),
                 img_l1,
@@ -319,7 +305,7 @@ impl Drop for XferQueue {
             // TODO: It might be worth bringing back scoped Vulkan
             // object pools to avoid writing this kind of destructor.
             // Should mix well with scoped allocators.
-            self.queue.device.table
+            self.queue.device().table
                 .destroy_command_pool(self.cmd_pool, ptr::null());
         }
     }
@@ -362,15 +348,15 @@ impl XferQueue {
     }
 
     pub unsafe fn new(queue: Arc<Queue>, batch_size: usize) -> Self {
-        let queue_flags = queue.family.properties.queue_flags;
+        let queue_flags = queue.flags();
         assert!(queue_flags.contains(vk::QueueFlags::TRANSFER_BIT));
 
-        let dt = &queue.device.table;
+        let dt = &queue.device().table;
 
         let create_info = vk::CommandPoolCreateInfo {
             flags: vk::CommandPoolCreateFlags::TRANSIENT_BIT
                 | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER_BIT,
-            queue_family_index: queue.family.index,
+            queue_family_index: queue.family().index(),
             ..Default::default()
         };
         let mut cmd_pool = vk::null();
@@ -380,7 +366,7 @@ impl XferQueue {
         let cmds =
             XferCmdBuffer::new(Arc::clone(&queue), cmd_pool, NUM_BATCHES);
 
-        let device = &queue.device;
+        let device = queue.device();
         let mut batches: Vec<_> = cmds.into_iter()
             .map(|cmds| XferBatchState {
                 staging: StagingBuffer::new(Arc::clone(&device), batch_size),
@@ -468,7 +454,7 @@ mod tests {
     unsafe fn smoke_test(vars: testing::TestVars) {
         let swapchain = vars.swapchain;
         let queue = Arc::clone(&vars.queues[0][0]);
-        let dt = &*swapchain.device.table;
+        let dt = &*swapchain.device().table;
         let device = Arc::clone(&swapchain.device);
 
         let mut image_mem = create_image_mem(device, 0x400_0000);

@@ -38,6 +38,14 @@ impl Swapchain {
         Ok(result)
     }
 
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    pub fn inner(&self) -> vk::SwapchainKHR {
+        self.inner
+    }
+
     pub fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
     }
@@ -141,4 +149,16 @@ impl Swapchain {
 
         Ok(())
     }
+}
+
+crate unsafe fn init_swapchain(
+    app_info: AppInfo,
+    window: Arc<window::Window>
+) -> Result<(Swapchain, Vec<Vec<Arc<Queue>>>), AnyError> {
+    let vk_platform = window.vk_platform().clone();
+    let instance = Arc::new(Instance::new(vk_platform, app_info)?);
+    let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
+    let pdev = device_for_surface(&surface).unwrap();
+    let (device, queues) = Device::new(instance, pdev)?;
+    Ok((Swapchain::new(surface, device)?, queues))
 }

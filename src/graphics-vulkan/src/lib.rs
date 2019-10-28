@@ -12,10 +12,20 @@ macro_rules! test_type {
 }
 
 mod cor;
-mod objects_core;
+mod render_loop;
+mod triangle;
 
-crate use cor::*;
-crate use objects_core::*;
+pub use cor::*;
+pub use render_loop::*;
+crate use triangle::*;
+
+pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
+    vk::ClearValue {
+        color: vk::ClearColorValue {
+            float_32: color,
+        },
+    }
+}
 
 unit::collect_tests![
     cor,

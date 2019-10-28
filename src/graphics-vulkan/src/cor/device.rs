@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::ffi::CString;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
@@ -6,36 +6,10 @@ use prelude::*;
 
 use crate::*;
 
-pub unsafe fn device_for_surface(surface: &Surface) ->
-    Result<vk::PhysicalDevice, AnyError>
-{
-    let instance = &*surface.instance;
-    let surface = surface.inner;
-
-    let pdevices = instance.get_physical_devices();
-    for pd in pdevices.into_iter() {
-        let qf = 0u32;
-        let props = instance.get_queue_family_properties(pd)[qf as usize];
-        let required_bits = vk::QueueFlags::GRAPHICS_BIT
-            | vk::QueueFlags::COMPUTE_BIT
-            | vk::QueueFlags::TRANSFER_BIT;
-        if !props.queue_flags.contains(required_bits) { continue; }
-
-        let mut surface_supp = 0;
-        instance.table.get_physical_device_surface_support_khr
-            (pd, qf, surface, &mut surface_supp).check()?;
-        if surface_supp != vk::TRUE { continue; }
-
-        return Ok(pd);
-    }
-
-    Err("no presentable graphics device".into())
-}
-
 #[derive(Debug)]
 pub struct Device {
     pub instance: Arc<Instance>,
-    pub config: Arc<InitConfig>,
+    pub app_info: Arc<AppInfo>,
     pub pdev: vk::PhysicalDevice,
     pub props: Box<vk::PhysicalDeviceProperties>,
     pub mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
@@ -44,19 +18,51 @@ pub struct Device {
 
 #[derive(Debug)]
 pub struct QueueFamily {
-    pub index: u32,
-    pub properties: vk::QueueFamilyProperties,
+    index: u32,
+    properties: vk::QueueFamilyProperties,
+}
+
+impl QueueFamily {
+    pub fn index(&self) -> u32 {
+        self.index
+    }
+
+    pub fn properties(&self) -> &vk::QueueFamilyProperties {
+        &self.properties
+    }
+
+    pub fn flags(&self) -> vk::QueueFlags {
+        self.properties.queue_flags
+    }
 }
 
 #[derive(Debug)]
 pub struct Queue {
-    pub device: Arc<Device>,
-    pub inner: vk::Queue,
-    pub family: Arc<QueueFamily>,
+    device: Arc<Device>,
+    inner: vk::Queue,
+    family: Arc<QueueFamily>,
     mutex: Mutex<()>,
 }
 
 impl Queue {
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    pub fn inner(&self) -> vk::Queue {
+        self.inner
+    }
+
+    pub fn family(&self) -> &Arc<QueueFamily> {
+        &self.family
+    }
+
+    pub fn flags(&self) -> vk::QueueFlags {
+        self.family.flags()
+    }
+
+    // TODO: Verify that submitted commands are executable by this type
+    // of queue.
     pub unsafe fn submit(
         &self,
         submissions: &[vk::SubmitInfo],
@@ -134,7 +140,7 @@ impl Device {
         Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         let it = &instance.table;
-        let config = Arc::clone(&instance.config);
+        let app_info = Arc::clone(&instance.app_info);
 
         // TODO: check that extensions are actually supported
         let exts = [
@@ -188,7 +194,7 @@ impl Device {
 
         let device = Arc::new(Device {
             instance,
-            config,
+            app_info,
             pdev,
             props,
             mem_props,
@@ -224,10 +230,11 @@ impl Device {
     pub unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
     where
         T: DebugUtils,
-        A: AsRef<CStr>,
+        A: AsRef<str>,
     {
-        if self.config.debug {
-            set_debug_name(&self.table, obj, name.as_ref().as_ptr());
+        if self.app_info.debug {
+            let name = CString::new(name.as_ref()).unwrap();
+            set_debug_name(&self.table, obj, name.as_ptr());
         }
     }
 

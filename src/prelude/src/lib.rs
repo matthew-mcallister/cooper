@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 use num_traits as num;
 
 #[macro_export]
@@ -59,3 +61,6 @@ pub fn slice_to_bytes<T: Sized>(slice: &[T]) -> &[u8] {
     let len = slice.len() * std::mem::size_of::<T>();
     unsafe { std::slice::from_raw_parts(slice as *const [T] as _, len) }
 }
+
+pub trait Guard<'a, T: 'a> = std::ops::Deref<Target = T> + 'a;
+pub trait GuardMut<'a, T: 'a> = std::ops::DerefMut<Target = T> + 'a;

@@ -8,9 +8,9 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug, Default)]
-pub struct InitConfig {
-    pub app_name: String,
-    pub app_version: [u32; 3],
+pub struct AppInfo {
+    pub name: String,
+    pub version: [u32; 3],
     pub debug: bool,
 }
 
@@ -19,7 +19,7 @@ pub struct Instance {
     pub vk: window::VulkanPlatform,
     pub entry: Arc<vkl::Entry>,
     pub table: Arc<vkl::InstanceTable>,
-    pub config: Arc<InitConfig>,
+    pub app_info: Arc<AppInfo>,
 }
 
 impl Drop for Instance {
@@ -31,17 +31,17 @@ impl Drop for Instance {
 impl Instance {
     pub unsafe fn new(
         vk: window::VulkanPlatform,
-        config: InitConfig,
+        app_info: AppInfo,
     ) -> Result<Self, AnyError> {
         if !vk.supported() { Err("vulkan not available")?; }
 
         let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
-        let app_name = CString::new(config.app_name.clone()).unwrap();
-        let [major, minor, patch] = config.app_version;
-        let app_info = vk::ApplicationInfo {
-            p_application_name: app_name.as_ptr(),
+        let name = CString::new(app_info.name.clone()).unwrap();
+        let [major, minor, patch] = app_info.version;
+        let vk_app_info = vk::ApplicationInfo {
+            p_application_name: name.as_ptr(),
             application_version: vk::make_version!(major, minor, patch),
             api_version: vk::API_VERSION_1_1,
             p_engine_name: c_str!("cooper"),
@@ -54,13 +54,13 @@ impl Instance {
         let mut extensions = Vec::new();
         extensions.extend(vk.required_instance_extensions());
 
-        if config.debug {
+        if app_info.debug {
             layers.push(c_str!("VK_LAYER_KHRONOS_validation"));
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
         let create_info = vk::InstanceCreateInfo {
-            p_application_info: &app_info,
+            p_application_info: &vk_app_info,
             enabled_layer_count: layers.len() as _,
             pp_enabled_layer_names: layers.as_ptr(),
             enabled_extension_count: extensions.len() as _,
@@ -73,8 +73,8 @@ impl Instance {
         let table =
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
-        let config = Arc::new(config);
-        Ok(Instance { vk, entry, table, config })
+        let app_info = Arc::new(app_info);
+        Ok(Instance { vk, entry, table, app_info })
     }
 
     pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
@@ -139,6 +139,32 @@ impl Surface {
             inner,
         })
     }
+}
+
+pub unsafe fn device_for_surface(surface: &Surface) ->
+    Result<vk::PhysicalDevice, AnyError>
+{
+    let instance = &*surface.instance;
+    let surface = surface.inner;
+
+    let pdevices = instance.get_physical_devices();
+    for pd in pdevices.into_iter() {
+        let qf = 0u32;
+        let props = instance.get_queue_family_properties(pd)[qf as usize];
+        let required_bits = vk::QueueFlags::GRAPHICS_BIT
+            | vk::QueueFlags::COMPUTE_BIT
+            | vk::QueueFlags::TRANSFER_BIT;
+        if !props.queue_flags.contains(required_bits) { continue; }
+
+        let mut surface_supp = 0;
+        instance.table.get_physical_device_surface_support_khr
+            (pd, qf, surface, &mut surface_supp).check()?;
+        if surface_supp != vk::TRUE { continue; }
+
+        return Ok(pd);
+    }
+
+    Err("no presentable graphics device".into())
 }
 
 #[cfg(test)]
