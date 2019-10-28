@@ -1,6 +1,6 @@
 use std::fmt;
+use std::mem::ManuallyDrop;
 use std::ops::{Index, IndexMut};
-use std::ptr;
 
 use prelude::*;
 
@@ -42,6 +42,11 @@ enum Payload<T> {
 
 impl<T> Payload<T> {
     #[inline]
+    fn is_occupied(&self) -> bool {
+        self.as_ref().value().is_some()
+    }
+
+    #[inline]
     fn value(self) -> Option<T> {
         match self {
             Occupied(value) => Some(value),
@@ -56,11 +61,26 @@ impl<T> Payload<T> {
             _ => None,
         }
     }
+
+    #[inline]
+    fn into_raw(self) -> RawPayload<T> {
+        match self {
+            Occupied(value) => RawPayload { value: ManuallyDrop::new(value) },
+            Vacant(next) => RawPayload { next },
+        }
+    }
+
+    #[inline]
+    fn as_ref(&self) -> Payload<&T> {
+        match self {
+            Occupied(ref value) => Occupied(value),
+            Vacant(next) => Vacant(*next),
+        }
+    }
 }
 
-#[allow(unions_with_drop_fields)]
-union PayloadRaw<T> {
-    value: T,
+union RawPayload<T> {
+    value: ManuallyDrop<T>,
     // Free list pointer
     next: u32,
 }
@@ -75,12 +95,12 @@ union PayloadRaw<T> {
 // The discriminant of `Payload` is packed into the top bit of `gen`.
 struct Slot<T> {
     props: SlotProps,
-    payload: PayloadRaw<T>,
+    payload: RawPayload<T>,
 }
 
-impl<T> Default for PayloadRaw<T> {
+impl<T> Default for RawPayload<T> {
     fn default() -> Self {
-        PayloadRaw { next: 0 }
+        RawPayload { next: 0 }
     }
 }
 
@@ -96,10 +116,8 @@ impl<T> Default for Slot<T> {
 impl<T> Drop for Slot<T> {
     #[inline]
     fn drop(&mut self) {
-        unsafe {
-            if let Some(value) = self.value_mut() {
-                ptr::drop_in_place(value as _);
-            }
+        if self.props.occupied() {
+            unsafe { ManuallyDrop::drop(&mut self.payload.value); }
         }
     }
 }
@@ -122,7 +140,7 @@ impl<T> Slot<T> {
         props.set_occupied(true);
         Slot {
             props,
-            payload: PayloadRaw { value },
+            payload: RawPayload { value: ManuallyDrop::new(value) },
         }
     }
 
@@ -144,28 +162,19 @@ impl<T> Slot<T> {
     }
 
     #[inline]
-    fn replace(&mut self, payload: Payload<T>) -> Payload<T> {
+    fn replace(&mut self, other: Payload<T>) -> Payload<T> {
         unsafe {
-            let result = self.copy_payload();
-            match payload {
-                Occupied(value) => {
-                    self.props.set_occupied(true);
-                    self.payload.value = value;
-                },
-                Vacant(next) => {
-                    self.props.set_occupied(false);
-                    self.payload.next = next;
-                },
-            }
+            let result = self.take_payload();
+            self.props.set_occupied(other.is_occupied());
+            self.payload = other.into_raw();
             result
         }
     }
 
-    // Unsafe if T is not Copy
     #[inline]
-    unsafe fn copy_payload(&self) -> Payload<T> {
+    unsafe fn take_payload(&mut self) -> Payload<T> {
         if self.props.occupied() {
-            Occupied(ptr::read(&self.payload.value as _))
+            Occupied(ManuallyDrop::take(&mut self.payload.value as _))
         } else {
             Vacant(self.payload.next)
         }
