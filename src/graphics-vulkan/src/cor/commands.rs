@@ -5,7 +5,7 @@ use ccore::name::*;
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum CmdBufferState {
+crate enum CmdBufferState {
     Initial,
     Recording,
     Executable,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::*;
 
 #[derive(Debug)]
-pub struct Image {
+crate struct Image {
     // May be null if image is not in use
     crate inner: vk::Image,
     // May be null if image is not in use
@@ -18,7 +18,7 @@ pub struct Image {
     crate bound_alloc: Option<DeviceAlloc>,
 }
 
-pub unsafe fn create_image_mem(
+crate unsafe fn create_image_mem(
     device: Arc<Device>,
     base_size: vk::DeviceSize,
 ) -> Box<MemoryPool> {

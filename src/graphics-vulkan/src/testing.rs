@@ -16,22 +16,22 @@ use prelude::*;
 
 use crate::*;
 
-pub type VulkanTestData = unsafe fn(TestVars);
-pub type VulkanTest = unit::Test<VulkanTestData>;
+crate type VulkanTestData = unsafe fn(TestVars);
+crate type VulkanTest = unit::Test<VulkanTestData>;
 
 #[derive(Constructor, Debug)]
-pub struct VulkanTestContext {
+crate struct VulkanTestContext {
     proxy: window::EventLoopProxy,
 }
 
 #[derive(Debug)]
-pub struct TestVars {
-    pub swapchain: Arc<Swapchain>,
-    pub queues: Vec<Vec<Arc<Queue>>>,
+crate struct TestVars {
+    crate swapchain: Arc<Swapchain>,
+    crate queues: Vec<Vec<Arc<Queue>>>,
 }
 
 impl TestVars {
-    pub fn device(&self) -> &Arc<Device> {
+    crate fn device(&self) -> &Arc<Device> {
         &self.swapchain.device
     }
 }
@@ -86,7 +86,7 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
     }
 }
 
-pub fn run_tests() {
+crate fn run_tests() {
     let (mut evt, proxy) = unsafe { window::init().unwrap() };
     let thread = thread::spawn(move || {
         let context = VulkanTestContext::new(proxy);

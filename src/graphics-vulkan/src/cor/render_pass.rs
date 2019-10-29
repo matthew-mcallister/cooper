@@ -6,27 +6,27 @@ use fnv::FnvHashMap;
 use crate::*;
 
 #[derive(Debug)]
-pub struct RenderPass {
+crate struct RenderPass {
     inner: vk::RenderPass,
     attachments: Vec<vk::AttachmentDescription>,
     subpasses: FnvHashMap<Name, u32>,
 }
 
 impl RenderPass {
-    pub fn inner(&self) -> vk::RenderPass {
+    crate fn inner(&self) -> vk::RenderPass {
         self.inner
     }
 
-    pub fn attachments(&self) -> &[vk::AttachmentDescription] {
+    crate fn attachments(&self) -> &[vk::AttachmentDescription] {
         &self.attachments
     }
 
-    pub fn get_subpass(&self, key: Name) -> u32 {
+    crate fn get_subpass(&self, key: Name) -> u32 {
         self.subpasses[&key]
     }
 }
 
-pub unsafe fn create_render_pass(
+crate unsafe fn create_render_pass(
     device: &Device,
     create_info: &vk::RenderPassCreateInfo,
     subpass_names: Vec<Name>,

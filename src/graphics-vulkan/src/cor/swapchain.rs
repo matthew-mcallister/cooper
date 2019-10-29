@@ -6,13 +6,13 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug)]
-pub struct Swapchain {
-    pub surface: Arc<Surface>,
-    pub device: Arc<Device>,
-    pub inner: vk::SwapchainKHR,
-    pub format: vk::Format,
-    pub extent: vk::Extent2D,
-    pub images: Vec<vk::Image>,
+crate struct Swapchain {
+    crate surface: Arc<Surface>,
+    crate device: Arc<Device>,
+    crate inner: vk::SwapchainKHR,
+    crate format: vk::Format,
+    crate extent: vk::Extent2D,
+    crate images: Vec<vk::Image>,
 }
 
 impl Drop for Swapchain {
@@ -22,7 +22,7 @@ impl Drop for Swapchain {
 }
 
 impl Swapchain {
-    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
+    crate unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
         Result<Self, AnyError>
     {
         let mut result = Swapchain {
@@ -38,19 +38,19 @@ impl Swapchain {
         Ok(result)
     }
 
-    pub fn device(&self) -> &Arc<Device> {
+    crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    pub fn inner(&self) -> vk::SwapchainKHR {
+    crate fn inner(&self) -> vk::SwapchainKHR {
         self.inner
     }
 
-    pub fn rect(&self) -> vk::Rect2D {
+    crate fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
     }
 
-    pub fn viewport(&self) -> vk::Viewport {
+    crate fn viewport(&self) -> vk::Viewport {
         vk::Viewport {
             x: 0.0,
             y: 0.0,
@@ -65,7 +65,7 @@ impl Swapchain {
         self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
     }
 
-    pub unsafe fn recreate(&mut self) -> Result<(), AnyError> {
+    crate unsafe fn recreate(&mut self) -> Result<(), AnyError> {
         let dt = &*self.device.table;
         let it: &vkl::InstanceTable = &self.device.instance.table;
         let pdev = self.device.pdev;

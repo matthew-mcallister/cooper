@@ -11,6 +11,10 @@ use crate::*;
 use super::objects::*;
 use super::pipeline::*;
 
+// TODO: Iffy on this type. Maybe there should be a single global
+// "device manager" type that is nigh-oblivious to synchronization
+// (similar to VkDevice) and proxy types should handle proper ownership
+// and synchronization but not storage or driver logic.
 #[derive(Debug)]
 crate struct CoreData {
     pub(super) config: Config,

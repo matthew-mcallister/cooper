@@ -6,37 +6,37 @@ use ccore::name::*;
 use crate::*;
 
 #[derive(Clone, Debug)]
-pub struct ShaderDesc {
-    pub entry: CString,
-    pub code: Vec<u8>,
-    pub set_bindings: Vec<(u32, Name)>,
+crate struct ShaderDesc {
+    crate entry: CString,
+    crate code: Vec<u8>,
+    crate set_bindings: Vec<(u32, Name)>,
 }
 
 #[derive(Debug)]
-pub struct Shader {
+crate struct Shader {
     inner: vk::ShaderModule,
     desc: ShaderDesc,
 }
 
 impl Shader {
-    pub fn inner(&self) -> vk::ShaderModule {
+    crate fn inner(&self) -> vk::ShaderModule {
         self.inner
     }
 
-    pub fn entry(&self) -> &CStr {
+    crate fn entry(&self) -> &CStr {
         &*self.desc.entry
     }
 
-    pub fn code(&self) -> &[u8] {
+    crate fn code(&self) -> &[u8] {
         &self.desc.code
     }
 
-    pub fn set_bindings(&self) -> &[(u32, Name)] {
+    crate fn set_bindings(&self) -> &[(u32, Name)] {
         &self.desc.set_bindings
     }
 }
 
-pub unsafe fn create_shader(
+crate unsafe fn create_shader(
     device: &Device,
     desc: ShaderDesc,
 ) -> Shader {

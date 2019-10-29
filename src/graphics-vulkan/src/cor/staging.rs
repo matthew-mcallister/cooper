@@ -3,13 +3,13 @@ use std::sync::Arc;
 use crate::*;
 
 #[derive(Debug)]
-pub struct StagingBuffer {
+crate struct StagingBuffer {
     capacity: usize,
     memory: MemoryPool,
 }
 
 impl StagingBuffer {
-    pub unsafe fn new(device: Arc<Device>, capacity: usize) -> Self {
+    crate unsafe fn new(device: Arc<Device>, capacity: usize) -> Self {
         let mem_flags = vk::MemoryPropertyFlags::HOST_VISIBLE_BIT;
         let type_index = find_memory_type(&device, mem_flags).unwrap();
         let create_info = MemoryPoolCreateInfo {
@@ -29,25 +29,25 @@ impl StagingBuffer {
         }
     }
 
-    pub unsafe fn allocate(&mut self, size: usize) -> Option<DeviceAlloc> {
+    crate unsafe fn allocate(&mut self, size: usize) -> Option<DeviceAlloc> {
         if self.used() + size <= self.capacity {
             Some(self.memory.allocate(size as _, 1))
         } else { None }
     }
 
-    pub fn clear(&mut self) {
+    crate fn clear(&mut self) {
         self.memory.clear();
     }
 
-    pub fn capacity(&self) -> usize {
+    crate fn capacity(&self) -> usize {
         self.capacity
     }
 
-    pub fn set_capacity(&mut self, capacity: usize) {
+    crate fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity;
     }
 
-    pub fn used(&self) -> usize {
+    crate fn used(&self) -> usize {
         self.memory.used() as _
     }
 }

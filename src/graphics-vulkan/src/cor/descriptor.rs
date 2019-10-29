@@ -15,12 +15,12 @@ use self::{
 
 /// Maps descriptor type to descriptor count for a set layout.
 #[derive(Clone, Debug)]
-pub struct DescriptorCounts {
-    pub inner: FnvHashMap<vk::DescriptorType, u32>,
+crate struct DescriptorCounts {
+    crate inner: FnvHashMap<vk::DescriptorType, u32>,
 }
 
 impl Counts {
-    pub fn pool_sizes(&self, multiplier: u32) -> Vec<vk::DescriptorPoolSize> {
+    crate fn pool_sizes(&self, multiplier: u32) -> Vec<vk::DescriptorPoolSize> {
         self.inner.iter()
             .map(|(&ty, &count)| vk::DescriptorPoolSize {
                 ty,
@@ -29,7 +29,7 @@ impl Counts {
             .collect()
     }
 
-    pub fn from_bindings(bindings: &[vk::DescriptorSetLayoutBinding]) -> Self {
+    crate fn from_bindings(bindings: &[vk::DescriptorSetLayoutBinding]) -> Self {
         let mut inner = FnvHashMap::default();
         for binding in bindings.iter() {
             let ty = binding.descriptor_type;
@@ -42,8 +42,8 @@ impl Counts {
 
 /// Tells the allocator how to allocate sets of a particular layout.
 #[derive(Clone, Copy, Debug)]
-pub struct DescriptorSetAllocPolicy {
-    pub pool_size: u32,
+crate struct DescriptorSetAllocPolicy {
+    crate pool_size: u32,
 }
 
 impl Default for DescriptorSetAllocPolicy {
@@ -55,7 +55,7 @@ impl Default for DescriptorSetAllocPolicy {
 }
 
 #[derive(Clone, Debug)]
-pub struct DescriptorSetLayout {
+crate struct DescriptorSetLayout {
     inner: vk::DescriptorSetLayout,
     flags: vk::DescriptorSetLayoutCreateFlags,
     counts: Counts,
@@ -79,7 +79,7 @@ impl Layout {
         &self.alloc_policy
     }
 
-    pub fn pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
+    crate fn pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
         let mut flags = Default::default();
 
         let update_after_bind =
@@ -144,18 +144,18 @@ unsafe fn create_pool(device: &Device, layout: &Layout, size: u32) ->
 }
 
 #[derive(Debug)]
-pub struct DescriptorSet {
+crate struct DescriptorSet {
     inner: vk::DescriptorSet,
     key: Name,
     pool: usize,
 }
 
 impl DescriptorSet {
-    pub fn inner(&self) -> vk::DescriptorSet {
+    crate fn inner(&self) -> vk::DescriptorSet {
         self.inner
     }
 
-    pub fn layout(&self) -> Name {
+    crate fn layout(&self) -> Name {
         self.key
     }
 }
@@ -250,7 +250,7 @@ impl Suballocator {
 }
 
 #[derive(Debug)]
-pub struct DescriptorAllocator {
+crate struct DescriptorAllocator {
     device: Arc<Device>,
     // TODO: RwLock + HashMap + Mutex is seemingly inferior to a true
     // concurrent hash map. Worth switching to?

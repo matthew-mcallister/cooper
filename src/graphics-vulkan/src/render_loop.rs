@@ -39,7 +39,7 @@ impl Drop for RenderLoop {
 }
 
 impl RenderLoop {
-    pub fn device(&self) -> &Arc<Device> {
+    crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
 

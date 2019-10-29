@@ -2,7 +2,7 @@ use std::os::raw::c_char;
 
 /// Adds type information to Vulkan object types from the debug_utils
 /// extension.
-pub trait DebugUtils: vk::traits::HandleType {
+crate trait DebugUtils: vk::traits::HandleType {
     /// Returns the debug object type.
     fn object_type() -> vk::ObjectType;
 }
@@ -60,7 +60,7 @@ impl_debug_marker_name! {
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
 }
 
-pub unsafe fn set_debug_name<T: DebugUtils>(
+crate unsafe fn set_debug_name<T: DebugUtils>(
     device: &vkl::DeviceTable,
     object: T,
     name: *const c_char,

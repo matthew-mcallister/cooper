@@ -8,22 +8,22 @@ use prelude::*;
 use crate::*;
 
 #[inline(always)]
-pub fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
+crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
     vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
         vk::MemoryPropertyFlags::HOST_COHERENT_BIT
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct AllocInfo {
-    pub memory: vk::DeviceMemory,
-    pub offset: vk::DeviceSize,
-    pub size: vk::DeviceSize,
+crate struct AllocInfo {
+    crate memory: vk::DeviceMemory,
+    crate offset: vk::DeviceSize,
+    crate size: vk::DeviceSize,
     /// Buffer containing the sub-allocation, if available.
-    pub buffer: vk::Buffer,
+    crate buffer: vk::Buffer,
     /// Offset into the buffer object.
-    pub buf_offset: vk::DeviceSize,
+    crate buf_offset: vk::DeviceSize,
     /// Memory-mapped pointer, if available.
-    pub ptr: *mut c_void,
+    crate ptr: *mut c_void,
 }
 
 impl Default for AllocInfo {
@@ -33,7 +33,7 @@ impl Default for AllocInfo {
 }
 
 impl AllocInfo {
-    pub fn as_slice<T: Sized>(&self) -> *mut [T] {
+    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
         let mem_size = self.size as usize;
         let elem_size = std::mem::size_of::<T>();
         assert_eq!(mem_size % elem_size, 0);
@@ -43,15 +43,15 @@ impl AllocInfo {
         }
     }
 
-    pub fn as_block<T: Sized>(&self) -> *mut T {
+    crate fn as_block<T: Sized>(&self) -> *mut T {
         self.ptr as _
     }
 
-    pub fn end(&self) -> vk::DeviceSize {
+    crate fn end(&self) -> vk::DeviceSize {
         self.offset + self.size
     }
 
-    pub fn buffer_info(&self) -> vk::DescriptorBufferInfo {
+    crate fn buffer_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.buffer,
             offset: self.offset,
@@ -65,7 +65,7 @@ fn compatible_type(type_bits: u32, type_index: u32) -> bool {
     type_bits & (1 << type_index) > 0
 }
 
-pub fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
+crate fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
     impl Iterator<Item = &vk::MemoryType>
 {
     props.memory_types.iter().take(props.memory_type_count as _)
@@ -76,7 +76,7 @@ pub fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
 /// implementations are to sort memory types in order of "performance",
 /// so the first memory type with the required properties is probably
 /// the best for general use.
-pub fn find_memory_type(device: &Device, flags: vk::MemoryPropertyFlags) ->
+crate fn find_memory_type(device: &Device, flags: vk::MemoryPropertyFlags) ->
     Option<u32>
 {
     iter_memory_types(&device.mem_props)
@@ -85,7 +85,7 @@ pub fn find_memory_type(device: &Device, flags: vk::MemoryPropertyFlags) ->
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct DeviceAlloc {
+crate struct DeviceAlloc {
     info: AllocInfo,
     chunk_idx: u32,
 }
@@ -94,7 +94,7 @@ macro_rules! delegate {
     ($parent:ident, $child:ident, {$($field:ident: $type:ty),*$(,)*}) => {
         impl $parent {
             $(
-                pub fn $field(&self) -> $type {
+                crate fn $field(&self) -> $type {
                     self.$child.$field
                 }
             )*
@@ -112,23 +112,23 @@ delegate!(DeviceAlloc, info, {
 });
 
 impl DeviceAlloc {
-    pub fn info(&self) -> &AllocInfo {
+    crate fn info(&self) -> &AllocInfo {
         &self.info
     }
 
-    pub fn as_slice<T: Sized>(&self) -> *mut [T] {
+    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
         self.info.as_slice()
     }
 
-    pub fn as_block<T: Sized>(&self) -> *mut T {
+    crate fn as_block<T: Sized>(&self) -> *mut T {
         self.info.as_block()
     }
 
-    pub fn end(&self) -> vk::DeviceSize {
+    crate fn end(&self) -> vk::DeviceSize {
         self.info.end()
     }
 
-    pub fn buffer_info(&self) -> vk::DescriptorBufferInfo {
+    crate fn buffer_info(&self) -> vk::DescriptorBufferInfo {
         self.info.buffer_info()
     }
 }
@@ -140,7 +140,7 @@ impl DeviceAlloc {
 // TODO: Stack-like allocation
 //
 #[derive(Debug)]
-pub struct MemoryPool {
+crate struct MemoryPool {
     device: Arc<Device>,
     type_index: u32,
     host_mapped: bool,
@@ -164,20 +164,20 @@ impl Drop for MemoryPool {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct BufferMapOptions {
-    pub usage: vk::BufferUsageFlags,
+crate struct BufferMapOptions {
+    crate usage: vk::BufferUsageFlags,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct MemoryPoolCreateInfo {
-    pub type_index: u32,
-    pub base_size: vk::DeviceSize,
+crate struct MemoryPoolCreateInfo {
+    crate type_index: u32,
+    crate base_size: vk::DeviceSize,
     /// Map all memory to host address space. Requires host visible
     /// memory.
-    pub host_mapped: bool,
+    crate host_mapped: bool,
     /// If provided, wraps all memory in a VkBuffer. Allocations will
     /// alias a region of one of these buffers.
-    pub buffer_map: Option<BufferMapOptions>,
+    crate buffer_map: Option<BufferMapOptions>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -202,7 +202,7 @@ impl FreeBlock {
 }
 
 impl MemoryPool {
-    pub unsafe fn new(
+    crate unsafe fn new(
         device: Arc<Device>,
         create_info: MemoryPoolCreateInfo,
     ) -> Self {
@@ -224,7 +224,7 @@ impl MemoryPool {
         mem
     }
 
-    pub fn device(&self) -> &Arc<Device> {
+    crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
@@ -236,32 +236,32 @@ impl MemoryPool {
         16
     }
 
-    pub fn host_mapped(&self) -> bool {
+    crate fn host_mapped(&self) -> bool {
         self.host_mapped
     }
 
-    pub fn buffer_mapped(&self) -> bool {
+    crate fn buffer_mapped(&self) -> bool {
         self.buffer_map.is_some()
     }
 
-    pub fn buffer_map(&self) -> Option<&BufferMapOptions> {
+    crate fn buffer_map(&self) -> Option<&BufferMapOptions> {
         self.buffer_map.as_ref()
     }
 
-    pub fn flags(&self) -> vk::MemoryPropertyFlags {
+    crate fn flags(&self) -> vk::MemoryPropertyFlags {
         self.device.mem_props.memory_types[self.type_index as usize]
             .property_flags
     }
 
-    pub fn used(&self) -> vk::DeviceSize {
+    crate fn used(&self) -> vk::DeviceSize {
         self.used
     }
 
-    pub fn capacity(&self) -> vk::DeviceSize {
+    crate fn capacity(&self) -> vk::DeviceSize {
         self.capacity
     }
 
-    pub unsafe fn grow(&mut self, size: vk::DeviceSize) {
+    crate unsafe fn grow(&mut self, size: vk::DeviceSize) {
         let dt = self.dt();
 
         let alloc_info = vk::MemoryAllocateInfo {
@@ -354,7 +354,7 @@ impl MemoryPool {
     }
 
     /// Allocates a chunk of memory without binding a resource to it.
-    pub unsafe fn allocate(
+    crate unsafe fn allocate(
         &mut self,
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
@@ -388,7 +388,7 @@ impl MemoryPool {
         }
     }
 
-    pub unsafe fn alloc_with_reqs(&mut self, reqs: vk::MemoryRequirements) ->
+    crate unsafe fn alloc_with_reqs(&mut self, reqs: vk::MemoryRequirements) ->
         DeviceAlloc
     {
         assert!(compatible_type(reqs.memory_type_bits, self.type_index));
@@ -398,7 +398,7 @@ impl MemoryPool {
     /// Frees a memory allocation, if possible. If any resource is still
     /// bound to that memory, it may alias a future allocation that
     /// overlaps the same range.
-    pub unsafe fn free(&mut self, alloc: DeviceAlloc) {
+    crate unsafe fn free(&mut self, alloc: DeviceAlloc) {
         let chunk = alloc.chunk_idx;
         assert_eq!(self.chunks[chunk as usize].memory, alloc.memory());
         let info = alloc.info();
@@ -443,7 +443,7 @@ impl MemoryPool {
         }
     }
 
-    pub fn clear(&mut self) {
+    crate fn clear(&mut self) {
         self.free.clear();
         self.used = 0;
         for (i, chunk) in self.chunks.iter().enumerate() {
@@ -461,7 +461,7 @@ impl MemoryPool {
 
     // TODO: dedicated allocations
     /// Binds a buffer to newly allocated memory.
-    pub unsafe fn alloc_buffer_memory(&mut self, buffer: vk::Buffer) ->
+    crate unsafe fn alloc_buffer_memory(&mut self, buffer: vk::Buffer) ->
         DeviceAlloc
     {
         let mut reqs = Default::default();
@@ -476,7 +476,7 @@ impl MemoryPool {
 
     // TODO: dedicated allocations
     /// Binds an image to newly allocated memory.
-    pub unsafe fn alloc_image_memory(&mut self, image: vk::Image) ->
+    crate unsafe fn alloc_image_memory(&mut self, image: vk::Image) ->
         DeviceAlloc
     {
         let mut reqs = Default::default();

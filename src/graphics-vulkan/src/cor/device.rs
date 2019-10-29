@@ -7,37 +7,37 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug)]
-pub struct Device {
-    pub instance: Arc<Instance>,
-    pub app_info: Arc<AppInfo>,
-    pub pdev: vk::PhysicalDevice,
-    pub props: Box<vk::PhysicalDeviceProperties>,
-    pub mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
-    pub table: Arc<vkl::DeviceTable>,
+crate struct Device {
+    crate instance: Arc<Instance>,
+    crate app_info: Arc<AppInfo>,
+    crate pdev: vk::PhysicalDevice,
+    crate props: Box<vk::PhysicalDeviceProperties>,
+    crate mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
+    crate table: Arc<vkl::DeviceTable>,
 }
 
 #[derive(Debug)]
-pub struct QueueFamily {
+crate struct QueueFamily {
     index: u32,
     properties: vk::QueueFamilyProperties,
 }
 
 impl QueueFamily {
-    pub fn index(&self) -> u32 {
+    crate fn index(&self) -> u32 {
         self.index
     }
 
-    pub fn properties(&self) -> &vk::QueueFamilyProperties {
+    crate fn properties(&self) -> &vk::QueueFamilyProperties {
         &self.properties
     }
 
-    pub fn flags(&self) -> vk::QueueFlags {
+    crate fn flags(&self) -> vk::QueueFlags {
         self.properties.queue_flags
     }
 }
 
 #[derive(Debug)]
-pub struct Queue {
+crate struct Queue {
     device: Arc<Device>,
     inner: vk::Queue,
     family: Arc<QueueFamily>,
@@ -45,25 +45,25 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn device(&self) -> &Arc<Device> {
+    crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    pub fn inner(&self) -> vk::Queue {
+    crate fn inner(&self) -> vk::Queue {
         self.inner
     }
 
-    pub fn family(&self) -> &Arc<QueueFamily> {
+    crate fn family(&self) -> &Arc<QueueFamily> {
         &self.family
     }
 
-    pub fn flags(&self) -> vk::QueueFlags {
+    crate fn flags(&self) -> vk::QueueFlags {
         self.family.flags()
     }
 
     // TODO: Verify that submitted commands are executable by this type
     // of queue.
-    pub unsafe fn submit(
+    crate unsafe fn submit(
         &self,
         submissions: &[vk::SubmitInfo],
         fence: vk::Fence,
@@ -77,7 +77,7 @@ impl Queue {
         ).check().unwrap();
     }
 
-    pub unsafe fn present(&self, present_info: &vk::PresentInfoKHR) ->
+    crate unsafe fn present(&self, present_info: &vk::PresentInfoKHR) ->
         vk::Result
     {
         let _lock = self.mutex.lock();
@@ -136,7 +136,7 @@ unsafe fn check_for_features(
 }
 
 impl Device {
-    pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
+    crate unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
         Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         let it = &instance.table;
@@ -227,7 +227,7 @@ impl Device {
         vec![vec![queue]]
     }
 
-    pub unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
+    crate unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
     where
         T: DebugUtils,
         A: AsRef<str>,
@@ -238,7 +238,7 @@ impl Device {
         }
     }
 
-    pub unsafe fn create_fence(&self, signaled: bool) -> vk::Fence {
+    crate unsafe fn create_fence(&self, signaled: bool) -> vk::Fence {
         let mut create_info = vk::FenceCreateInfo::default();
         if signaled {
             create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
@@ -249,7 +249,7 @@ impl Device {
         obj
     }
 
-    pub unsafe fn create_semaphore(&self) -> vk::Semaphore {
+    crate unsafe fn create_semaphore(&self) -> vk::Semaphore {
         let create_info = Default::default();
         let mut obj = vk::null();
         self.table.create_semaphore(&create_info, ptr::null(), &mut obj)
@@ -257,7 +257,7 @@ impl Device {
         obj
     }
 
-    pub unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>) ->
+    crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>) ->
         Result<Arc<Swapchain>, AnyError>
     {
         Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))

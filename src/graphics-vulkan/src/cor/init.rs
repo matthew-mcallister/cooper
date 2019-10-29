@@ -15,11 +15,11 @@ pub struct AppInfo {
 }
 
 #[derive(Debug)]
-pub struct Instance {
-    pub vk: window::VulkanPlatform,
-    pub entry: Arc<vkl::Entry>,
-    pub table: Arc<vkl::InstanceTable>,
-    pub app_info: Arc<AppInfo>,
+crate struct Instance {
+    crate vk: window::VulkanPlatform,
+    crate entry: Arc<vkl::Entry>,
+    crate table: Arc<vkl::InstanceTable>,
+    crate app_info: Arc<AppInfo>,
 }
 
 impl Drop for Instance {
@@ -29,7 +29,7 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    pub unsafe fn new(
+    crate unsafe fn new(
         vk: window::VulkanPlatform,
         app_info: AppInfo,
     ) -> Result<Self, AnyError> {
@@ -77,11 +77,11 @@ impl Instance {
         Ok(Instance { vk, entry, table, app_info })
     }
 
-    pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
+    crate unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
         vk::enumerate2!(self.table, enumerate_physical_devices).unwrap()
     }
 
-    pub unsafe fn get_queue_family_properties(&self, pdev: vk::PhysicalDevice)
+    crate unsafe fn get_queue_family_properties(&self, pdev: vk::PhysicalDevice)
         -> Vec<vk::QueueFamilyProperties>
     {
         vk::enumerate2!(
@@ -91,7 +91,7 @@ impl Instance {
         )
     }
 
-    pub unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
+    crate unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
         Box<vk::PhysicalDeviceProperties>
     {
         let mut res = Box::new(Default::default());
@@ -99,13 +99,13 @@ impl Instance {
         res
     }
 
-    pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
+    crate unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
         Result<(Arc<Device>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         Ok(Device::new(Arc::clone(self), pdev)?)
     }
 
-    pub unsafe fn create_surface(
+    crate unsafe fn create_surface(
         self: &Arc<Self>,
         window: &Arc<window::Window>,
     ) -> Result<Arc<Surface>, AnyError> {
@@ -114,10 +114,10 @@ impl Instance {
 }
 
 #[derive(Debug)]
-pub struct Surface {
-    pub window: Arc<window::Window>,
-    pub instance: Arc<Instance>,
-    pub inner: vk::SurfaceKHR,
+crate struct Surface {
+    crate window: Arc<window::Window>,
+    crate instance: Arc<Instance>,
+    crate inner: vk::SurfaceKHR,
 }
 
 impl Drop for Surface {
@@ -129,7 +129,7 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
+    crate unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
         Result<Self, AnyError>
     {
         let inner = window.create_surface(instance.table.instance)?;
@@ -141,7 +141,7 @@ impl Surface {
     }
 }
 
-pub unsafe fn device_for_surface(surface: &Surface) ->
+crate unsafe fn device_for_surface(surface: &Surface) ->
     Result<vk::PhysicalDevice, AnyError>
 {
     let instance = &*surface.instance;

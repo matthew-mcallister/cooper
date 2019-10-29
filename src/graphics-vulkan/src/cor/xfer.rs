@@ -5,10 +5,10 @@ use std::sync::Arc;
 use crate::*;
 
 /// Serial number corresponding to a transfer batch.
-pub type XferBatchSerial = NonZeroU32;
+crate type XferBatchSerial = NonZeroU32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum XferState {
+crate enum XferState {
     Clean,
     Dirty,
     Pending,
@@ -274,7 +274,7 @@ impl XferCmdBuffer {
 }
 
 #[derive(Debug)]
-pub struct XferBatchState {
+crate struct XferBatchState {
     cmds: XferCmdBuffer,
     staging: StagingBuffer,
 }
@@ -290,7 +290,7 @@ const NUM_BATCHES: usize = 2;
 /// If multiple transfer queues are available, it may be possible to
 /// operate multiple instances of this type in parallel.
 #[derive(Debug)]
-pub struct XferQueue {
+crate struct XferQueue {
     queue: Arc<Queue>,
     batch_size: usize,
     cmd_pool: vk::CommandPool,
@@ -347,7 +347,7 @@ impl XferQueue {
         self.serial.get() as usize % self.batches.len()
     }
 
-    pub unsafe fn new(queue: Arc<Queue>, batch_size: usize) -> Self {
+    crate unsafe fn new(queue: Arc<Queue>, batch_size: usize) -> Self {
         let queue_flags = queue.flags();
         assert!(queue_flags.contains(vk::QueueFlags::TRANSFER_BIT));
 
@@ -393,7 +393,7 @@ impl XferQueue {
     /// Tries to stage an image for upload. Returns `None` when the
     /// queue isn't ready to accept more data. Otherwise, returns a
     /// slice pointer where the image data can be written.
-    pub unsafe fn stage_image(
+    crate unsafe fn stage_image(
         &mut self,
         image: &mut Image,
     ) -> Option<*mut [u8]> {
@@ -415,34 +415,34 @@ impl XferQueue {
         self.serial = NonZeroU32::new(self.serial.get() + 1).unwrap();
     }
 
-    pub unsafe fn submit(&mut self) {
+    crate unsafe fn submit(&mut self) {
         if self.state() == XferState::Dirty {
             cmds!(self).submit();
             self.next_batch();
         }
     }
 
-    pub fn state(&self) -> XferState {
+    crate fn state(&self) -> XferState {
         cmds_ro!(self).state()
     }
 
-    pub unsafe fn poll(&mut self) {
+    crate unsafe fn poll(&mut self) {
         cmds!(self).poll();
     }
 
-    pub unsafe fn wait(&mut self) {
+    crate unsafe fn wait(&mut self) {
         cmds!(self).wait();
     }
 
     /// Waits for all pending transfers to complete.
-    pub unsafe fn flush(&mut self) {
+    crate unsafe fn flush(&mut self) {
         self.submit();
         for batch in self.batches.iter_mut() {
             batch.cmds.wait();
         }
     }
 
-    pub unsafe fn queued_xfers(&self) -> usize {
+    crate unsafe fn queued_xfers(&self) -> usize {
         cmds_ro!(self).img_pre_barriers.len()
     }
 }
