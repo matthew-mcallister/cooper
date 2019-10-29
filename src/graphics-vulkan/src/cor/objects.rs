@@ -146,7 +146,8 @@ mod tests {
     use super::*;
 
     fn smoke_test(vars: crate::testing::TestVars) {
-        CoreData::new(Arc::clone(&vars.device()));
+        let device = Arc::clone(vars.swapchain.device());
+        CoreData::new(device, &vars.queues, vars.config);
     }
 
     unit::declare_tests![

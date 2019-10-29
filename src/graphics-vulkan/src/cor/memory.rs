@@ -496,8 +496,7 @@ mod tests {
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let swapchain = vars.swapchain;
-        let device = Arc::clone(&swapchain.device);
+        let device = Arc::clone(&vars.swapchain.device);
 
         let flags = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
         let type_index = find_memory_type(&device, flags).unwrap();

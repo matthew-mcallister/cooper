@@ -8,6 +8,7 @@
 
 #![cfg(test)]
 
+use std::os::raw::c_int;
 use std::sync::Arc;
 use std::thread;
 
@@ -26,44 +27,45 @@ crate struct VulkanTestContext {
 
 #[derive(Debug)]
 crate struct TestVars {
+    crate config: Config,
     crate swapchain: Arc<Swapchain>,
     crate queues: Vec<Vec<Arc<Queue>>>,
 }
 
-impl TestVars {
-    crate fn device(&self) -> &Arc<Device> {
-        &self.swapchain.device
-    }
-}
-
-const WINDOW_DIMS: (i32, i32) = (320, 200);
+const WINDOW_DIMS: (u32, u32) = (320, 200);
 
 impl VulkanTestContext {
     unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
+        let config = Config {
+            width: WINDOW_DIMS.0,
+            height: WINDOW_DIMS.1,
+        };
+
         const NAME: &'static str = "cooper unit test";
         let info = window::CreateInfo {
             title: NAME.to_owned(),
-            dims: WINDOW_DIMS.into(),
+            dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
             hints: window::CreationHints {
                 hidden: true,
                 ..Default::default()
             },
         };
         let window = Arc::new(self.proxy.create_window(info)?);
-        let app = AppInfo {
+
+        let app_info = AppInfo {
             name: NAME.to_owned(),
             version: [0, 1, 0],
             debug: true,
             ..Default::default()
         };
-
-        let instance =
-            Arc::new(Instance::new(window.vk_platform().clone(), info)?);
+        let vk_platform = window.vk_platform().clone();
+        let instance = Arc::new(Instance::new(vk_platform, app_info)?);
         let surface = instance.create_surface(&window)?;
         let pdev = device_for_surface(&surface)?;
         let (device, queues) = instance.create_device(pdev)?;
         let swapchain = device.create_swapchain(&surface)?;
         Ok(TestVars {
+            config,
             swapchain,
             queues,
         })

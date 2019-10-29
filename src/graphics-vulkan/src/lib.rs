@@ -29,7 +29,6 @@ pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
 
 unit::collect_tests![
     cor,
-    objects_core,
 ];
 
 #[cfg(test)]

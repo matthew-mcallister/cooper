@@ -452,10 +452,10 @@ mod tests {
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let swapchain = vars.swapchain;
+        let swapchain = Arc::clone(&vars.swapchain);
         let queue = Arc::clone(&vars.queues[0][0]);
-        let dt = &*swapchain.device().table;
-        let device = Arc::clone(&swapchain.device);
+        let device = Arc::clone(swapchain.device());
+        let dt = Arc::clone(&device.table);
 
         let mut image_mem = create_image_mem(device, 0x400_0000);
 

@@ -324,7 +324,9 @@ mod tests {
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
-        let core_data = Arc::new(CoreData::new(device));
+        let mut core_data = CoreData::new(device, &vars.queues, vars.config);
+        core_data.init();
+        let core_data = Arc::new(core_data);
 
         let core = Arc::clone(&core_data);
         let thread1 = thread::spawn(move || {
@@ -355,8 +357,10 @@ mod tests {
     }
 
     unsafe fn test_for_races(vars: testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device);
-        let core_data = Arc::new(CoreData::new(device));
+        let device = Arc::clone(vars.swapchain.device());
+        let mut core_data = CoreData::new(device, &vars.queues, vars.config);
+        core_data.init();
+        let core_data = Arc::new(core_data);
 
         // Spawn two threads that allocate and deallocate in a loop for
         // a while. Not surefire, but better than nothing.

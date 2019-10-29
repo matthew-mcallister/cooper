@@ -41,6 +41,7 @@ unit::collect_tests![
     descriptor,
     init,
     memory,
+    objects,
     staging,
     xfer,
 ];

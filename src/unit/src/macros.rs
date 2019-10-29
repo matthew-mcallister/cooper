@@ -16,7 +16,7 @@ macro_rules! declare_tests {
     };
     ($($entry:tt),*$(,)*) => {
         #[cfg(test)]
-        pub fn __collect_tests
+        crate fn __collect_tests
             (builder: &mut $crate::TestDriverBuilder<test_type!()>)
         {
             $($crate::declare_tests!(@entry(builder, $entry));)*
@@ -28,7 +28,7 @@ macro_rules! declare_tests {
 macro_rules! collect_tests {
     ($($mod:ident),*$(,)*) => {
         #[cfg(test)]
-        pub fn __collect_tests
+        crate fn __collect_tests
             (builder: &mut $crate::TestDriverBuilder<test_type!()>)
         {
             $($mod::__collect_tests(builder);)*
