@@ -9,5 +9,6 @@ publish = false
 crossbeam-channel = "0.3"
 derive_more = "0.15"
 derivative = "^1.0"
+enum-map = "0.6"
 fnv = "^1.0"
 prelude = { path = "../prelude", package = "cooper-prelude" }

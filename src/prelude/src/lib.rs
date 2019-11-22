@@ -1,6 +1,6 @@
 #![feature(trait_alias)]
 
-use num_traits as num;
+pub mod num;
 
 #[macro_export]
 macro_rules! c_str {
@@ -25,7 +25,7 @@ pub trait ResultExt<T, E> {
     /// # Examples
     ///
     /// ```
-    /// # use cooper_core::prelude::ResultExt;
+    /// # use cooper_prelude::ResultExt;
     /// # fn sthg() -> Result<(), u32> {
     /// # let result = Err(0u32);
     /// result.on_err(|x| println!("error: {}", x))?;
@@ -45,7 +45,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 
 // Returns the smallest multiple of `alignment` that is `>= offset`.
 #[inline(always)]
-pub fn align<T: Copy + num::Num>(alignment: T, offset: T) -> T {
+pub fn align<T: Copy + num::PrimInt>(alignment: T, offset: T) -> T {
     ((offset + alignment - num::one()) / alignment) * alignment
 }
 
