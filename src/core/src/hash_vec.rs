@@ -33,9 +33,13 @@ impl<K, V, S> Zero for HashVector<K, V, S> where Self: Default {
     }
 }
 
-impl<K, V> HashVector<K, V> where Self: Default {
+impl<K: Hash + Eq, V> HashVector<K, V> {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self::with_capacity_and_hasher(capacity, Default::default())
     }
 }
 
@@ -70,12 +74,6 @@ impl<K, V, S> HashVector<K, V, S> {
 
     pub fn capacity(&self) -> usize {
         self.inner.capacity()
-    }
-}
-
-impl<K: Hash + Eq, V> HashVector<K, V> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self::with_capacity_and_hasher(capacity, Default::default())
     }
 }
 
@@ -160,6 +158,24 @@ where
     V: Eq,
 {}
 
+// TODO: This trait has the same problem as operators where you need 4
+// overloads for every variant of (K, V), (&K, V), (K, &V), (&K, &V).
+impl<K, V, S> std::iter::Sum<(K, V)> for HashVector<K, V, S>
+where
+    K: Hash + Eq,
+    V: Zero + ops::AddAssign,
+    S: BuildHasher + Default,
+{
+    fn sum<I: Iterator<Item = (K, V)>>(iter: I) -> Self {
+        // TODO: Pick an initial capacity.
+        let mut vec: Self = Default::default();
+        for (k, v) in iter {
+            *vec.index_by_val_mut(k) += v;
+        }
+        vec
+    }
+}
+
 macro_rules! impl_un_op {
     ($Op:ident, $op:ident) => {
         // Moving
@@ -206,6 +222,8 @@ macro_rules! impl_vector_op {
                 // Perf note: if other is much larger than self, it
                 // would be faster to clone it and perform the reverse
                 // assignment than to rehash every key as we do here.
+                // Note 2: It would also help to estimate the number of
+                // new keys and reserve extra space in self.
                 for (k, v) in other.iter() {
                     ops::$OpAssign::$op_assign(self.index_mut(k), v);
                 }
@@ -339,5 +357,26 @@ mod tests {
         a *= 2;
         assert_eq!(&a % 2, zero());
         assert_eq!(&a / 2, a_0);
+    }
+
+    #[test]
+    fn test_sum() {
+        let v: HashVector<i32, i32> = vec![
+            (0, -1),
+            (1, 3),
+            (4, 0),
+            (0, 1),
+            (2, 2),
+            (1, -1),
+            (-1, 1),
+            (0, 2),
+        ].into_iter().sum();
+
+        assert_eq!(v.get(&-1), 1);
+        assert_eq!(v.get(&0), 2);
+        assert_eq!(v.get(&1), 2);
+        assert_eq!(v.get(&2), 2);
+        assert_eq!(v.get(&3), 0);
+        assert_eq!(v.get(&4), 0);
     }
 }
