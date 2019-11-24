@@ -100,7 +100,7 @@ macro_rules! impl_un_op {
         {
             type Output = Self;
             fn $op(mut self) -> Self::Output {
-                for (_, v) in self.iter_mut() {
+                for v in self.values_mut() {
                     *v = <V as std::ops::$Op>::$op(*v);
                 }
                 self
@@ -135,7 +135,7 @@ macro_rules! impl_bin_op {
             where V: std::ops::$OpAssign + Copy,
         {
             fn $op_assign(&mut self, other: V) {
-                for (_, v) in self.iter_mut() {
+                for v in self.values_mut() {
                     <V as std::ops::$OpAssign>::$op_assign(v, other);
                 }
             }
@@ -177,7 +177,7 @@ mod tests {
     use super::*;
     use self::Color::*;
 
-    #[derive(Clone, Copy, Debug, Enum)]
+    #[derive(Clone, Copy, Debug, Enum, Eq, PartialEq)]
     enum Color {
         Red,
         Green,
@@ -194,6 +194,7 @@ mod tests {
         assert_eq!(a, -b);
         assert_eq!(b, -a);
         assert_eq!(a + b, EnumVector::lift(0));
+        assert_eq!([a[Red], a[Green], a[Blue]], [-1, 0, 1]);
 
         assert_eq!(a - b, a * 2);
         assert_eq!(a + b * 2, b);
