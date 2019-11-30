@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::Arc;
 
-use ccore::{HashVector, Sentinel};
+use base::{HashVector, Sentinel};
 use fnv::FnvHashMap;
 
 use crate::*;
@@ -298,7 +298,7 @@ impl Pool {
 #[cfg(test)]
 mod tests {
     use vk::traits::*;
-    use ccore::Name;
+    use base::Name;
     use super::*;
 
     unsafe fn create_test_set_layouts(device: &Arc<Device>) ->

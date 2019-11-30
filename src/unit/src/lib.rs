@@ -166,8 +166,7 @@ impl<T> TestDriverBuilder<T> {
 }
 
 impl<D> TestDriverBuilder<Test<D>> {
-    pub fn build(self, context: Box<dyn TestContext<Test<D>>>) ->
-        TestDriver<D>
+    pub fn build(self, context: Box<dyn TestContext<Test<D>>>) -> TestDriver<D>
     {
         let reporter = self.reporter
             .unwrap_or_else(|| Box::new(StandardTestReporter::stdout()));
@@ -177,6 +176,12 @@ impl<D> TestDriverBuilder<Test<D>> {
             reporter,
             context,
         }
+    }
+}
+
+impl TestDriverBuilder<PlainTest> {
+    pub fn build_basic(self) -> TestDriver<fn()> {
+        self.build(Box::new(PanicTestContext::new(PlainTestInvoker::new())))
     }
 }
 

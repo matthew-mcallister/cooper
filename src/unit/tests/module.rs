@@ -97,9 +97,8 @@ mod blue {
 
 fn main() {
     use cooper_unit::*;
-    let context = PanicTestContext::new(PlainTestInvoker);
     let mut builder = TestDriverBuilder::new();
     crate::__collect_tests(&mut builder);
-    let mut driver = builder.build(Box::new(context));
+    let mut driver = builder.build_basic();
     driver.run();
 }

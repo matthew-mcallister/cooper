@@ -1,5 +1,5 @@
 [package]
-name = "cooper-graphics-vulkan"
+name = "cooper-gfx"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
@@ -9,7 +9,7 @@ publish = false
 harness = false
 
 [dependencies]
-ccore = { path = "../core", package = "cooper-core" }
+base = { path = "../base", package = "cooper-base" }
 derive_more = "0.15"
 enum-map = "^0.6.1"
 fnv = "1.0"

@@ -6,6 +6,60 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug)]
+crate struct Surface {
+    crate window: Arc<window::Window>,
+    crate instance: Arc<Instance>,
+    crate inner: vk::SurfaceKHR,
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        unsafe {
+            self.instance.table.destroy_surface_khr(self.inner, ptr::null());
+        }
+    }
+}
+
+impl Surface {
+    crate unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
+        Result<Self, AnyError>
+    {
+        let inner = window.create_surface(instance.table.instance)?;
+        Ok(Surface {
+            window,
+            instance,
+            inner,
+        })
+    }
+}
+
+crate unsafe fn device_for_surface(surface: &Surface) ->
+    Result<vk::PhysicalDevice, AnyError>
+{
+    let instance = &*surface.instance;
+    let surface = surface.inner;
+
+    let pdevices = instance.get_physical_devices();
+    for pd in pdevices.into_iter() {
+        let qf = 0u32;
+        let props = instance.get_queue_family_properties(pd)[qf as usize];
+        let required_bits = vk::QueueFlags::GRAPHICS_BIT
+            | vk::QueueFlags::COMPUTE_BIT
+            | vk::QueueFlags::TRANSFER_BIT;
+        if !props.queue_flags.contains(required_bits) { continue; }
+
+        let mut surface_supp = 0;
+        instance.table.get_physical_device_surface_support_khr
+            (pd, qf, surface, &mut surface_supp).check()?;
+        if surface_supp != vk::TRUE { continue; }
+
+        return Ok(pd);
+    }
+
+    Err("no presentable graphics device".into())
+}
+
+#[derive(Debug)]
 crate struct Swapchain {
     crate surface: Arc<Surface>,
     crate device: Arc<Device>,

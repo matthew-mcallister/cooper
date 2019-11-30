@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use std::ptr;
 
-use ccore::Name;
+use base::Name;
 
 use crate::*;
 

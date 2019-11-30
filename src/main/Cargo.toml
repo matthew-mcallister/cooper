@@ -6,7 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
-ccore = { path = "../core", package = "cooper-core" }
+base = { path = "../base", package = "cooper-base" }
 derivative = "1"
 derive_more = "0.14"
 fnv = "1"

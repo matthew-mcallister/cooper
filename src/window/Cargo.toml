@@ -9,7 +9,7 @@ publish = false
 harness = false
 
 [dependencies]
-ccore = { path = "../core", package = "cooper-core" }
+base = { path = "../base", package = "cooper-base" }
 crossbeam-channel = "0.3"
 derive_more = "0.14"
 prelude = { path = "../prelude", package = "cooper-prelude" }

@@ -1,8 +1,7 @@
 [workspace]
 members = [
-    "src/core",
-    "src/graphics-vulkan",
-    "src/main",
+    "src/base",
+    "src/gfx",
     "src/math",
     "src/prelude",
     "src/unit",

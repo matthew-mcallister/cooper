@@ -27,8 +27,8 @@ impl<D, F> PanicTestInvoker<D> for F
 /// The test type of the vanilla Rust test runner.
 pub type PlainTest = Test<fn()>;
 
-#[derive(Debug, Default)]
-pub struct PlainTestInvoker;
+#[derive(Constructor, Debug, Default)]
+pub struct PlainTestInvoker {}
 
 impl PanicTestInvoker<fn()> for PlainTestInvoker {
     fn invoke(&self, test: &PlainTest) {
@@ -56,7 +56,6 @@ impl PanicTestInvoker<fn()> for PlainTestInvoker {
 /// route, the second trait constraint may need to be implemented
 /// manually.
 #[derive(Constructor, Debug, Default)]
-#[non_exhaustive]
 pub struct PanicTestContext<F> {
     inner: F,
 }

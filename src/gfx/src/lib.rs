@@ -10,13 +10,11 @@ macro_rules! test_type {
     () => { crate::testing::VulkanTest }
 }
 
-mod cor;
-//mod render_loop;
-//mod triangle;
+mod config;
+mod device;
 
-pub use cor::*;
-//pub use render_loop::*;
-//crate use triangle::*;
+pub use config::*;
+pub use device::*;
 
 pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
     vk::ClearValue {
@@ -27,7 +25,7 @@ pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
 }
 
 unit::collect_tests![
-    cor,
+    device,
 ];
 
 #[cfg(test)]

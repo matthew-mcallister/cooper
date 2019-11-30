@@ -26,7 +26,7 @@ use std::os::raw::{c_char, c_int};
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use ccore::request as rq;
+use base::request as rq;
 use crossbeam_channel as cc;
 use derive_more::*;
 use prelude::*;
@@ -466,7 +466,10 @@ mod tests {
             let config = CreateInfo {
                 title: "smoke test".to_owned(),
                 dims: (320, 200).into(),
-                hints: Default::default(),
+                hints: CreationHints {
+                    hidden: true,
+                    ..Default::default()
+                },
             };
             let window = proxy.create_window(config).unwrap();
             window.set_title("tset ekoms".to_owned());
@@ -477,16 +480,10 @@ mod tests {
     }
 
     fn error_test() {
-        let (mut evt, proxy) = unsafe { init().unwrap() };
+        let (mut evt, _) = unsafe { init().unwrap() };
 
-        let thd = thread::spawn(move || {
-            let config = CreateInfo {
-                title: "error test".to_owned(),
-                dims: (-1, -1).into(),
-                hints: Default::default(),
-            };
-            proxy.create_window(config).unwrap();
-        });
+        // Make sure we don't deadlock
+        let thd = thread::spawn(move || panic!());
 
         evt.pump();
         thd.join().unwrap();
@@ -505,6 +502,6 @@ collect_tests![tests];
 pub fn main() {
     let mut builder = TestDriverBuilder::new();
     crate::__collect_tests(&mut builder);
-    let mut driver = builder.build(Box::new(PlainTestContext::new()));
+    let mut driver = builder.build_basic();
     driver.run();
 }

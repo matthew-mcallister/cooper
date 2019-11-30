@@ -175,18 +175,18 @@ mod xform_tests {
         let y = na::Vector3::new(0.0, 1.0f32, 0.0);
         let z = na::Vector3::new(0.0, 0.0, 1.0f32);
 
-        let [fwd, abv, rgt] = aiming_basis(o, x, z);
+        let [fwd, abv, rgt] = aiming_basis(x, z);
         assert_relative_eq!(fwd, x);
         assert_relative_eq!(rgt, -y);
         assert_relative_eq!(abv, z);
 
-        let [fwd, abv, rgt] = aiming_basis(o, z, x);
+        let [fwd, abv, rgt] = aiming_basis(z, x);
         assert_relative_eq!(fwd, z);
         assert_relative_eq!(rgt, y);
         assert_relative_eq!(abv, x);
 
         let tgt = x + y + z;
-        let [fwd, _, rgt] = aiming_basis(o, tgt, z);
+        let [fwd, _, rgt] = aiming_basis(tgt - o, z);
         assert_relative_eq!(fwd * 3f32.sqrt(), tgt);
         assert_relative_eq!(rgt, (x - y).normalize());
     }

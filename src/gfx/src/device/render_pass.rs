@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::Arc;
 
-use ccore::Name;
+use base::Name;
 use fnv::FnvHashMap;
 
 use crate::*;
