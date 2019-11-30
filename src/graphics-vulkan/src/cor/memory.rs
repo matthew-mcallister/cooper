@@ -3,71 +3,20 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::Arc;
 
+use enum_map::{Enum, EnumMap};
 use prelude::*;
 
 use crate::*;
 
-#[inline(always)]
-crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
-    vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
-        vk::MemoryPropertyFlags::HOST_COHERENT_BIT
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate struct AllocInfo {
-    crate memory: vk::DeviceMemory,
-    crate offset: vk::DeviceSize,
-    crate size: vk::DeviceSize,
-    /// Buffer containing the sub-allocation, if available.
-    crate buffer: vk::Buffer,
-    /// Offset into the buffer object.
-    crate buf_offset: vk::DeviceSize,
-    /// Memory-mapped pointer, if available.
-    crate ptr: *mut c_void,
-}
-
-impl Default for AllocInfo {
-    fn default() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
-}
-
-impl AllocInfo {
-    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
-        let mem_size = self.size as usize;
-        let elem_size = std::mem::size_of::<T>();
-        assert_eq!(mem_size % elem_size, 0);
-        let slice_len = mem_size / elem_size;
-        unsafe {
-            std::slice::from_raw_parts_mut(self.ptr as *mut T, slice_len) as _
-        }
-    }
-
-    crate fn as_block<T: Sized>(&self) -> *mut T {
-        self.ptr as _
-    }
-
-    crate fn end(&self) -> vk::DeviceSize {
-        self.offset + self.size
-    }
-
-    crate fn buffer_info(&self) -> vk::DescriptorBufferInfo {
-        vk::DescriptorBufferInfo {
-            buffer: self.buffer,
-            offset: self.offset,
-            range: self.size,
-        }
-    }
-}
-
-/// Returns whether the type index is in the bitmask of types.
+#[inline]
 fn compatible_type(type_bits: u32, type_index: u32) -> bool {
     type_bits & (1 << type_index) > 0
 }
 
-crate fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
-    impl Iterator<Item = &vk::MemoryType>
+#[inline]
+fn iter_memory_types(device: &Device) -> impl Iterator<Item = &vk::MemoryType>
 {
+    let props = &device.mem_props;
     props.memory_types.iter().take(props.memory_type_count as _)
 }
 
@@ -76,240 +25,263 @@ crate fn iter_memory_types(props: &vk::PhysicalDeviceMemoryProperties) ->
 /// implementations are to sort memory types in order of "performance",
 /// so the first memory type with the required properties is probably
 /// the best for general use.
-crate fn find_memory_type(device: &Device, flags: vk::MemoryPropertyFlags) ->
-    Option<u32>
-{
-    iter_memory_types(&device.mem_props)
-        .position(|ty| ty.property_flags.contains(flags))
-        .map(|x| x as _)
+crate fn find_memory_type(
+    device: &Device,
+    flags: vk::MemoryPropertyFlags,
+    type_mask: u32,
+) -> Option<u32> {
+    iter_memory_types(device)
+        .enumerate()
+        .filter(|&(idx, _)| compatible_type(type_mask, idx as u32))
+        .position(|(_, ty)| ty.property_flags.contains(flags))
+        .map(|x| x as u32)
 }
 
-#[derive(Clone, Copy, Debug)]
-crate struct DeviceAlloc {
-    info: AllocInfo,
-    chunk_idx: u32,
+#[inline(always)]
+crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
+    vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
+        vk::MemoryPropertyFlags::HOST_COHERENT_BIT
 }
 
-macro_rules! delegate {
-    ($parent:ident, $child:ident, {$($field:ident: $type:ty),*$(,)*}) => {
-        impl $parent {
-            $(
-                crate fn $field(&self) -> $type {
-                    self.$child.$field
-                }
-            )*
+#[derive(Clone, Copy, Debug, Enum, Eq, PartialEq)]
+crate enum Tiling {
+    /// Denotes a linear image or a buffer.
+    Linear,
+    /// Denotes a nonlinear (a.k.a. optimal) image.
+    Nonlinear,
+}
+
+impl From<Tiling> for vk::ImageTiling {
+    fn from(tiling: Tiling) -> Self {
+        match tiling {
+            Tiling::Linear => vk::ImageTiling::LINEAR,
+            Tiling::Nonlinear => vk::ImageTiling::OPTIMAL,
         }
     }
 }
 
-delegate!(DeviceAlloc, info, {
-    memory: vk::DeviceMemory,
+impl From<vk::ImageTiling> for Tiling {
+    fn from(tiling: vk::ImageTiling) -> Self {
+        match tiling {
+            vk::ImageTiling::LINEAR => Tiling::Linear,
+            _ => Tiling::Nonlinear,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+crate struct DeviceMemory {
+    inner: vk::DeviceMemory,
+    size: vk::DeviceSize,
+    type_index: u32,
+    ptr: *mut c_void,
+    tiling: Tiling,
+    chunk: u32,
+}
+
+impl DeviceMemory {
+    crate fn inner(&self) -> vk::DeviceMemory {
+        self.inner
+    }
+
+    crate fn size(&self) -> vk::DeviceSize {
+        self.size
+    }
+
+    crate fn type_index(&self) -> u32 {
+        self.type_index
+    }
+
+    /// Memory-mapped pointer when host-visible.
+    crate fn ptr(&self) -> *mut c_void {
+        self.ptr
+    }
+
+    crate fn tiling(&self) -> Tiling {
+        self.tiling
+    }
+
+    unsafe fn map(&mut self, device: &Device) {
+        assert!(self.ptr.is_null());
+        let dt = &*device.table;
+        let flags = Default::default();
+        dt.map_memory(self.inner, 0, self.size, flags, &mut self.ptr)
+            .check().expect("failed to map device memory");
+    }
+}
+
+crate unsafe fn alloc_device_memory(
+    device: &Device,
+    size: vk::DeviceSize,
+    type_index: u32,
+) -> vk::DeviceMemory {
+    let dt = &*device.table;
+    let alloc_info = vk::MemoryAllocateInfo {
+        allocation_size: size,
+        memory_type_index: type_index,
+        ..Default::default()
+    };
+    let mut memory = vk::null();
+    dt.allocate_memory(&alloc_info, ptr::null(), &mut memory)
+        .check().expect("failed to allocate device memory");
+    memory
+}
+
+#[derive(Clone, Debug)]
+crate struct DeviceRange {
+    memory: Arc<DeviceMemory>,
     offset: vk::DeviceSize,
     size: vk::DeviceSize,
-    buffer: vk::Buffer,
-    buf_offset: vk::DeviceSize,
-    ptr: *mut c_void,
-});
+}
 
-impl DeviceAlloc {
-    crate fn info(&self) -> &AllocInfo {
-        &self.info
+impl DeviceRange {
+    crate fn memory(&self) -> &Arc<DeviceMemory> {
+        &self.memory
     }
 
-    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
-        self.info.as_slice()
+    crate fn offset(&self) -> vk::DeviceSize {
+        self.offset
     }
 
-    crate fn as_block<T: Sized>(&self) -> *mut T {
-        self.info.as_block()
+    crate fn size(&self) -> vk::DeviceSize {
+        self.size
     }
 
     crate fn end(&self) -> vk::DeviceSize {
-        self.info.end()
+        self.offset + self.size
+    }
+
+    crate fn as_raw(&self) -> *mut c_void {
+        if !self.memory.ptr.is_null() {
+            unsafe { self.memory.ptr.add(self.offset as _) }
+        } else { 0usize as _ }
+    }
+
+    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
+        let ptr = self.as_raw();
+        assert_ne!(ptr, 0 as _);
+        let mem_size = self.size as usize;
+        let elem_size = std::mem::size_of::<T>();
+        assert_eq!(mem_size % elem_size, 0);
+        let slice_len = mem_size / elem_size;
+        unsafe {
+            std::slice::from_raw_parts_mut(ptr as *mut T, slice_len) as _
+        }
+    }
+
+
+    crate fn as_ptr<T: Sized>(&self) -> *mut T {
+        assert!(self.size() <= std::mem::size_of::<T>() as u64);
+        self.as_raw() as _
+    }
+
+    fn block(&self) -> Block {
+        Block {
+            chunk: self.memory.chunk,
+            start: self.offset,
+            end: self.offset + self.size,
+        }
+    }
+}
+
+crate type DeviceAlloc = DeviceRange;
+
+#[derive(Clone, Debug)]
+crate struct DeviceBuffer {
+    memory: Arc<DeviceMemory>,
+    inner: vk::Buffer,
+    usage: vk::BufferUsageFlags,
+}
+
+impl DeviceBuffer {
+    crate fn memory(&self) -> &Arc<DeviceMemory> {
+        &self.memory
+    }
+
+    crate fn inner(&self) -> vk::Buffer {
+        self.inner
+    }
+
+    crate fn usage(&self) -> vk::BufferUsageFlags {
+        self.usage
+    }
+}
+
+/// A suballocation of a VkBuffer object.
+#[derive(Clone, Debug)]
+crate struct BufferSuballoc {
+    buffer: Arc<DeviceBuffer>,
+    offset: vk::DeviceSize,
+    size: vk::DeviceSize,
+    chunk: u32,
+}
+
+impl BufferSuballoc {
+    crate fn buffer(&self) -> &Arc<DeviceBuffer> {
+        &self.buffer
     }
 
     crate fn buffer_info(&self) -> vk::DescriptorBufferInfo {
-        self.info.buffer_info()
-    }
-}
-
-/// This is a simple address-ordered FIFO allocator. It is somewhat
-/// low-level as it doesn't check for correct memory usage (i.e.
-/// linear/non-linear overlap).
-// TODO: Maybe store a map from allocation size to free blocks.
-// TODO: Stack-like allocation
-//
-#[derive(Debug)]
-crate struct MemoryPool {
-    device: Arc<Device>,
-    type_index: u32,
-    host_mapped: bool,
-    buffer_map: Option<BufferMapOptions>,
-    base_size: vk::DeviceSize,
-    capacity: vk::DeviceSize,
-    used: vk::DeviceSize,
-    chunks: Vec<Chunk>,
-    free: Vec<FreeBlock>,
-}
-
-impl Drop for MemoryPool {
-    fn drop(&mut self) {
-        for &chunk in self.chunks.iter() {
-            unsafe {
-                self.dt().destroy_buffer(chunk.buffer, ptr::null());
-                self.dt().free_memory(chunk.memory, ptr::null());
-            }
+        vk::DescriptorBufferInfo {
+            buffer: self.buffer.inner,
+            offset: self.offset,
+            range: self.size,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-crate struct BufferMapOptions {
-    crate usage: vk::BufferUsageFlags,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-crate struct MemoryPoolCreateInfo {
-    crate type_index: u32,
-    crate base_size: vk::DeviceSize,
-    /// Map all memory to host address space. Requires host visible
-    /// memory.
-    crate host_mapped: bool,
-    /// If provided, wraps all memory in a VkBuffer. Allocations will
-    /// alias a region of one of these buffers.
-    crate buffer_map: Option<BufferMapOptions>,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Chunk {
-    memory: vk::DeviceMemory,
-    buffer: vk::Buffer,
-    size: vk::DeviceSize,
-    ptr: *mut c_void,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct FreeBlock {
+struct Block {
     chunk: u32,
     start: vk::DeviceSize,
     end: vk::DeviceSize,
 }
 
-impl FreeBlock {
+impl Block {
+    fn offset(&self) -> vk::DeviceSize {
+        self.start
+    }
+
+    fn size(&self) -> vk::DeviceSize {
+        self.end - self.start
+    }
+
     fn is_empty(&self) -> bool {
         self.start == self.end
     }
 }
 
-impl MemoryPool {
-    crate unsafe fn new(
-        device: Arc<Device>,
-        create_info: MemoryPoolCreateInfo,
-    ) -> Self {
-        let mem = MemoryPool {
-            device,
-            type_index: create_info.type_index,
-            host_mapped: create_info.host_mapped,
-            buffer_map: create_info.buffer_map,
-            base_size: create_info.base_size,
-            capacity: 0,
-            used: 0,
-            chunks: Vec::new(),
-            free: Vec::new(),
-        };
-        println!();
-        assert!(mem.type_index < mem.device.mem_props.memory_type_count);
-        assert!(!mem.host_mapped() ||
-            mem.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT));
-        mem
+/// Address-ordered FIFO allocation algorithm.
+#[derive(Debug, Default)]
+struct FreeListAllocator {
+    capacity: vk::DeviceSize,
+    used: vk::DeviceSize,
+    // List of chunk sizes
+    chunks: Vec<vk::DeviceSize>,
+    free: Vec<Block>,
+}
+
+impl FreeListAllocator {
+    fn new() -> Self {
+        Default::default()
     }
 
-    crate fn device(&self) -> &Arc<Device> {
-        &self.device
-    }
-
-    // Guarantees that each allocation is aligned to `quantum` bytes and
-    // is a multiple of `quantum` in length. This is transparent to the
-    // user, who sees exactly the size they requested.
-    fn quantum(&self) -> vk::DeviceSize {
-        // sizeof(vec4) seems like a good choice
-        16
-    }
-
-    crate fn host_mapped(&self) -> bool {
-        self.host_mapped
-    }
-
-    crate fn buffer_mapped(&self) -> bool {
-        self.buffer_map.is_some()
-    }
-
-    crate fn buffer_map(&self) -> Option<&BufferMapOptions> {
-        self.buffer_map.as_ref()
-    }
-
-    crate fn flags(&self) -> vk::MemoryPropertyFlags {
-        self.device.mem_props.memory_types[self.type_index as usize]
-            .property_flags
-    }
-
-    crate fn used(&self) -> vk::DeviceSize {
+    fn used(&self) -> vk::DeviceSize {
         self.used
     }
 
-    crate fn capacity(&self) -> vk::DeviceSize {
+    fn capacity(&self) -> vk::DeviceSize {
         self.capacity
     }
 
-    crate unsafe fn grow(&mut self, size: vk::DeviceSize) {
-        let dt = self.dt();
-
-        let alloc_info = vk::MemoryAllocateInfo {
-            allocation_size: size,
-            memory_type_index: self.type_index,
-            ..Default::default()
-        };
-        let mut memory = vk::null();
-        dt.allocate_memory(&alloc_info, ptr::null(), &mut memory)
-            .check().expect("failed to allocate device memory");
-
-        let mut ptr = 0usize as *mut c_void;
-        if self.host_mapped {
-            let flags = Default::default();
-            dt.map_memory(memory, 0, size, flags, &mut ptr)
-                .check().expect("failed to map device memory");
-        }
-
-        let mut buffer = vk::null();
-        if let Some(ref opts) = &self.buffer_map {
-            let create_info = vk::BufferCreateInfo {
-                size,
-                usage: opts.usage,
-                ..Default::default()
-            };
-            dt.create_buffer(&create_info, ptr::null(), &mut buffer)
-                .check().unwrap();
-
-            let mut reqs = vk::MemoryRequirements::default();
-            dt.get_buffer_memory_requirements(buffer, &mut reqs);
-            assert_eq!(reqs.size, size);
-            assert!(
-                compatible_type(reqs.memory_type_bits, self.type_index),
-                "type_index: {}, memory_type_bits: 0b{:b}",
-                self.type_index, reqs.memory_type_bits,
-            );
-
-            dt.bind_buffer_memory(buffer, memory, 0).check().unwrap();
-        }
-
-        self.chunks.push(Chunk { memory, buffer, size, ptr });
-        self.free.push(FreeBlock {
+    fn add_chunk(&mut self, size: vk::DeviceSize) {
+        self.capacity += size;
+        self.chunks.push(size);
+        self.free.push(Block {
             chunk: (self.chunks.len() - 1) as _,
             start: 0,
             end: size,
         });
-
-        self.capacity += size;
     }
 
     fn carve_block(&mut self, index: usize, range: Range<vk::DeviceSize>) {
@@ -323,14 +295,13 @@ impl MemoryPool {
         // Resize/cull old block
         let mut block = &mut self.free[index];
         block.start = range.end;
-        // TODO: Reverse free list order so we remove from the end
-        // rather than the beginning.
+        // TODO: Reverse free list order to prefer removal near end
         if block.is_empty() { self.free.remove(index); }
 
         // Insert padding block if necessary
         let chunk_idx = old_block.chunk;
         if range.start > old_block.start {
-            let block = FreeBlock {
+            let block = Block {
                 chunk: chunk_idx,
                 start: old_block.start,
                 end: range.start,
@@ -339,75 +310,46 @@ impl MemoryPool {
         }
     }
 
-    fn try_alloc(
+    fn alloc_in(
         &mut self,
-        idx: usize,
+        block_idx: usize,
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
-    ) -> Option<(u32, vk::DeviceSize)> {
-        let block = &self.free[idx];
+    ) -> Option<Block> {
+        let block = &self.free[block_idx];
         let offset = align(alignment, block.start);
         if offset + size > block.end { return None; }
         let chunk = block.chunk;
-        self.carve_block(idx, offset..offset + size);
-        Some((chunk, offset))
+        self.carve_block(block_idx, offset..offset + size);
+        Some(Block {
+            chunk,
+            start: offset,
+            end: offset + size,
+        })
     }
 
-    /// Allocates a chunk of memory without binding a resource to it.
-    crate unsafe fn allocate(
+    unsafe fn alloc(
         &mut self,
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
-    ) -> DeviceAlloc {
-        // TODO: make alignment comply with
-        // minStorageBufferOffsetAlignment etc.
-        let alignment = std::cmp::max(alignment, self.quantum());
-        let padded_size = align(size, self.quantum());
-        let (chunk_idx, offset) = (0..self.free.len())
-            .find_map(|idx| self.try_alloc(idx, padded_size, alignment))
-            .or_else(|| {
-                // Didn't find a block; allocate a new chunk and put the
-                // allocation there.
-                self.grow(align(self.base_size, padded_size));
-                self.try_alloc(self.free.len() - 1, padded_size, alignment)
-            })
-            .unwrap();
-        let chunk = self.chunks[chunk_idx as usize];
-        let ptr = if !chunk.ptr.is_null() { chunk.ptr.add(offset as _) }
-            else { 0usize as _ };
-        DeviceAlloc {
-            info: AllocInfo {
-                memory: chunk.memory,
-                offset,
-                size,
-                buffer: chunk.buffer,
-                buf_offset: offset,
-                ptr,
-            },
-            chunk_idx,
-        }
+    ) -> Option<Block> {
+        let aligned_size = align(alignment, size);
+        let block = (0..self.free.len())
+            .find_map(|block| self.alloc_in(block, aligned_size, alignment))?;
+        Some(block)
     }
 
-    crate unsafe fn alloc_with_reqs(&mut self, reqs: vk::MemoryRequirements) ->
-        DeviceAlloc
-    {
-        assert!(compatible_type(reqs.memory_type_bits, self.type_index));
-        self.allocate(reqs.size, reqs.alignment)
-    }
-
-    /// Frees a memory allocation, if possible. If any resource is still
-    /// bound to that memory, it may alias a future allocation that
-    /// overlaps the same range.
-    crate unsafe fn free(&mut self, alloc: DeviceAlloc) {
-        let chunk = alloc.chunk_idx;
-        assert_eq!(self.chunks[chunk as usize].memory, alloc.memory());
-        let info = alloc.info();
-        let start = info.offset;
-        let end = align(self.quantum(), info.end());
+    fn free(&mut self, block: Block) {
+        let chunk = block.chunk;
+        let start = block.start;
+        let end = block.end;
 
         self.used -= end - start;
 
-        // TODO: Optimize search and insertion
+        // Find insertion point
+        // TODO: Binary search
+        // TODO: If fragmentation is not an issue in practice, it might
+        // not even be necessary to sort the free list
         let mut idx = self.free.len();
         for i in 0..self.free.len() {
             let block = self.free[i];
@@ -417,23 +359,24 @@ impl MemoryPool {
             }
         }
 
-        // Found insertion point
+        // Detect adjacent blocks
         let merge_left = if idx > 0 {
             let left = self.free[idx - 1];
+            assert!(left.chunk <= chunk);
+            assert!((left.chunk < chunk) | (left.end <= start));
             (left.chunk == chunk) & (left.end == start)
         } else { false };
         let merge_right = if idx < self.free.len() {
             let right = self.free[idx];
+            assert!(chunk <= right.chunk);
+            assert!((chunk < right.chunk) | (end <= right.start));
             (right.chunk == chunk) & (end == right.start)
         } else { false };
 
+        // Perform the insertion
         match (merge_left, merge_right) {
             (false, false) =>
-                self.free.insert(idx, FreeBlock {
-                    chunk,
-                    start,
-                    end,
-                }),
+                self.free.insert(idx, Block { chunk, start, end }),
             (true, false) => self.free[idx - 1].end = end,
             (false, true) => self.free[idx].start = start,
             (true, true) => {
@@ -443,50 +386,276 @@ impl MemoryPool {
         }
     }
 
-    crate fn clear(&mut self) {
+    fn clear(&mut self) {
         self.free.clear();
         self.used = 0;
-        for (i, chunk) in self.chunks.iter().enumerate() {
-            self.free.push(FreeBlock {
+        for (i, &size) in self.chunks.iter().enumerate() {
+            self.free.push(Block {
                 chunk: i as _,
                 start: 0,
-                end: chunk.size,
+                end: size,
             });
         }
     }
+}
 
-    fn dt(&self) -> &vkl::DeviceTable {
-        &self.device.table
+#[derive(Debug)]
+crate struct HeapPool {
+    device: Arc<Device>,
+    type_index: u32,
+    tiling: Tiling,
+    allocator: FreeListAllocator,
+    chunks: Vec<Arc<DeviceMemory>>,
+}
+
+impl Drop for HeapPool {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        unsafe {
+            for chunk in self.chunks.iter() {
+                assert_eq!(Arc::strong_count(chunk), 1,
+                    "allocation still in use: {:?}", chunk);
+                dt.free_memory(chunk.inner, ptr::null());
+            }
+        }
+    }
+}
+
+impl HeapPool {
+    fn new(
+        device: Arc<Device>,
+        type_index: u32,
+        tiling: Tiling,
+    ) -> Self {
+        HeapPool {
+            device,
+            type_index,
+            tiling,
+            allocator: Default::default(),
+            chunks: Vec::new(),
+        }
     }
 
-    // TODO: dedicated allocations
-    /// Binds a buffer to newly allocated memory.
-    crate unsafe fn alloc_buffer_memory(&mut self, buffer: vk::Buffer) ->
-        DeviceAlloc
+    fn used(&self) -> vk::DeviceSize {
+        self.allocator.used()
+    }
+
+    fn reserved(&self) -> vk::DeviceSize {
+        self.allocator.capacity()
+    }
+
+    fn memory_type(&self) -> &vk::MemoryType {
+        &self.device.mem_props
+            .memory_types[self.type_index as usize]
+    }
+
+    fn heap_index(&self) -> u32 {
+        self.memory_type().heap_index
+    }
+
+    fn has_flags(&self, flags: vk::MemoryPropertyFlags) -> bool {
+        self.memory_type()
+            .property_flags
+            .contains(flags)
+    }
+
+    fn host_visible(&self) -> bool {
+        self.has_flags(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT)
+    }
+
+    fn mapped(&self) -> bool {
+        self.host_visible()
+    }
+
+    fn chunk_size(&self) -> vk::DeviceSize {
+        0x100_0000
+    }
+
+    fn min_alignment(&self) -> vk::DeviceSize {
+        32
+    }
+
+    unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
+        let chunk = self.chunks.len() as u32;
+        let size = align(self.chunk_size(), min_size);
+        let inner = alloc_device_memory(&self.device, size, self.type_index);
+        let mut mem = DeviceMemory {
+            inner,
+            size,
+            type_index: self.type_index,
+            ptr: 0 as _,
+            tiling: self.tiling,
+            chunk,
+        };
+        if self.mapped() { mem.map(&self.device); }
+        self.chunks.push(Arc::new(mem));
+        self.allocator.add_chunk(size);
+    }
+
+    unsafe fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize)
+        -> DeviceAlloc
     {
+        let alignment = std::cmp::max(self.min_alignment(), alignment);
+        let size = align(alignment, size);
+        let block = self.allocator.alloc(size, alignment)
+            .or_else(|| {
+                self.add_chunk(size);
+                self.allocator.alloc(size, alignment)
+            })
+            .unwrap();
+        let chunk = block.chunk;
+        let memory = Arc::clone(&self.chunks[chunk as usize]);
+        DeviceAlloc {
+            memory,
+            offset: block.offset(),
+            size: block.size(),
+        }
+    }
+
+    fn free(&mut self, alloc: DeviceAlloc) {
+        // Make sure the allocation comes from this pool
+        assert!(Arc::ptr_eq(
+            &alloc.memory,
+            &self.chunks[alloc.memory.chunk as usize],
+        ));
+        self.allocator.free(alloc.block());
+    }
+
+    fn clear(&mut self) {
+        self.allocator.clear()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+crate struct HeapInfo {
+    reserved: vk::DeviceSize,
+    used: vk::DeviceSize,
+}
+
+#[derive(Debug)]
+crate struct DeviceHeap {
+    device: Arc<Device>,
+    // One pool per memory type per tiling
+    pools: Vec<EnumMap<Tiling, HeapPool>>,
+    heaps: Vec<HeapInfo>,
+}
+
+// TODO: dedicated allocations
+impl DeviceHeap {
+    crate fn new(device: Arc<Device>) -> Self {
+        let pools: Vec<EnumMap<_, _>> = iter_memory_types(&device)
+            .enumerate()
+            .map(|(idx, _)| (|tiling| HeapPool::new(
+                Arc::clone(&device),
+                idx as _,
+                tiling,
+            )).into())
+            .collect();
+        let heap_count = device.mem_props.memory_heap_count as usize;
+        let heaps = vec![Default::default(); heap_count];
+        DeviceHeap {
+            device,
+            pools,
+            heaps,
+        }
+    }
+
+    fn chunk_size() -> vk::DeviceSize {
+        0x100_0000
+    }
+
+    fn pool_mut(&mut self, type_idx: u32, tiling: Tiling) -> &mut HeapPool {
+        &mut self.pools[type_idx as usize][tiling]
+    }
+
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    fn dt(&self) -> &vkl::DeviceTable {
+        &*self.device.table
+    }
+
+    fn update_heaps(&mut self) {
+        for heap in self.heaps.iter_mut() {
+            heap.reserved = 0;
+            heap.used = 0;
+        }
+        for pool in self.pools.iter().flat_map(|x| x.values()) {
+            let heap = &mut self.heaps[pool.heap_index() as usize];
+            heap.reserved += pool.reserved();
+            heap.used += pool.used();
+        }
+    }
+
+    crate fn heaps(&mut self) -> &[HeapInfo] {
+        self.update_heaps();
+        &self.heaps
+    }
+
+    crate unsafe fn alloc(
+        &mut self,
+        reqs: vk::MemoryRequirements,
+        tiling: Tiling,
+        mapped: bool,
+    ) -> DeviceAlloc {
+        let flags = if mapped {
+            // TODO: cached incoherent memory
+            vk::MemoryPropertyFlags::HOST_VISIBLE_BIT
+                | vk::MemoryPropertyFlags::HOST_COHERENT_BIT
+        } else {
+            vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT
+        };
+
+        // TODO: fall back to less restrictive flags on failure
+        let type_idx = find_memory_type(
+            &*self.device,
+            flags,
+            reqs.memory_type_bits,
+        ).unwrap();
+
+        self.pool_mut(type_idx, tiling).alloc(reqs.size, reqs.alignment)
+    }
+
+    /// Binds a buffer to newly allocated memory.
+    crate unsafe fn alloc_buffer_memory(
+        &mut self,
+        buffer: vk::Buffer,
+        mapped: bool,
+    ) -> DeviceAlloc {
         let mut reqs = Default::default();
         self.dt().get_buffer_memory_requirements(buffer, &mut reqs);
-        let alloc = self.alloc_with_reqs(reqs);
+        let alloc = self.alloc(reqs, Tiling::Linear, mapped);
 
-        let &AllocInfo { memory, offset, .. } = alloc.info();
+        let memory = alloc.memory().inner();
+        let offset = alloc.offset();
         self.dt().bind_buffer_memory(buffer, memory, offset).check().unwrap();
 
         alloc
     }
 
-    // TODO: dedicated allocations
     /// Binds an image to newly allocated memory.
-    crate unsafe fn alloc_image_memory(&mut self, image: vk::Image) ->
-        DeviceAlloc
-    {
+    // TODO: Image tiling is assumed nonlinear
+    crate unsafe fn alloc_image_memory(
+        &mut self,
+        image: vk::Image,
+        mapped: bool,
+    ) -> DeviceAlloc {
         let mut reqs = Default::default();
         self.dt().get_image_memory_requirements(image, &mut reqs);
-        let alloc = self.alloc_with_reqs(reqs);
+        let alloc = self.alloc(reqs, Tiling::Nonlinear, mapped);
 
-        let &AllocInfo { memory, offset, .. } = alloc.info();
+        let memory = alloc.memory().inner();
+        let offset = alloc.offset();
         self.dt().bind_image_memory(image, memory, offset).check().unwrap();
 
         alloc
+    }
+
+    crate fn free(&mut self, alloc: DeviceAlloc) {
+        let type_index = alloc.memory().type_index();
+        let tiling = alloc.memory().tiling();
+        self.pool_mut(type_index, tiling).free(alloc);
     }
 }
 
@@ -495,53 +664,23 @@ mod tests {
     use vk::traits::*;
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn device_heap_smoke(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
+        let mut heap = DeviceHeap::new(device);
 
-        let flags = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
-        let type_index = find_memory_type(&device, flags).unwrap();
-        let create_info = MemoryPoolCreateInfo {
-            type_index,
-            base_size: 0x100_0000,
-            ..Default::default()
+        let reqs = vk::MemoryRequirements {
+            size: 4096,
+            alignment: 256,
+            memory_type_bits: !0,
         };
-        let mut memory = MemoryPool::new(device, create_info);
-
-        let alloc0 = memory.allocate(0x1000, 0x100);
-        let alloc1 = memory.allocate(0x1000, 0x100);
-
-        assert!(memory.capacity() >= 0x2000);
-
-        let info0 = alloc0.info();
-        let info1 = alloc1.info();
-
-        assert!(!info0.memory.is_null());
-        assert_eq!(info0.memory, info1.memory);
-
-        assert_eq!(info0.size, 0x1000);
-        assert_eq!(info1.size, info0.size);
-
-        assert_eq!(info0.offset, 0);
-        assert_eq!(info1.offset, info0.size);
-
-        assert!(info0.ptr.is_null());
-        assert!(info0.buffer.is_null());
-
-        assert_eq!(memory.used(), 0x2000);
-        memory.free(alloc0);
-        assert_eq!(memory.used(), 0x1000);
-        memory.free(alloc1);
-        assert_eq!(memory.used(), 0);
-
-        memory.allocate(0x1000, 0x100);
-        memory.allocate(0x1000, 0x100);
-        assert_eq!(memory.used(), 0x2000);
-        memory.clear();
-        assert_eq!(memory.used(), 0);
+        let _alloc0 = heap.alloc(reqs, Tiling::Linear, true);
+        let _alloc1 = heap.alloc(reqs, Tiling::Nonlinear, false);
+        assert_ne!(_alloc0.as_raw(), 0 as _);
+        heap.free(_alloc0);
     }
 
     unit::declare_tests![
-        smoke_test,
+        device_heap_smoke,
     ];
 }
 

@@ -1,5 +1,3 @@
-#![feature(non_exhaustive)]
-#![feature(option_flattening)]
 #![feature(set_stdio)]
 
 use enum_map::Enum;

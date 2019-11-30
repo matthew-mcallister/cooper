@@ -11,6 +11,7 @@ harness = false
 [dependencies]
 ccore = { path = "../core", package = "cooper-core" }
 derive_more = "0.15"
+enum-map = "^0.6.1"
 fnv = "1.0"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }

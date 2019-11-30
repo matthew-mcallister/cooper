@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::Arc;
 
-use ccore::name::*;
+use ccore::Name;
 
 use crate::*;
 
@@ -99,7 +99,7 @@ impl Attachment {
 #[derive(Debug)]
 crate struct Framebuffer {
     device: Arc<Device>,
-    pass: Name,
+    pass: Arc<RenderPass>,
     attachments: Vec<Arc<Attachment>>,
     inner: vk::Framebuffer,
 }
@@ -114,14 +114,11 @@ impl Drop for Framebuffer {
 }
 
 unsafe fn create_framebuffer(
-    core: &CoreData,
-    render_pass: Name,
+    render_pass: Arc<RenderPass>,
     attachments: Vec<Arc<Attachment>>,
 ) -> Framebuffer {
-    let device: Arc<Device> = Arc::clone(core.device());
+    let device: Arc<Device> = Arc::clone(render_pass.device());
     let dt = &*device.table;
-    let render_pass_id = render_pass;
-    let render_pass = core.get_pass(render_pass_id);
 
     assert_eq!(attachments.len(), render_pass.attachments().len());
     for (attch, desc) in attachments.iter()
@@ -154,7 +151,7 @@ unsafe fn create_framebuffer(
 
     Framebuffer {
         device,
-        pass: render_pass_id,
+        pass: Arc::clone(&render_pass),
         attachments,
         inner,
     }
@@ -162,11 +159,10 @@ unsafe fn create_framebuffer(
 
 impl Framebuffer {
     crate unsafe fn new(
-        core: &CoreData,
-        render_pass: Name,
+        render_pass: Arc<RenderPass>,
         attachments: Vec<Arc<Attachment>>,
     ) -> Self {
-        create_framebuffer(core, render_pass, attachments)
+        create_framebuffer(render_pass, attachments)
     }
 
     crate fn device(&self) -> &Arc<Device> {
@@ -177,8 +173,8 @@ impl Framebuffer {
         self.inner
     }
 
-    crate fn pass(&self) -> Name {
-        self.pass
+    crate fn pass(&self) -> &Arc<RenderPass> {
+        &self.pass
     }
 
     crate fn attachments(&self) -> &[Arc<Attachment>] {

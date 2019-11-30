@@ -1,6 +1,5 @@
 #![feature(arbitrary_self_types)]
 #![feature(crate_visibility_modifier)]
-#![feature(non_exhaustive)]
 #![feature(seek_convenience)]
 #![feature(try_blocks)]
 
@@ -12,12 +11,12 @@ macro_rules! test_type {
 }
 
 mod cor;
-mod render_loop;
-mod triangle;
+//mod render_loop;
+//mod triangle;
 
 pub use cor::*;
-pub use render_loop::*;
-crate use triangle::*;
+//pub use render_loop::*;
+//crate use triangle::*;
 
 pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
     vk::ClearValue {

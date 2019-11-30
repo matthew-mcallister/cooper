@@ -1,18 +1,24 @@
 use std::ptr;
+use std::sync::Arc;
 
-use ccore::name::*;
+use ccore::Name;
 use fnv::FnvHashMap;
 
 use crate::*;
 
 #[derive(Debug)]
 crate struct RenderPass {
+    device: Arc<Device>,
     inner: vk::RenderPass,
     attachments: Vec<vk::AttachmentDescription>,
     subpasses: FnvHashMap<Name, u32>,
 }
 
 impl RenderPass {
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     crate fn inner(&self) -> vk::RenderPass {
         self.inner
     }
@@ -27,7 +33,7 @@ impl RenderPass {
 }
 
 crate unsafe fn create_render_pass(
-    device: &Device,
+    device: Arc<Device>,
     create_info: &vk::RenderPassCreateInfo,
     subpass_names: Vec<Name>,
 ) -> RenderPass {
@@ -49,6 +55,7 @@ crate unsafe fn create_render_pass(
     assert_eq!(subpasses.len(), num_subpasses, "duplicate subpass name");
 
     RenderPass {
+        device,
         inner: render_pass,
         attachments,
         subpasses,

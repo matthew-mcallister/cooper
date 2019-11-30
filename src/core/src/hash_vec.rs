@@ -129,6 +129,14 @@ impl<K: Hash + Eq, V: Zero, S: BuildHasher> HashVector<K, V, S> {
     }
 }
 
+impl<A, K, V, S> std::iter::FromIterator<A> for HashVector<K, V, S>
+    where HashMap<K, V, S>: std::iter::FromIterator<A>
+{
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        HashMap::from_iter(iter).into()
+    }
+}
+
 impl<K, V, S> PartialEq for HashVector<K, V, S>
 where
     K: Hash + Eq,

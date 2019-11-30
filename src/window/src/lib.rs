@@ -5,7 +5,6 @@
 //! objects.
 
 #![feature(arbitrary_self_types)]
-#![feature(non_exhaustive)]
 #![feature(optin_builtin_traits)]
 
 #[cfg(test)]

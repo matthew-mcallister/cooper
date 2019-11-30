@@ -1,68 +1,103 @@
 use std::ptr;
 use std::sync::Arc;
 
-use ccore::name::*;
+use ccore::{HashVector, Sentinel};
 use fnv::FnvHashMap;
-use parking_lot::{Mutex, RwLock};
 
 use crate::*;
 
 // Sorry if this causes more confusion than good
 use self::{
-    DescriptorAllocator as Allocator, DescriptorCounts as Counts,
+    DescriptorCounts as Counts, DescriptorPool as Pool,
     DescriptorSet as Set, DescriptorSetLayout as Layout,
 };
 
-/// Maps descriptor type to descriptor count for a set layout.
-#[derive(Clone, Debug)]
-crate struct DescriptorCounts {
-    crate inner: FnvHashMap<vk::DescriptorType, u32>,
+type DescriptorCounts = HashVector<vk::DescriptorType, u32>;
+
+crate fn pool_sizes(counts: &DescriptorCounts) -> Vec<vk::DescriptorPoolSize> {
+    counts.iter()
+        .map(|(&ty, &descriptor_count)| {
+            vk::DescriptorPoolSize { ty, descriptor_count }
+        })
+        .collect()
 }
 
-impl Counts {
-    crate fn pool_sizes(&self, multiplier: u32) -> Vec<vk::DescriptorPoolSize> {
-        self.inner.iter()
-            .map(|(&ty, &count)| vk::DescriptorPoolSize {
-                ty,
-                descriptor_count: count * multiplier,
-            })
-            .collect()
-    }
-
-    crate fn from_bindings(bindings: &[vk::DescriptorSetLayoutBinding]) -> Self {
-        let mut inner = FnvHashMap::default();
-        for binding in bindings.iter() {
-            let ty = binding.descriptor_type;
-            let count = binding.descriptor_count;
-            *inner.entry(ty).or_insert(0) += count;
-        }
-        Counts { inner }
-    }
+crate fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) ->
+    Counts
+{
+    bindings.iter()
+        .map(|binding| (binding.descriptor_type, binding.descriptor_count))
+        .sum()
 }
 
-/// Tells the allocator how to allocate sets of a particular layout.
-#[derive(Clone, Copy, Debug)]
-crate struct DescriptorSetAllocPolicy {
-    crate pool_size: u32,
+/// Returns a reasonable number of descriptor sets and pool sizes for
+/// a global descriptor pool.
+crate fn global_descriptor_counts() -> (u32, Counts) {
+    let max_sets = 0x1_0000;
+    let max_descs = [
+        (vk::DescriptorType::SAMPLER,                   1 * max_sets),
+        (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),
+        (vk::DescriptorType::SAMPLED_IMAGE,             8 * max_sets),
+        (vk::DescriptorType::STORAGE_IMAGE,             1 * max_sets),
+        (vk::DescriptorType::UNIFORM_TEXEL_BUFFER,      1 * max_sets),
+        (vk::DescriptorType::STORAGE_TEXEL_BUFFER,      1 * max_sets),
+        (vk::DescriptorType::UNIFORM_BUFFER,            1 * max_sets),
+        (vk::DescriptorType::STORAGE_BUFFER,            1 * max_sets),
+        (vk::DescriptorType::INPUT_ATTACHMENT,          256),
+    ].iter().cloned().collect();
+    (max_sets, max_descs)
 }
 
-impl Default for DescriptorSetAllocPolicy {
-    fn default() -> Self {
-        DescriptorSetAllocPolicy {
-            pool_size: 256,
-        }
-    }
+crate unsafe fn create_global_pool(device: Arc<Device>) -> DescriptorPool {
+    let (max_sets, max_descriptors) = global_descriptor_counts();
+    let pool_sizes = pool_sizes(&max_descriptors);
+    let create_info = vk::DescriptorPoolCreateInfo {
+        flags: vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT,
+        max_sets,
+        pool_size_count: pool_sizes.len() as _,
+        p_pool_sizes: pool_sizes.as_ptr(),
+        ..Default::default()
+    };
+    DescriptorPool::new(device, &create_info)
 }
 
 #[derive(Clone, Debug)]
 crate struct DescriptorSetLayout {
+    device: Arc<Device>,
     inner: vk::DescriptorSetLayout,
     flags: vk::DescriptorSetLayoutCreateFlags,
     counts: Counts,
-    alloc_policy: DescriptorSetAllocPolicy,
+}
+
+impl Drop for DescriptorSetLayout {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        unsafe { dt.destroy_descriptor_set_layout(self.inner, ptr::null()); }
+    }
 }
 
 impl Layout {
+    crate unsafe fn new(
+        device: Arc<Device>,
+        create_info: &vk::DescriptorSetLayoutCreateInfo,
+    ) -> Self {
+        create_descriptor_set_layout(device, &create_info)
+    }
+
+    crate unsafe fn from_bindings(
+        device: Arc<Device>,
+        flags: vk::DescriptorSetLayoutCreateFlags,
+        bindings: &[vk::DescriptorSetLayoutBinding],
+    ) -> Self {
+        let create_info = vk::DescriptorSetLayoutCreateInfo {
+            flags,
+            binding_count: bindings.len() as _,
+            p_bindings: bindings.as_ptr(),
+            ..Default::default()
+        };
+        Self::new(device, &create_info)
+    }
+
     crate fn inner(&self) -> vk::DescriptorSetLayout {
         self.inner
     }
@@ -75,11 +110,7 @@ impl Layout {
         &self.counts
     }
 
-    crate fn alloc_policy(&self) -> &DescriptorSetAllocPolicy {
-        &self.alloc_policy
-    }
-
-    crate fn pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
+    crate fn required_pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
         let mut flags = Default::default();
 
         let update_after_bind =
@@ -90,64 +121,35 @@ impl Layout {
 
         flags
     }
-
-    unsafe fn create_pool(&self, device: &Device, size: u32) ->
-        vk::DescriptorPool
-    {
-        create_pool(device, self, size)
-    }
 }
 
-crate unsafe fn create_descriptor_set_layout(
-    device: &Device,
+unsafe fn create_descriptor_set_layout(
+    device: Arc<Device>,
     create_info: &vk::DescriptorSetLayoutCreateInfo,
-    alloc_policy: DescriptorSetAllocPolicy,
 ) -> DescriptorSetLayout {
     let dt = &*device.table;
     let bindings = std::slice::from_raw_parts(
         create_info.p_bindings,
         create_info.binding_count as _,
     );
-    let counts = Counts::from_bindings(bindings);
+    let counts = count_descriptors(bindings);
     let flags = create_info.flags;
     let mut inner = vk::null();
     dt.create_descriptor_set_layout(create_info, ptr::null(), &mut inner)
         .check().unwrap();
     DescriptorSetLayout {
+        device,
         inner,
         flags,
         counts,
-        alloc_policy,
     }
-}
-
-unsafe fn create_pool(device: &Device, layout: &Layout, size: u32) ->
-    vk::DescriptorPool
-{
-    let dt = &device.table;
-
-    let pool_sizes = layout.counts.pool_sizes(size);
-    let flags = layout.pool_flags();
-
-    let create_info = vk::DescriptorPoolCreateInfo {
-        flags,
-        max_sets: size,
-        pool_size_count: pool_sizes.len() as _,
-        p_pool_sizes: pool_sizes.as_ptr(),
-        ..Default::default()
-    };
-    let mut inner = vk::null();
-    dt.create_descriptor_pool(&create_info, ptr::null(), &mut inner)
-        .check().unwrap();
-
-    inner
 }
 
 #[derive(Debug)]
 crate struct DescriptorSet {
+    layout: Arc<DescriptorSetLayout>,
+    sentinel: Sentinel,
     inner: vk::DescriptorSet,
-    key: Name,
-    pool: usize,
 }
 
 impl DescriptorSet {
@@ -155,28 +157,101 @@ impl DescriptorSet {
         self.inner
     }
 
-    crate fn layout(&self) -> Name {
-        self.key
+    crate fn layout(&self) -> &Arc<DescriptorSetLayout> {
+        &self.layout
     }
 }
 
+/// Fixed-size general-purpose descriptor pool.
 #[derive(Debug)]
-struct Subpool {
+crate struct DescriptorPool {
+    device: Arc<Device>,
     inner: vk::DescriptorPool,
-    size: u32,
+    flags: vk::DescriptorPoolCreateFlags,
+    // Provides a reference count for safety
+    sentinel: Sentinel,
+    // Note: limits are not hard but are informative
+    max_sets: u32,
+    used_sets: u32,
+    max_descriptors: Counts,
+    used_descriptors: Counts,
 }
 
-impl Subpool {
-    unsafe fn alloc_sets(
-        &self,
-        device: &Device,
-        layout: vk::DescriptorSetLayout,
-    ) -> Vec<vk::DescriptorSet> {
-        let dt = &*device.table;
-        let count = self.size;
+impl Drop for Pool {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        assert!(!self.sentinel.in_use());
+        unsafe { dt.destroy_descriptor_pool(self.inner, ptr::null()); }
+    }
+}
 
+impl Pool {
+    crate unsafe fn new(
+        device: Arc<Device>,
+        create_info: &vk::DescriptorPoolCreateInfo,
+    ) -> Self {
+        let dt = &*device.table;
+
+        assert!(create_info.max_sets > 0);
+        let pool_sizes = std::slice::from_raw_parts(
+            create_info.p_pool_sizes,
+            create_info.pool_size_count as usize,
+        );
+        let max_descriptors = pool_sizes.iter()
+            .map(|pool_size| (pool_size.ty, pool_size.descriptor_count))
+            .collect();
+
+        let mut inner = vk::null();
+        dt.create_descriptor_pool(create_info, ptr::null(), &mut inner)
+            .check().unwrap();
+
+        DescriptorPool {
+            device,
+            inner,
+            flags: create_info.flags,
+            sentinel: Sentinel::new(),
+            max_sets: create_info.max_sets,
+            used_sets: 0,
+            max_descriptors,
+            used_descriptors: Default::default(),
+        }
+    }
+
+    crate fn can_free(&self) -> bool {
+        let flag = vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT;
+        self.flags.contains(flag)
+    }
+
+    crate fn max_sets(&self) -> u32 {
+        self.max_sets
+    }
+
+    crate fn used_sets(&self) -> u32 {
+        self.used_sets
+    }
+
+    crate fn max_descriptors(&self) -> &Counts {
+        &self.max_descriptors
+    }
+
+    crate fn used_descriptors(&self) -> &Counts {
+        &self.used_descriptors
+    }
+
+    crate unsafe fn alloc_many(
+        &mut self,
+        layout: &Arc<DescriptorSetLayout>,
+        count: u32,
+    ) -> Vec<DescriptorSet> {
+        assert!(self.flags.contains(layout.required_pool_flags()));
+
+        self.used_sets += count;
+        self.used_descriptors += layout.counts() * count;
+
+        // XXX: use smallvec here
+        let dt = &*self.device.table;
         let mut sets = vec![vk::null(); count as usize];
-        let layouts = vec![layout; count as usize];
+        let layouts = vec![layout.inner(); count as usize];
         let alloc_info = vk::DescriptorSetAllocateInfo {
             descriptor_pool: self.inner,
             descriptor_set_count: count,
@@ -185,217 +260,125 @@ impl Subpool {
         };
         dt.allocate_descriptor_sets(&alloc_info, sets.as_mut_ptr())
             .check().unwrap();
-        sets
-    }
-}
 
-/// Acts like a dynamically growing descriptor pool.
-/// TODO: It would be more efficient to separate pools from layouts.
-#[derive(Debug)]
-struct Suballocator {
-    device: Arc<Device>,
-    free: Vec<Set>,
-    sub_pools: Vec<Subpool>,
-    layout: *const Layout,
-    key: Name,
-}
-
-impl Suballocator {
-    unsafe fn grow_by(&mut self, size: u32) {
-        assert!(size > 0);
-        let device = &*self.device;
-        let layout = &*self.layout; // raw deref here
-        let key = self.key;
-
-        // Add new descriptor pool
-        let pool_inner = layout.create_pool(device, size);
-        let pool = Subpool { inner: pool_inner, size };
-
-        // Allocate all possible sets
-        let sets = pool.alloc_sets(device, layout.inner);
-
-        // Add to free list
-        let pool_idx = self.sub_pools.len();
-        let sets = sets.into_iter()
-            .map(|inner| Set {
+        sets.into_iter().map(|inner| {
+            DescriptorSet {
+                layout: layout.clone(),
+                sentinel: self.sentinel.clone(),
                 inner,
-                key,
-                pool: pool_idx,
-            });
-        self.free.extend(sets);
-
-        // Save the pool object
-        self.sub_pools.push(pool);
-    }
-
-    unsafe fn grow(&mut self) {
-        let layout = &*self.layout;
-        let size = layout.alloc_policy.pool_size;
-        self.grow_by(size);
-    }
-
-    unsafe fn allocate(&mut self) -> Set {
-        if let Some(set) = self.free.pop() {
-            return set;
-        }
-
-        self.grow();
-        self.free.pop().unwrap()
-    }
-
-    fn free(&mut self, set: Set) {
-        assert_eq!(set.key, self.key);
-        self.free.push(set);
-    }
-}
-
-#[derive(Debug)]
-crate struct DescriptorAllocator {
-    device: Arc<Device>,
-    // TODO: RwLock + HashMap + Mutex is seemingly inferior to a true
-    // concurrent hash map. Worth switching to?
-    sub_alloc: RwLock<FnvHashMap<Name, Mutex<Suballocator>>>,
-}
-
-unsafe impl Send for DescriptorAllocator {}
-unsafe impl Sync for DescriptorAllocator {}
-
-impl Drop for Allocator {
-    fn drop(&mut self) {
-        let dt = &*self.device.table;
-        unsafe {
-            for sub in self.sub_alloc.get_mut().values_mut() {
-                for pool in sub.get_mut().sub_pools.iter() {
-                    dt.destroy_descriptor_pool(pool.inner, ptr::null());
-                }
             }
-        }
-    }
-}
-
-impl Allocator {
-    crate fn new(device: Arc<Device>) -> Self {
-        Allocator {
-            device,
-            sub_alloc: RwLock::new(Default::default()),
-        }
+        }).collect()
     }
 
-    crate unsafe fn allocate(&self, layout: Name) -> Option<Set> {
-        Some(self.sub_alloc.read()
-            .get(&layout)?
-            .lock()
-            .allocate())
-    }
-
-    crate unsafe fn insert_alloc(&self, key: Name, layout: *const Layout) ->
-        Set
+    crate unsafe fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set
     {
-        self.sub_alloc.write()
-            .entry(key)
-            .or_insert_with(|| {
-                Mutex::new(Suballocator {
-                    device: Arc::clone(&self.device),
-                    free: Vec::new(),
-                    sub_pools: Vec::new(),
-                    layout,
-                    key,
-                })
-            })
-            .get_mut()
-            .allocate()
+        self.alloc_many(layout, 1).pop().unwrap()
     }
 
-    crate fn free(&self, set: Set) {
-        use std::ops::Index;
-        self.sub_alloc.read()
-            .index(&set.key)
-            .lock()
-            .free(set.into());
+    crate unsafe fn free(&mut self, set: Set) {
+        assert!(self.can_free());
+        assert_eq!(self.sentinel, set.sentinel);
+
+        self.used_sets -= 1;
+        self.used_descriptors -= set.layout.counts();
+
+        let dt = &*self.device.table;
+        let sets = std::slice::from_ref(&set.inner);
+        dt.free_descriptor_sets(self.inner, sets.len() as _, sets.as_ptr())
+            .check().unwrap();
+    }
+
+    crate unsafe fn reset(&mut self) {
+        assert!(!self.sentinel.in_use());
+        let dt = &*self.device.table;
+        dt.reset_descriptor_pool(self.inner, Default::default());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-    use ccore::name::*;
     use vk::traits::*;
+    use ccore::Name;
     use super::*;
+
+    unsafe fn create_test_set_layouts(device: &Arc<Device>) ->
+        fnv::FnvHashMap<Name, Arc<DescriptorSetLayout>>
+    {
+        let mut map = FnvHashMap::default();
+
+        let flags = Default::default();
+
+        let bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+                    | vk::ShaderStageFlags::FRAGMENT_BIT,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: 1,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+                ..Default::default()
+            },
+        ];
+        map.insert(
+            Name::new("scene_globals"),
+            Arc::new(DescriptorSetLayout::from_bindings(
+                Arc::clone(&device), flags, &bindings,
+            )),
+        );
+
+        let bindings = [vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 3,
+            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
+            ..Default::default()
+        }];
+        map.insert(
+            Name::new("material"),
+            Arc::new(DescriptorSetLayout::from_bindings(
+                Arc::clone(&device), flags, &bindings,
+            )),
+        );
+
+        map
+    }
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
-        let mut core_data = CoreData::new(device, &vars.queues, vars.config);
-        core_data.init();
-        let core_data = Arc::new(core_data);
 
-        let core = Arc::clone(&core_data);
-        let thread1 = thread::spawn(move || {
-            let layout = Name::new("scene_globals");
-            let set0 = core.alloc_desc_set(layout);
-            let sets = [
-                core.alloc_desc_set(layout),
-                core.alloc_desc_set(layout),
-                core.alloc_desc_set(layout),
-            ];
-            core.free_desc_set(set0);
+        let layouts = create_test_set_layouts(&device);
+        let mut pool = create_global_pool(device);
 
-            assert!(!sets.iter().any(|set| set.inner.is_null()));
-            assert_ne!(sets[0].inner, sets[1].inner);
-            assert_ne!(sets[1].inner, sets[2].inner);
-            assert_ne!(sets[2].inner, sets[0].inner);
-        });
+        let scene_global_layout = &layouts[&Name::new("scene_globals")];
+        let material_layout = &layouts[&Name::new("material")];
 
-        let core = Arc::clone(&core_data);
-        let thread2 = thread::spawn(move || {
-            let set = core.alloc_desc_set(Name::new("material"));
-            assert!(!set.inner.is_null());
-            core.free_desc_set(set);
-        });
+        let set0 = pool.alloc(scene_global_layout);
+        let sets = pool.alloc_many(material_layout, 3);
 
-        thread1.join().unwrap();
-        thread2.join().unwrap();
-    }
+        let used = pool.used_descriptors();
+        assert_eq!(pool.used_sets(), 4);
+        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 2);
+        assert_eq!(used.get(&vk::DescriptorType::COMBINED_IMAGE_SAMPLER), 9);
 
-    unsafe fn test_for_races(vars: testing::TestVars) {
-        let device = Arc::clone(vars.swapchain.device());
-        let mut core_data = CoreData::new(device, &vars.queues, vars.config);
-        core_data.init();
-        let core_data = Arc::new(core_data);
+        assert!(!sets.iter().any(|set| set.inner.is_null()));
+        assert_ne!(sets[0].inner, sets[1].inner);
+        assert_ne!(sets[1].inner, sets[2].inner);
+        assert_ne!(sets[2].inner, sets[0].inner);
 
-        // Spawn two threads that allocate and deallocate in a loop for
-        // a while. Not surefire, but better than nothing.
-
-        const NUM_ITERS: usize = 50;
-
-        let layout = Name::new("scene_globals");
-
-        let core = Arc::clone(&core_data);
-        let thread1 = thread::spawn(move || {
-            for _ in 0..NUM_ITERS {
-                let set0 = core.alloc_desc_set(layout);
-                thread::sleep(std::time::Duration::from_micros(50));
-                core.free_desc_set(set0);
-            }
-        });
-
-        let core = Arc::clone(&core_data);
-        let thread2 = thread::spawn(move || {
-            for _ in 0..NUM_ITERS {
-                let set1 = core.alloc_desc_set(layout);
-                let set2 = core.alloc_desc_set(layout);
-                thread::sleep(std::time::Duration::from_micros(50));
-                core.free_desc_set(set1);
-                core.free_desc_set(set2);
-            }
-        });
-
-        thread1.join().unwrap();
-        thread2.join().unwrap();
+        pool.free(set0);
+        let used = pool.used_descriptors();
+        assert_eq!(pool.used_sets(), 3);
+        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 0);
     }
 
     unit::declare_tests![
         smoke_test,
-        test_for_races,
     ];
 }
 
