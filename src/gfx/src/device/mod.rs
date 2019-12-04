@@ -20,8 +20,28 @@ crate use render_pass::*;
 crate use shader::*;
 crate use swapchain::*;
 
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    fn smoke_test(_vars: crate::testing::TestVars) {
+        // Do nothing
+    }
+
+    fn validation_error_test(vars: crate::testing::TestVars) {
+        let device = Arc::clone(&vars.swapchain.device);
+        // Leak a semaphore
+        unsafe { device.create_semaphore(); }
+    }
+
+    unit::declare_tests![
+        smoke_test,
+        (#[should_err] validation_error_test),
+    ];
+}
+
 unit::collect_tests![
     descriptor,
-    instance,
     memory,
+    tests,
 ];

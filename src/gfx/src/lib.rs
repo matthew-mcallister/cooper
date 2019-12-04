@@ -1,4 +1,5 @@
 #![feature(arbitrary_self_types)]
+#![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
 #![feature(seek_convenience)]
 #![feature(try_blocks)]

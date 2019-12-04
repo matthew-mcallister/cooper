@@ -12,6 +12,7 @@ pub struct AppInfo {
     pub name: String,
     pub version: [u32; 3],
     pub debug: bool,
+    pub test: bool,
 }
 
 #[derive(Debug)]
@@ -20,11 +21,18 @@ crate struct Instance {
     crate entry: Arc<vkl::Entry>,
     crate table: Arc<vkl::InstanceTable>,
     crate app_info: Arc<AppInfo>,
+    debug_messengers: Vec<DebugMessenger>,
+    debug_msg_queue: Arc<DebugMessageQueue>,
 }
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        unsafe { self.table.destroy_instance(ptr::null()); }
+        unsafe {
+            for messenger in self.debug_messengers.iter_mut() {
+                messenger.destroy(&self.table);
+            }
+            self.table.destroy_instance(ptr::null());
+        }
     }
 }
 
@@ -74,16 +82,37 @@ impl Instance {
             Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
         let app_info = Arc::new(app_info);
-        Ok(Instance { vk, entry, table, app_info })
+        let mut instance = Instance {
+            vk,
+            entry,
+            table,
+            app_info,
+            debug_messengers: Vec::new(),
+            debug_msg_queue: Default::default(),
+        };
+
+        if instance.app_info.test {
+            let severity
+                = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING_BIT_EXT
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR_BIT_EXT;
+            let ty
+                = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION_BIT_EXT
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE_BIT_EXT;
+            let msg_queue = Arc::clone(&instance.debug_msg_queue);
+            instance.register_debug_messenger(severity, ty, msg_queue);
+        }
+
+        Ok(instance)
     }
 
     crate unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
         vk::enumerate2!(self.table, enumerate_physical_devices).unwrap()
     }
 
-    crate unsafe fn get_queue_family_properties(&self, pdev: vk::PhysicalDevice)
-        -> Vec<vk::QueueFamilyProperties>
-    {
+    crate unsafe fn get_queue_family_properties(
+        &self,
+        pdev: vk::PhysicalDevice,
+    ) -> Vec<vk::QueueFamilyProperties> {
         vk::enumerate2!(
             @void self.table,
             get_physical_device_queue_family_properties,
@@ -111,17 +140,18 @@ impl Instance {
     ) -> Result<Arc<Surface>, AnyError> {
         Ok(Arc::new(Surface::new(Arc::clone(self), Arc::clone(window))?))
     }
-}
 
-#[cfg(test)]
-mod tests {
-    fn smoke_test(_vars: crate::testing::TestVars) {
-        // Do nothing
+    crate unsafe fn register_debug_messenger(
+        &mut self,
+        severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+        types: vk::DebugUtilsMessageTypeFlagsEXT,
+        handler: Arc<dyn DebugMessageHandler>,
+    ) {
+        let messenger = DebugMessenger::new(self, severity, types, handler);
+        self.debug_messengers.push(messenger);
     }
 
-    unit::declare_tests![
-        smoke_test,
-    ];
+    crate fn get_debug_messages(&self) -> Vec<DebugMessagePayload> {
+        self.debug_msg_queue.take()
+    }
 }
-
-unit::collect_tests![tests];

@@ -16,6 +16,15 @@ crate struct Device {
     crate table: Arc<vkl::DeviceTable>,
 }
 
+impl Drop for Device {
+    fn drop(&mut self) {
+        let dt = &*self.table;
+        unsafe {
+            dt.destroy_device(ptr::null());
+        }
+    }
+}
+
 #[derive(Debug)]
 crate struct QueueFamily {
     index: u32,
@@ -85,14 +94,6 @@ impl Queue {
     }
 }
 
-impl Drop for Device {
-    fn drop(&mut self) {
-        unsafe {
-            self.table.destroy_device(ptr::null());
-        }
-    }
-}
-
 macro_rules! check_for_features {
     ($expected:expr, $actual:expr; $($member:ident,)*) => {
         $(
@@ -149,6 +150,7 @@ impl Device {
         ];
 
         let features = Default::default();
+        // TODO: Don't really need these
         let descriptor_indexing_features =
             vk::PhysicalDeviceDescriptorIndexingFeaturesEXT {
                 shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
@@ -257,9 +259,22 @@ impl Device {
         obj
     }
 
-    crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>) ->
-        Result<Arc<Swapchain>, AnyError>
+    crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>)
+        -> Result<Arc<Swapchain>, AnyError>
     {
         Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    fn smoke_test(_vars: crate::testing::TestVars) {
+        // Do nothing
+    }
+
+    unit::declare_tests![
+        smoke_test,
+    ];
+}
+
+unit::collect_tests![tests];

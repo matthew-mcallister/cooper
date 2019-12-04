@@ -56,6 +56,7 @@ impl VulkanTestContext {
             name: NAME.to_owned(),
             version: [0, 1, 0],
             debug: true,
+            test: true,
             ..Default::default()
         };
         let vk_platform = window.vk_platform().clone();
@@ -72,6 +73,14 @@ impl VulkanTestContext {
     }
 }
 
+fn check_validation_messages(instance: &Instance) {
+    let messages = instance.get_debug_messages();
+    if messages.is_empty() { return; }
+    let messages: Vec<_> = messages.iter().map(ToString::to_string).collect();
+    let output = messages.join("");
+    panic!(output);
+}
+
 impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
     fn invoke(&self, test: &unit::Test<VulkanTestData>) {
         // Recreate the full state so that every test has a clean slate.
@@ -79,11 +88,11 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
             let vars = self.init_vars().unwrap_or_else(|e| {
                 panic!("failed to initialize video: {}", e);
             });
+            let instance = Arc::clone(&vars.swapchain.device.instance);
 
-            // TODO: Today, just run the test and see that it doesn't
-            // crash. Tomorrow, mark the test as failed if the
-            // validation layer reports any errors or warnings.
             (test.data())(vars);
+
+            check_validation_messages(&instance);
         }
     }
 }

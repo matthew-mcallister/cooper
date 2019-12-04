@@ -13,6 +13,7 @@ base = { path = "../base", package = "cooper-base" }
 derive_more = "0.15"
 enum-map = "^0.6.1"
 fnv = "1.0"
+itertools = "^0.8.2"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }
 owning_ref = "0.4"
