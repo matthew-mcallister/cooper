@@ -1,20 +1,33 @@
+use enum_map::Enum;
+
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+crate enum AttachmentName {
+    Color,
+    Depth,
+    DepthStencil,
+    // G-buffer components etc.
+}
+
+/*
 use std::ptr;
 use std::sync::Arc;
 
-use base::Name;
-
 use crate::*;
 
-// TODO: Attachments should probably be assigned a value that designates
-// their purpose, i.e. color, depth, or some g-buffer component.
 #[derive(Debug)]
 crate struct Attachment {
     device: Arc<Device>,
+    image: ImageInfo,
+    owned_image: bool,
     view: vk::ImageView,
-    extent: vk::Extent2D,
-    format: vk::Format,
-    samples: vk::SampleCountFlags,
-    layers: u32,
+}
+
+#[derive(Debug)]
+crate struct Framebuffer {
+    device: Arc<Device>,
+    pass: Arc<RenderPass>,
+    attachments: Vec<Arc<Attachment>>,
+    inner: vk::Framebuffer,
 }
 
 impl Drop for Attachment {
@@ -22,53 +35,22 @@ impl Drop for Attachment {
         let dt = &*self.device.table;
         unsafe {
             dt.destroy_image_view(self.view, ptr::null());
+            if self.owned_image {
+                dt.destroy_image(self.image, ptr::null());
+            }
         }
     }
 }
 
-crate unsafe fn attachments_from_swapchain(swapchain: &Swapchain) ->
-    impl Iterator<Item = Attachment> + '_
-{
-    let device = Arc::clone(&swapchain.device);
-    let extent = swapchain.extent;
-    let format = swapchain.format;
-    let samples = vk::SampleCountFlags::_1_BIT;
-    let layers = 1;
-    swapchain.images.iter().map(move |&image| {
-        // TODO: Encapsulate images in an "Image" type and make this
-        // block a generic "from_image" function
-        let create_info = vk::ImageViewCreateInfo {
-            image,
-            view_type: vk::ImageViewType::_2D,
-            format,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            ..Default::default()
-        };
-        let mut view = vk::null();
-        device.table.create_image_view
-            (&create_info, ptr::null(), &mut view).check().unwrap();
-        Attachment {
-            device: Arc::clone(&device),
-            view,
-            extent,
-            format,
-            samples,
-            layers,
-        }
-    })
-}
-
 impl Attachment {
-    crate unsafe fn from_swapchain(swapchain: &Swapchain) ->
-        impl Iterator<Item = Self> + '_
-    {
-        attachments_from_swapchain(swapchain)
+    crate unsafe fn from_image(device: Arc<Device>, info: ImageInfo) -> Self {
+        let view = create_image_view(&device, &info);
+        Attachment {
+            device,
+            image: info,
+            owned_image: false,
+            view,
+        }
     }
 
     crate fn device(&self) -> &Arc<Device> {
@@ -80,28 +62,25 @@ impl Attachment {
     }
 
     crate fn extent(&self) -> vk::Extent2D {
-        self.extent
+        let extent = self.info.extent;
+        vk::Extent2D::new(extent.width, extent.height)
     }
 
     crate fn format(&self) -> vk::Format {
-        self.format
+        self.info.format
     }
 
     crate fn samples(&self) -> vk::SampleCountFlags {
-        self.samples
+        self.info.samples
     }
 
     crate fn layers(&self) -> u32 {
-        self.layers
+        self.info.layers
     }
-}
 
-#[derive(Debug)]
-crate struct Framebuffer {
-    device: Arc<Device>,
-    pass: Arc<RenderPass>,
-    attachments: Vec<Arc<Attachment>>,
-    inner: vk::Framebuffer,
+    crate fn mip_levels(&self) -> u32 {
+        self.info.mip_levels
+    }
 }
 
 impl Drop for Framebuffer {
@@ -189,3 +168,4 @@ impl Framebuffer {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent())
     }
 }
+*/

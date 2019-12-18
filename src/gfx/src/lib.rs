@@ -5,28 +5,36 @@
 #![feature(try_blocks)]
 
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
 #[cfg(test)]
 macro_rules! test_type {
     () => { crate::testing::VulkanTest }
 }
 
-mod config;
+mod descriptor;
 mod device;
+mod framebuffer;
+mod shader;
+mod util;
+mod vertex;
+
+crate use descriptor::*;
+crate use device::*;
+crate use framebuffer::*;
+crate use shader::*;
+crate use util::*;
+crate use vertex::*;
+
+mod config;
 
 pub use config::*;
-pub use device::*;
-
-pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
-    vk::ClearValue {
-        color: vk::ClearColorValue {
-            float_32: color,
-        },
-    }
-}
 
 unit::collect_tests![
+    descriptor,
     device,
+    shader,
+    vertex,
 ];
 
 #[cfg(test)]

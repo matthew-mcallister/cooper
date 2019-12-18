@@ -16,6 +16,10 @@ macro_rules! insert_unique {
     }
 }
 
+pub fn opt(b: bool) -> Option<()> {
+    if b { Some(()) } else { None }
+}
+
 pub type AnyError = Box<dyn std::error::Error>;
 
 pub trait ResultExt<T, E> {
@@ -43,24 +47,51 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 }
 
-// Returns the smallest multiple of `alignment` that is `>= offset`.
+/// Returns the smallest multiple of `alignment` that is `>= offset`.
 #[inline(always)]
 pub fn align<T: Copy + num::PrimInt>(alignment: T, offset: T) -> T {
     ((offset + alignment - num::one()) / alignment) * alignment
 }
 
-// A.k.a. guard
-#[inline(always)]
-pub fn opt(cond: bool) -> Option<()> {
-    if cond { Some(()) } else { None }
+pub trait SliceExt {
+    type Target: Sized;
+
+    /// Casts a slice to a byte array.
+    fn as_bytes(&self) -> &[u8];
+
+    /// Converts a slice to a *non-dangling* pointer. This means that,
+    /// if the slice has length zero, the returned pointer is NULL.
+    /// Though it is hardly undocumented, this is not the case for
+    /// `slice::as_ptr`.
+    fn c_ptr(&self) -> *const Self::Target;
 }
 
-// Vexing that this isn't in std
-#[inline(always)]
-pub fn slice_to_bytes<T: Sized>(slice: &[T]) -> &[u8] {
-    let len = slice.len() * std::mem::size_of::<T>();
-    unsafe { std::slice::from_raw_parts(slice as *const [T] as _, len) }
+impl<T> SliceExt for [T] {
+    type Target = T;
+
+    #[inline(always)]
+    fn as_bytes(&self) -> &[u8] {
+        let len = self.len() * std::mem::size_of::<T>();
+        unsafe { std::slice::from_raw_parts(self as *const [T] as _, len) }
+    }
+
+    #[inline(always)]
+    fn c_ptr(&self) -> *const Self::Target {
+        if self.is_empty() { std::ptr::null() } else { self.as_ptr() }
+    }
 }
 
-pub trait Guard<'a, T: 'a> = std::ops::Deref<Target = T> + 'a;
-pub trait GuardMut<'a, T: 'a> = std::ops::DerefMut<Target = T> + 'a;
+pub trait AsPtr {
+    type Target;
+
+    fn as_ptr(self) -> *const Self::Target;
+}
+
+impl<'a, T> AsPtr for Option<&'a T> {
+    type Target = T;
+
+    #[inline(always)]
+    fn as_ptr(self) -> *const Self::Target {
+        unsafe { std::mem::transmute(self) }
+    }
+}

@@ -3,31 +3,34 @@ use std::sync::Arc;
 use crate::*;
 
 #[derive(Debug)]
-crate struct Image {
-    // May be null if image is not in use
+crate struct ImageInfo {
     crate inner: vk::Image,
-    // May be null if image is not in use
-    crate view: vk::ImageView,
     crate extent: vk::Extent3D,
     crate format: vk::Format,
-    crate dst_layout: vk::ImageLayout,
-    crate dst_access_mask: vk::AccessFlags,
-    // TODO: Calculate from extent and format
-    crate size: usize,
-    crate batch_serial: Option<XferBatchSerial>,
-    crate bound_alloc: Option<DeviceAlloc>,
+    crate samples: vk::SampleCountFlags,
+    crate layers: u32,
+    crate mip_levels: u32,
 }
 
-crate unsafe fn create_image_mem(
-    device: Arc<Device>,
-    base_size: vk::DeviceSize,
-) -> Box<MemoryPool> {
-    let mem_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
-    let type_index = find_memory_type(&device, mem_flags).unwrap();
-    let create_info = MemoryPoolCreateInfo {
-        type_index,
-        base_size,
+crate unsafe fn create_image_view(device: &Device, info: &ImageInfo) ->
+    vk::ImageView
+{
+    let dt = &*device.table;
+    let create_info = vk::ImageViewCreateInfo {
+        image: info.inner,
+        view_type: vk::ImageViewType::_2D,
+        format: info.format,
+        subresource_range: vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        },
         ..Default::default()
     };
-    Box::new(MemoryPool::new(device, create_info))
+    let mut view = vk::null();
+    dt.create_image_view(&create_info, ptr::null(), &mut view)
+        .check().unwrap();
+    view
 }

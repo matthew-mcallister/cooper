@@ -229,6 +229,14 @@ impl Device {
         vec![vec![queue]]
     }
 
+    crate fn properties(&self) -> &vk::PhysicalDeviceProperties {
+        &self.props
+    }
+
+    crate fn limits(&self) -> &vk::PhysicalDeviceLimits {
+        &self.properties().limits
+    }
+
     crate unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
     where
         T: DebugUtils,

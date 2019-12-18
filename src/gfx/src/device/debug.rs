@@ -293,7 +293,7 @@ impl fmt::Display for Type {
         }
 
         let fmt = pairs.iter()
-            .filter_map(|&(k, v)| ty.contains(k).then(v))
+            .filter_map(|&(k, v)| ty.contains(k).then_some(v))
             .format(" | ");
         write!(f, "{}", fmt)
     }
