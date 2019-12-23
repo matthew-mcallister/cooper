@@ -19,7 +19,6 @@ crate struct Shader {
     stage: ShaderStage,
     inputs: Vec<ShaderVar>,
     outputs: Vec<ShaderVar>,
-    set_bindings: Vec<ShaderSetBinding>,
     spec_consts: FnvHashMap<Name, SpecConstDecl>,
 }
 
@@ -27,8 +26,8 @@ crate struct Shader {
 #[derive(Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct ShaderSpec {
-    #[derivative(Hash(hash_with="arc_ptr_hash"))]
-    #[derivative(PartialEq(compare_with="std::sync::Arc::ptr_eq"))]
+    #[derivative(Hash(hash_with="ptr_hash"))]
+    #[derivative(PartialEq(compare_with="ptr_eq"))]
     shader: Arc<Shader>,
     spec_info: vk::SpecializationInfo,
     spec_map: Vec<vk::SpecializationMapEntry>,
@@ -69,16 +68,6 @@ crate struct ShaderVar {
     crate attch: Option<AttachmentName>,
 }
 
-#[derive(Clone, Constructor, Debug, Derivative)]
-#[derivative(Hash, PartialEq)]
-crate struct ShaderSetBinding {
-    crate index: u32,
-    #[derivative(Hash(hash_with="arc_ptr_hash"))]
-    #[derivative(PartialEq(compare_with="std::sync::Arc::ptr_eq"))]
-    crate layout: Arc<DescriptorSetLayout>,
-}
-impl Eq for ShaderSetBinding {}
-
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 crate enum ShaderStage {
     Vertex,
@@ -107,11 +96,9 @@ impl Shader {
         // except possibly vertex input/fragment output names.
         inputs: Vec<ShaderVar>,
         outputs: Vec<ShaderVar>,
-        set_bindings: Vec<ShaderSetBinding>,
         spec_consts: Vec<SpecConstDecl>,
     ) -> Self {
-        // TODO: Shader inputs, bindings, etc. could be validated via
-        // reflection.
+        // TODO: Shader inputs, etc. could be validated via reflection.
         let dt = &device.table;
         assert_eq!(code.len() % 4, 0);
         let create_info = vk::ShaderModuleCreateInfo {
@@ -134,7 +121,6 @@ impl Shader {
             stage,
             inputs,
             outputs,
-            set_bindings,
             spec_consts,
         }
     }
@@ -163,10 +149,6 @@ impl Shader {
         &self.inputs
     }
 
-    crate fn set_bindings(&self) -> &[ShaderSetBinding] {
-        &self.set_bindings
-    }
-
     crate fn spec_consts(&self) -> &FnvHashMap<Name, SpecConstDecl> {
         &self.spec_consts
     }
@@ -190,7 +172,7 @@ impl ShaderSpec {
         &self.spec_info
     }
 
-    crate fn set<T>(&mut self, name: &Name, val: &T) {
+    crate fn set<T>(&mut self, name: &Name, val: &T) -> &mut ShaderSpec {
         let decl = &self.shader.spec_consts()[name];
         let bytes = std::slice::from_ref(&val).as_bytes();
         assert_eq!(bytes.len(), decl.size as usize);
@@ -206,6 +188,7 @@ impl ShaderSpec {
             data_size: self.data.len(),
             p_data: self.data.as_ptr() as _,
         };
+        self
     }
 }
 
@@ -339,18 +322,9 @@ macro_rules! fragment_outputs {
 }
 
 impl BuiltinShaders {
-    crate fn new(
-        device: &Arc<Device>,
-        layouts: &BuiltinSetLayouts,
-    ) -> Self {
-        let binding = ShaderSetBinding::new;
-
+    crate fn new(device: &Arc<Device>) -> Self {
         let consts = [
             SpecConstDecl::typed::<f32>("PHONG_SHININESS", 1),
-        ];
-        let bindings = [
-            binding(0, Arc::clone(&layouts.example_globals)),
-            binding(0, Arc::clone(&layouts.example_instances)),
         ];
         unsafe {
             let example_vert = Arc::new(Shader::new(
@@ -363,7 +337,6 @@ impl BuiltinShaders {
                 }.to_vec(),
                 // Intermediates are ignored for now
                 Vec::new(),
-                bindings.to_vec(),
                 consts.to_vec(),
             ));
             let example_frag = Arc::new(Shader::new(
@@ -374,7 +347,6 @@ impl BuiltinShaders {
                 fragment_outputs! {
                     location(0) VEC3 Color;
                 }.to_vec(),
-                bindings.to_vec(),
                 consts.to_vec(),
             ));
             BuiltinShaders {
@@ -393,8 +365,7 @@ mod tests {
 
     fn smoke_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device());
-        let layouts = BuiltinSetLayouts::new(&device);
-        let _shaders = BuiltinShaders::new(&device, &layouts);
+        let _shaders = BuiltinShaders::new(&device);
     }
 
     unit::declare_tests![

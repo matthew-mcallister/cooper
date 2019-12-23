@@ -5,6 +5,24 @@ use fnv::FnvHashMap;
 
 use crate::*;
 
+/// Describes the vertex attributes present in a mesh and how they are
+/// laid out in memory.
+#[derive(Debug)]
+crate struct VertexLayout {
+    crate topology: vk::PrimitiveTopology,
+    crate bindings: Vec<VertexLayoutBinding>,
+    crate attrs: EnumMap<VertexAttrName, Option<VertexLayoutAttr>>,
+}
+
+crate type VertexLayoutBinding = vk::VertexInputBindingDescription;
+
+#[derive(Clone, Copy, Debug, Default)]
+crate struct VertexLayoutAttr {
+    crate binding: u32,
+    crate format: vk::Format,
+    crate offset: u32,
+}
+
 /// Semantic names for vertex attributes which may be mapped to shader
 /// inputs.
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
@@ -19,24 +37,6 @@ crate enum VertexAttrName {
     Joints,
     Weights,
     Velocity,
-}
-
-crate type VertexLayoutBinding = vk::VertexInputBindingDescription;
-
-#[derive(Clone, Copy, Debug)]
-crate struct VertexLayoutAttr {
-    crate binding: u32,
-    crate format: vk::Format,
-    crate offset: u32,
-}
-
-/// Describes the vertex attributes present in a mesh and how they are
-/// laid out in memory.
-#[derive(Debug)]
-crate struct VertexLayout {
-    crate topology: vk::PrimitiveTopology,
-    crate bindings: Vec<VertexLayoutBinding>,
-    crate attrs: EnumMap<VertexAttrName, Option<VertexLayoutAttr>>,
 }
 
 impl VertexLayout {
@@ -69,6 +69,32 @@ impl VertexLayout {
             })
         }).collect()
     }
+
+    crate fn from_attrs_unpacked(
+        // TODO: Use custom format enum so we can compute size
+        tuples: &[(VertexAttrName, vk::Format, u32)],
+    ) -> Self {
+        let mut attrs = EnumMap::new();
+        let mut bindings = Vec::with_capacity(attrs.len());
+        for (binding, &(attr, format, stride)) in tuples.iter().enumerate() {
+            let binding = binding as u32;
+            attrs[attr] = Some(VertexLayoutAttr {
+                binding,
+                format,
+                offset: 0,
+            });
+            bindings.push(VertexLayoutBinding {
+                binding,
+                stride,
+                ..Default::default()
+            });
+        }
+        Self {
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            bindings,
+            attrs,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -84,54 +110,20 @@ mod tests {
 
         let mut map = FnvHashMap::default();
 
-        map.insert("simple".to_owned(), Arc::new(VertexLayout {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            bindings: vec![
-                VertexLayoutBinding {
-                    binding: 0,
-                    stride: std::mem::size_of::<[f32; 4]>() as _,
-                    ..Default::default()
-                },
-            ],
-            attrs: enum_map! {
-                Attr::Position => Some(VertexLayoutAttr {
-                    binding: 0,
-                    format: vk::Format::R32G32B32A32_SFLOAT,
-                    offset: 0,
-                }),
-                _ => None,
-            },
-        }));
+        let attrs = &[(Attr::Position, vk::Format::R32G32B32_SFLOAT, 12)];
+        let layout = VertexLayout::from_attrs_unpacked(attrs);
+        map.insert("simple".to_owned(), Arc::new(layout));
 
-        let mut attrs = EnumMap::default();
-        let tuples = [
-            // TODO: Function mapping VkFormat to pixel size
-            (Attr::Position,    vk::Format::R32G32B32A32_SFLOAT,    16  ),
+        let attrs = &[
+            (Attr::Position,    vk::Format::R32G32B32_SFLOAT,       12  ),
             (Attr::QTangent,    vk::Format::R32G32B32A32_SFLOAT,    16  ),
             (Attr::Texcoord0,   vk::Format::R16G16_UNORM,           4   ),
             (Attr::Color,       vk::Format::R8G8B8_UNORM,           3   ),
             (Attr::Joints,      vk::Format::R8G8B8A8_UINT,          4   ),
             (Attr::Weights,     vk::Format::R8G8B8A8_UNORM,         4   ),
         ];
-        let mut bindings = Vec::with_capacity(tuples.len());
-        for (binding, &(attr, format, stride)) in tuples.iter().enumerate() {
-            let binding = binding as u32;
-            attrs[attr] = Some(VertexLayoutAttr {
-                binding,
-                format,
-                offset: 0,
-            });
-            bindings.push(VertexLayoutBinding {
-                binding,
-                stride,
-                ..Default::default()
-            });
-        }
-        map.insert("full".to_owned(), Arc::new(VertexLayout {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            bindings,
-            attrs,
-        }));
+        let layout = VertexLayout::from_attrs_unpacked(attrs);
+        map.insert("full".to_owned(), Arc::new(layout));
 
         map
     }

@@ -29,6 +29,6 @@ struct SceneGlobals {
 layout(set = 0, binding = 0) readonly buffer blk_scene_globals {
     SceneGlobals globals;
 };
-layout(set = 0, binding = 1) readonly buffer blk_instances {
+layout(set = 1, binding = 0) readonly buffer blk_instances {
     Instance g_instances[];
 };

@@ -8,7 +8,7 @@ macro_rules! bindings {
         [$(bindings!(@binding ($($binding)*)),)*]
     };
     (@binding (
-        $binding:expr, $type:ident$([$count:expr])? $(, $($flags:ident)+)?)
+        $binding:expr, $type:ident$([$count:expr])? $(, $($stages:ident)+)?)
     ) => {
         #[allow(path_statements)]
         vk::DescriptorSetLayoutBinding {
@@ -18,7 +18,7 @@ macro_rules! bindings {
             stage_flags: {
                 vk::ShaderStageFlags::ALL
                 $(; vk::ShaderStageFlags::empty()
-                    $(| vk::ShaderStageFlags::$flags)*)?
+                    $(| vk::ShaderStageFlags::$stages)*)?
             },
             ..Default::default()
         }
@@ -34,7 +34,7 @@ crate struct BuiltinSetLayouts {
 impl BuiltinSetLayouts {
     crate fn new(device: &Arc<Device>) -> Self {
         let bindings = bindings! {
-            (0, STORAGE_BUFFER[1], ALL)
+            (0, STORAGE_BUFFER)
         };
         let example = unsafe {
             Arc::new(DescriptorSetLayout::from_bindings(
