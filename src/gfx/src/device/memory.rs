@@ -1,5 +1,7 @@
 use std::ops::Range;
 use std::ffi::c_void;
+use std::marker::PhantomData;
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::ptr;
 use std::sync::Arc;
 
@@ -37,36 +39,18 @@ crate fn find_memory_type(
         .map(|x| x as u32)
 }
 
+crate fn find_memory_type_reqs(
+    device: &Device,
+    flags: vk::MemoryPropertyFlags,
+    reqs: &vk::MemoryRequirements,
+) -> Option<u32> {
+    find_memory_type(device, flags, reqs.memory_type_bits)
+}
+
 #[inline(always)]
-crate fn visible_coherent_memory() -> vk::MemoryPropertyFlags {
+crate fn visible_coherent_flags() -> vk::MemoryPropertyFlags {
     vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
         vk::MemoryPropertyFlags::HOST_COHERENT_BIT
-}
-
-#[derive(Clone, Copy, Debug, Enum, Eq, PartialEq)]
-crate enum Tiling {
-    /// Denotes a linear image or a buffer.
-    Linear,
-    /// Denotes a nonlinear (a.k.a. optimal) image.
-    Nonlinear,
-}
-
-impl From<Tiling> for vk::ImageTiling {
-    fn from(tiling: Tiling) -> Self {
-        match tiling {
-            Tiling::Linear => vk::ImageTiling::LINEAR,
-            Tiling::Nonlinear => vk::ImageTiling::OPTIMAL,
-        }
-    }
-}
-
-impl From<vk::ImageTiling> for Tiling {
-    fn from(tiling: vk::ImageTiling) -> Self {
-        match tiling {
-            vk::ImageTiling::LINEAR => Tiling::Linear,
-            _ => Tiling::Nonlinear,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,6 +61,66 @@ crate struct DeviceMemory {
     ptr: *mut c_void,
     tiling: Tiling,
     chunk: u32,
+}
+
+/// A suballocation of a VkMemory object.
+#[derive(Clone, Debug)]
+crate struct DeviceRange {
+    memory: Arc<DeviceMemory>,
+    offset: vk::DeviceSize,
+    // N.B. The allocator may return a larger allocation than requested
+    size: vk::DeviceSize,
+}
+
+crate type DeviceAlloc = DeviceRange;
+
+#[derive(Clone, Copy, Debug, Enum, Eq, PartialEq)]
+crate enum Tiling {
+    /// Denotes a linear image or a buffer.
+    Linear,
+    /// Denotes a nonlinear (a.k.a. optimal) image.
+    Nonlinear,
+}
+
+crate trait MemoryRegion {
+    fn memory(&self) -> &Arc<DeviceMemory>;
+    fn offset(&self) -> vk::DeviceSize;
+    fn size(&self) -> vk::DeviceSize;
+
+    fn end(&self) -> vk::DeviceSize {
+        self.offset() + self.size()
+    }
+
+    fn as_raw(&self) -> *mut c_void {
+        assert!(!self.memory().ptr.is_null());
+        unsafe { self.memory().ptr.add(self.offset() as _) }
+    }
+
+    fn as_ptr<T>(&self) -> *mut T {
+        let ptr = self.as_raw() as *mut T;
+        assert_eq!(ptr as usize % std::mem::align_of::<T>(), 0);
+        ptr
+    }
+
+    fn as_mut<T>(&mut self) -> &mut T {
+        assert!(std::mem::size_of::<T>() as vk::DeviceSize <= self.size());
+        unsafe { &mut *self.as_ptr::<T>() }
+    }
+
+    fn as_mut_slice<T>(&mut self) -> &mut [T] {
+        let ptr = self.as_ptr::<T>();
+        let elem_size = std::mem::size_of::<T>();
+        let len = self.size() as usize / elem_size;
+        unsafe { std::slice::from_raw_parts_mut(ptr, len) }
+    }
+}
+
+fn get_block<T: MemoryRegion>(region: &T) -> Block {
+    Block {
+        chunk: region.memory().chunk,
+        start: region.offset(),
+        end: region.end(),
+    }
 }
 
 impl DeviceMemory {
@@ -110,7 +154,7 @@ impl DeviceMemory {
     }
 }
 
-crate unsafe fn alloc_device_memory(
+unsafe fn alloc_device_memory(
     device: &Device,
     size: vk::DeviceSize,
     type_index: u32,
@@ -127,70 +171,58 @@ crate unsafe fn alloc_device_memory(
     memory
 }
 
-#[derive(Clone, Debug)]
-crate struct DeviceRange {
-    memory: Arc<DeviceMemory>,
-    offset: vk::DeviceSize,
-    size: vk::DeviceSize,
-}
-
-impl DeviceRange {
-    crate fn memory(&self) -> &Arc<DeviceMemory> {
+impl MemoryRegion for DeviceRange {
+    fn memory(&self) -> &Arc<DeviceMemory> {
         &self.memory
     }
 
-    crate fn offset(&self) -> vk::DeviceSize {
+    fn offset(&self) -> vk::DeviceSize {
         self.offset
     }
 
-    crate fn size(&self) -> vk::DeviceSize {
+    fn size(&self) -> vk::DeviceSize {
         self.size
     }
+}
 
-    crate fn end(&self) -> vk::DeviceSize {
-        self.offset + self.size
-    }
-
-    crate fn as_raw(&self) -> *mut c_void {
-        if !self.memory.ptr.is_null() {
-            unsafe { self.memory.ptr.add(self.offset as _) }
-        } else { 0usize as _ }
-    }
-
-    crate fn as_slice<T: Sized>(&self) -> *mut [T] {
-        let ptr = self.as_raw();
-        assert_ne!(ptr, 0 as _);
-        let mem_size = self.size as usize;
-        let elem_size = std::mem::size_of::<T>();
-        assert_eq!(mem_size % elem_size, 0);
-        let slice_len = mem_size / elem_size;
-        unsafe {
-            std::slice::from_raw_parts_mut(ptr as *mut T, slice_len) as _
-        }
-    }
-
-
-    crate fn as_ptr<T: Sized>(&self) -> *mut T {
-        assert!(self.size() <= std::mem::size_of::<T>() as u64);
-        self.as_raw() as _
-    }
-
-    fn block(&self) -> Block {
-        Block {
-            chunk: self.memory.chunk,
-            start: self.offset,
-            end: self.offset + self.size,
+impl From<Tiling> for vk::ImageTiling {
+    fn from(tiling: Tiling) -> Self {
+        match tiling {
+            Tiling::Linear => vk::ImageTiling::LINEAR,
+            Tiling::Nonlinear => vk::ImageTiling::OPTIMAL,
         }
     }
 }
 
-crate type DeviceAlloc = DeviceRange;
+impl From<vk::ImageTiling> for Tiling {
+    fn from(tiling: vk::ImageTiling) -> Self {
+        match tiling {
+            vk::ImageTiling::LINEAR => Tiling::Linear,
+            _ => Tiling::Nonlinear,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 crate struct DeviceBuffer {
     memory: Arc<DeviceMemory>,
     inner: vk::Buffer,
     usage: vk::BufferUsageFlags,
+}
+
+/// A suballocation of a VkBuffer object.
+#[derive(Clone, Debug)]
+crate struct BufferRange {
+    buffer: Arc<DeviceBuffer>,
+    offset: vk::DeviceSize,
+    // N.B. the allocator might return more memory than requested.
+    size: vk::DeviceSize,
+}
+
+#[derive(Debug)]
+crate struct BufferData<T: ?Sized> {
+    alloc: BufferRange,
+    ptr: *mut T,
 }
 
 impl DeviceBuffer {
@@ -207,16 +239,21 @@ impl DeviceBuffer {
     }
 }
 
-/// A suballocation of a VkBuffer object.
-#[derive(Clone, Debug)]
-crate struct BufferSuballoc {
-    buffer: Arc<DeviceBuffer>,
-    offset: vk::DeviceSize,
-    size: vk::DeviceSize,
-    chunk: u32,
+impl MemoryRegion for BufferRange {
+    fn memory(&self) -> &Arc<DeviceMemory> {
+        &self.buffer.memory
+    }
+
+    fn offset(&self) -> vk::DeviceSize {
+        self.offset
+    }
+
+    fn size(&self) -> vk::DeviceSize {
+        self.size
+    }
 }
 
-impl BufferSuballoc {
+impl BufferRange {
     crate fn buffer(&self) -> &Arc<DeviceBuffer> {
         &self.buffer
     }
@@ -228,6 +265,79 @@ impl BufferSuballoc {
             range: self.size,
         }
     }
+
+    crate fn chunk(&self) -> u32 {
+        self.buffer.memory.chunk
+    }
+}
+
+impl<T: ?Sized> Drop for BufferData<T> {
+    fn drop(&mut self) {
+        unsafe { std::ptr::drop_in_place(self.ptr); }
+    }
+}
+
+impl<T: ?Sized> From<BufferData<T>> for BufferRange {
+    fn from(data: BufferData<T>) -> Self {
+        data.into_inner()
+    }
+}
+
+impl<T: ?Sized> BufferData<T> {
+    crate fn alloc(&self) -> &BufferRange {
+        &self.alloc
+    }
+
+    crate fn into_inner(self) -> BufferRange {
+        let alloc = unsafe { ptr::read(&self.alloc) };
+        std::mem::forget(self);
+        alloc
+    }
+}
+
+impl<T> BufferData<MaybeUninit<T>> {
+    crate fn new(mut alloc: BufferRange) -> Self {
+        let ptr = alloc.as_mut::<MaybeUninit<T>>() as *mut _;
+        BufferData { alloc, ptr }
+    }
+
+    crate unsafe fn assume_init(this: Self) -> BufferData<T> {
+        let ptr = std::mem::transmute(this.ptr);
+        BufferData {
+            alloc: this.into_inner(),
+            ptr,
+        }
+    }
+}
+
+impl<T> BufferData<[MaybeUninit<T>]> {
+    crate fn new_slice(mut alloc: BufferRange) -> Self {
+        let ptr = alloc.as_mut_slice::<MaybeUninit<T>>() as *mut _;
+        BufferData { alloc, ptr }
+    }
+
+    crate unsafe fn assume_init_slice(this: Self) -> BufferData<[T]> {
+        let ptr = std::mem::transmute(this.ptr);
+        BufferData {
+            alloc: this.into_inner(),
+            ptr,
+        }
+    }
+}
+
+impl<T: ?Sized> std::ops::Deref for BufferData<T> {
+    type Target = T;
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.ptr }
+    }
+}
+
+impl<T: ?Sized> std::ops::DerefMut for BufferData<T> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *self.ptr }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -235,6 +345,16 @@ struct Block {
     chunk: u32,
     start: vk::DeviceSize,
     end: vk::DeviceSize,
+}
+
+/// Address-ordered FIFO allocation algorithm.
+#[derive(Debug, Default)]
+struct FreeListAllocator {
+    capacity: vk::DeviceSize,
+    used: vk::DeviceSize,
+    // List of chunk sizes
+    chunks: Vec<vk::DeviceSize>,
+    free: Vec<Block>,
 }
 
 impl Block {
@@ -249,16 +369,6 @@ impl Block {
     fn is_empty(&self) -> bool {
         self.start == self.end
     }
-}
-
-/// Address-ordered FIFO allocation algorithm.
-#[derive(Debug, Default)]
-struct FreeListAllocator {
-    capacity: vk::DeviceSize,
-    used: vk::DeviceSize,
-    // List of chunk sizes
-    chunks: Vec<vk::DeviceSize>,
-    free: Vec<Block>,
 }
 
 impl FreeListAllocator {
@@ -328,7 +438,7 @@ impl FreeListAllocator {
         })
     }
 
-    unsafe fn alloc(
+    fn alloc(
         &mut self,
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
@@ -408,13 +518,27 @@ crate struct HeapPool {
     chunks: Vec<Arc<DeviceMemory>>,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+crate struct HeapInfo {
+    reserved: vk::DeviceSize,
+    used: vk::DeviceSize,
+}
+
+// TODO maybe: Multithread this so all memory can be RAII
+#[derive(Debug)]
+crate struct DeviceHeap {
+    device: Arc<Device>,
+    // One pool per memory type per tiling
+    pools: Vec<EnumMap<Tiling, HeapPool>>,
+}
+
 impl Drop for HeapPool {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe {
             for chunk in self.chunks.iter() {
                 assert_eq!(Arc::strong_count(chunk), 1,
-                    "allocation still in use: {:?}", chunk);
+                    "allocation freed while still in use: {:?}", chunk);
                 dt.free_memory(chunk.inner, ptr::null());
             }
         }
@@ -518,26 +642,12 @@ impl HeapPool {
             &alloc.memory,
             &self.chunks[alloc.memory.chunk as usize],
         ));
-        self.allocator.free(alloc.block());
+        self.allocator.free(get_block(&alloc));
     }
 
     fn clear(&mut self) {
         self.allocator.clear()
     }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-crate struct HeapInfo {
-    reserved: vk::DeviceSize,
-    used: vk::DeviceSize,
-}
-
-#[derive(Debug)]
-crate struct DeviceHeap {
-    device: Arc<Device>,
-    // One pool per memory type per tiling
-    pools: Vec<EnumMap<Tiling, HeapPool>>,
-    heaps: Vec<HeapInfo>,
 }
 
 // TODO: dedicated allocations
@@ -551,12 +661,9 @@ impl DeviceHeap {
                 tiling,
             )).into())
             .collect();
-        let heap_count = device.mem_props.memory_heap_count as usize;
-        let heaps = vec![Default::default(); heap_count];
         DeviceHeap {
             device,
             pools,
-            heaps,
         }
     }
 
@@ -576,44 +683,29 @@ impl DeviceHeap {
         &*self.device.table
     }
 
-    fn update_heaps(&mut self) {
-        for heap in self.heaps.iter_mut() {
-            heap.reserved = 0;
-            heap.used = 0;
-        }
+    crate fn heaps(&self) -> Vec<HeapInfo> {
+        let heap_count = self.device.mem_props.memory_heap_count as usize;
+        let mut heaps = vec![HeapInfo::default(); heap_count];
         for pool in self.pools.iter().flat_map(|x| x.values()) {
-            let heap = &mut self.heaps[pool.heap_index() as usize];
+            let heap = &mut heaps[pool.heap_index() as usize];
             heap.reserved += pool.reserved();
             heap.used += pool.used();
         }
-    }
-
-    crate fn heaps(&mut self) -> &[HeapInfo] {
-        self.update_heaps();
-        &self.heaps
+        heaps
     }
 
     crate unsafe fn alloc(
         &mut self,
         reqs: vk::MemoryRequirements,
         tiling: Tiling,
-        mapped: bool,
+        mapping: MemoryMapping,
     ) -> DeviceAlloc {
-        let flags = if mapped {
-            // TODO: cached incoherent memory
-            vk::MemoryPropertyFlags::HOST_VISIBLE_BIT
-                | vk::MemoryPropertyFlags::HOST_COHERENT_BIT
-        } else {
-            vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT
-        };
-
-        // TODO: fall back to less restrictive flags on failure
+        // TODO: fall back to incoherent memory on failure
         let type_idx = find_memory_type(
             &*self.device,
-            flags,
+            mapping.memory_property_flags(),
             reqs.memory_type_bits,
         ).unwrap();
-
         self.pool_mut(type_idx, tiling).alloc(reqs.size, reqs.alignment)
     }
 
@@ -621,11 +713,11 @@ impl DeviceHeap {
     crate unsafe fn alloc_buffer_memory(
         &mut self,
         buffer: vk::Buffer,
-        mapped: bool,
+        mapping: MemoryMapping,
     ) -> DeviceAlloc {
         let mut reqs = Default::default();
         self.dt().get_buffer_memory_requirements(buffer, &mut reqs);
-        let alloc = self.alloc(reqs, Tiling::Linear, mapped);
+        let alloc = self.alloc(reqs, Tiling::Linear, mapping);
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
@@ -639,11 +731,11 @@ impl DeviceHeap {
     crate unsafe fn alloc_image_memory(
         &mut self,
         image: vk::Image,
-        mapped: bool,
+        mapping: MemoryMapping,
     ) -> DeviceAlloc {
         let mut reqs = Default::default();
         self.dt().get_image_memory_requirements(image, &mut reqs);
-        let alloc = self.alloc(reqs, Tiling::Nonlinear, mapped);
+        let alloc = self.alloc(reqs, Tiling::Nonlinear, mapping);
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
@@ -652,10 +744,199 @@ impl DeviceHeap {
         alloc
     }
 
+    // TODO: Allocations might be freed via RAII
     crate fn free(&mut self, alloc: DeviceAlloc) {
         let type_index = alloc.memory().type_index();
         let tiling = alloc.memory().tiling();
         self.pool_mut(type_index, tiling).free(alloc);
+    }
+}
+
+#[derive(Debug)]
+crate struct BufferPool {
+    device: Arc<Device>,
+    mapping: MemoryMapping,
+    usage: vk::BufferUsageFlags,
+    allocator: FreeListAllocator,
+    chunks: Vec<Arc<DeviceBuffer>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+crate enum MemoryMapping {
+    Mapped,
+    Unmapped,
+}
+
+impl Drop for BufferPool {
+    fn drop(&mut self) {
+        let dt = &*self.device.table;
+        unsafe {
+            for chunk in self.chunks.iter() {
+                assert_eq!(Arc::strong_count(chunk), 1,
+                    "buffer destroyed while still in use: {:?}", chunk);
+                dt.destroy_buffer(chunk.inner, ptr::null());
+                dt.free_memory(chunk.memory.inner, ptr::null());
+            }
+        }
+    }
+}
+
+impl BufferPool {
+    crate fn new(
+        device: Arc<Device>,
+        mapping: MemoryMapping,
+        usage: vk::BufferUsageFlags,
+    ) -> Self {
+        Self {
+            device,
+            mapping,
+            usage,
+            allocator: Default::default(),
+            chunks: Vec::new(),
+        }
+    }
+
+    // TODO: Refactor overlap with HeapPool type
+    crate fn used(&self) -> vk::DeviceSize {
+        self.allocator.used()
+    }
+
+    crate fn reserved(&self) -> vk::DeviceSize {
+        self.allocator.capacity()
+    }
+
+    fn chunk_size(&self) -> vk::DeviceSize {
+        0x100_0000
+    }
+
+    fn min_alignment(&self) -> vk::DeviceSize {
+        32
+    }
+
+    crate fn mapping(&self) -> MemoryMapping {
+        self.mapping
+    }
+
+    crate fn mapped(&self) -> bool {
+        self.mapping.into()
+    }
+
+    unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
+        let dt = &*self.device.table;
+
+        let chunk = self.chunks.len() as u32;
+        let size = align(self.chunk_size(), min_size);
+
+        let create_info = vk::BufferCreateInfo {
+            size,
+            usage: self.usage,
+            ..Default::default()
+        };
+        let mut buffer = vk::null();
+        dt.create_buffer(&create_info, ptr::null(), &mut buffer)
+            .check().unwrap();
+
+        let mut reqs = Default::default();
+        dt.get_buffer_memory_requirements(buffer, &mut reqs);
+
+        let flags = self.mapping.memory_property_flags();
+        let types = reqs.memory_type_bits;
+        let type_index = find_memory_type(&self.device, flags, types).unwrap();
+
+        let memory = alloc_device_memory(&self.device, size, type_index);
+        let mut mem = DeviceMemory {
+            inner: memory,
+            size,
+            type_index,
+            ptr: 0 as _,
+            tiling: Tiling::Linear,
+            chunk,
+        };
+        if self.mapped() { mem.map(&self.device); }
+
+        let buffer = DeviceBuffer {
+            memory: Arc::new(mem),
+            inner: buffer,
+            usage: self.usage,
+        };
+
+        self.chunks.push(Arc::new(buffer));
+        self.allocator.add_chunk(size);
+    }
+
+    crate fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize)
+        -> BufferRange
+    {
+        let alignment = std::cmp::max(self.min_alignment(), alignment);
+        let size = align(alignment, size);
+        assert_ne!(size, 0);
+        let block = self.allocator.alloc(size, alignment)
+            .or_else(|| {
+                unsafe { self.add_chunk(size); }
+                self.allocator.alloc(size, alignment)
+            })
+            .unwrap();
+        let buffer = Arc::clone(&self.chunks[block.chunk as usize]);
+        BufferRange {
+            buffer,
+            offset: block.offset(),
+            size: block.size(),
+        }
+    }
+
+    crate fn alloc_block<T>(&mut self) -> BufferData<MaybeUninit<T>> {
+        assert!(self.mapped());
+        let alloc = self.alloc(
+            std::mem::size_of::<T>() as _,
+            // N.B. alignment is rounded to 32 so we *shouldn't* hit
+            // alignment issues with (d)vec4, but beware of surprises.
+            std::mem::align_of::<T>() as _,
+        );
+        BufferData::new(alloc)
+    }
+
+    crate fn alloc_array<T>(&mut self, len: usize) ->
+        BufferData<[MaybeUninit<T>]>
+    {
+        assert!(self.mapped());
+        let alloc = self.alloc(
+            (std::mem::size_of::<T>() * len) as _,
+            std::mem::align_of::<T>() as _,
+        );
+        BufferData::new_slice(alloc)
+    }
+
+    crate fn free(&mut self, alloc: BufferRange) {
+        // Make sure the allocation came from this pool
+        assert!(Arc::ptr_eq(
+            &alloc.buffer,
+            &self.chunks[alloc.chunk() as usize],
+        ));
+        self.allocator.free(get_block(&alloc));
+    }
+
+    /// Invalidates existing allocations.
+    crate unsafe fn clear(&mut self) {
+        self.allocator.clear()
+    }
+}
+
+impl MemoryMapping {
+    fn memory_property_flags(self) -> vk::MemoryPropertyFlags {
+        use MemoryMapping::*;
+        match self {
+            Mapped => visible_coherent_flags(),
+            Unmapped => vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
+        }
+    }
+}
+
+impl From<MemoryMapping> for bool {
+    fn from(mapping: MemoryMapping) -> Self {
+        match mapping {
+            MemoryMapping::Mapped => true,
+            MemoryMapping::Unmapped => false,
+        }
     }
 }
 
@@ -665,22 +946,40 @@ mod tests {
     use super::*;
 
     unsafe fn device_heap_smoke(vars: testing::TestVars) {
+        use Tiling::*;
+        use MemoryMapping::*;
+
         let device = Arc::clone(&vars.swapchain.device);
-        let mut heap = DeviceHeap::new(device);
+        let mut heap = DeviceHeap::new(Arc::clone(&device));
 
         let reqs = vk::MemoryRequirements {
             size: 4096,
             alignment: 256,
             memory_type_bits: !0,
         };
-        let _alloc0 = heap.alloc(reqs, Tiling::Linear, true);
-        let _alloc1 = heap.alloc(reqs, Tiling::Nonlinear, false);
+        let _alloc0 = heap.alloc(reqs, Linear, Mapped);
+        let _alloc1 = heap.alloc(reqs, Nonlinear, Unmapped);
         assert_ne!(_alloc0.as_raw(), 0 as _);
         heap.free(_alloc0);
     }
 
+    unsafe fn buffer_pool_smoke(vars: testing::TestVars) {
+        let device = Arc::clone(&vars.swapchain.device);
+        let mut heap = BufferPool::new(
+            device,
+            MemoryMapping::Mapped,
+            vk::BufferUsageFlags::STORAGE_BUFFER_BIT,
+        );
+
+        let mut x = BufferData::assume_init(heap.alloc_block::<[f32; 4]>());
+        *x = [0.0, 1.0, 2.0, 3.0];
+        assert_eq!(x[1], 1.0);
+        heap.free(x.into());
+    }
+
     unit::declare_tests![
         device_heap_smoke,
+        buffer_pool_smoke,
     ];
 }
 
