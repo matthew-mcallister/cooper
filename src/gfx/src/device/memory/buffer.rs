@@ -348,7 +348,7 @@ impl BufferPool {
 
     fn alignment(&self) -> vk::DeviceSize {
         use BufferBinding::*;
-        let limits = &self.device.props.limits;
+        let limits = &self.device.limits();
         match self.binding {
             Storage => limits.min_storage_buffer_offset_alignment,
             Uniform => limits.min_uniform_buffer_offset_alignment,
@@ -420,7 +420,17 @@ impl BufferPool {
     fn alloc(&mut self, size: vk::DeviceSize) -> BufferRange {
         let alignment = self.alignment();
         let size = align(alignment, size);
+
         assert_ne!(size, 0);
+        let limits = self.device.limits();
+        match self.binding {
+            BufferBinding::Uniform =>
+                assert!(size < limits.max_uniform_buffer_range as _),
+            BufferBinding::Storage =>
+                assert!(size < limits.max_storage_buffer_range as _),
+            _ => (),
+        }
+
         let block = self.allocator.alloc(size, alignment)
             .or_else(|| {
                 unsafe { self.add_chunk(size); }
@@ -485,7 +495,24 @@ mod tests {
         heap.free(x);
     }
 
-    unit::declare_tests![smoke_test];
+    unsafe fn oversize_test(vars: testing::TestVars) {
+        use BufferBinding::*;
+
+        let device = Arc::clone(&vars.swapchain.device);
+        let mut heap = BufferHeap::new(Arc::clone(&device));
+
+        let x = heap.alloc(
+            Uniform,
+            MemoryMapping::Mapped,
+            (2 * device.limits().max_uniform_buffer_range) as _
+        );
+        heap.free(x);
+    }
+
+    unit::declare_tests![
+        smoke_test,
+        (#[should_err] oversize_test),
+    ];
 }
 
 unit::collect_tests![tests];
