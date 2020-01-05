@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use enum_map::{Enum, EnumMap};
@@ -31,7 +31,7 @@ crate struct BufferRange {
 #[derive(Debug)]
 crate struct BufferBox<T: ?Sized> {
     alloc: BufferRange,
-    ptr: *mut T,
+    ptr: NonNull<T>,
 }
 
 impl Drop for DeviceBuffer {
@@ -93,7 +93,7 @@ impl BufferRange {
 
 impl<T: ?Sized> Drop for BufferBox<T> {
     fn drop(&mut self) {
-        unsafe { std::ptr::drop_in_place(self.ptr); }
+        unsafe { std::ptr::drop_in_place(self.ptr.as_ptr()); }
     }
 }
 
@@ -105,7 +105,7 @@ impl<T: ?Sized> From<BufferBox<T>> for BufferRange {
 
 impl<T: ?Sized> BufferBox<T> {
     unsafe fn new(alloc: BufferRange, ptr: *mut T) -> Self {
-        BufferBox { alloc, ptr }
+        BufferBox { alloc, ptr: NonNull::new_unchecked(ptr) }
     }
 
     crate fn alloc(&self) -> &BufferRange {
@@ -114,7 +114,7 @@ impl<T: ?Sized> BufferBox<T> {
 
     crate fn into_inner(self) -> BufferRange {
         unsafe {
-            std::ptr::drop_in_place(self.ptr);
+            std::ptr::drop_in_place(self.ptr.as_ptr());
             let alloc = ptr::read(&self.alloc);
             std::mem::forget(self);
             alloc
@@ -156,7 +156,7 @@ impl<T: ?Sized> std::ops::Deref for BufferBox<T> {
     type Target = T;
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr }
+        unsafe { self.ptr.as_ref() }
     }
 }
 
@@ -164,7 +164,7 @@ impl<T: ?Sized> std::ops::Deref for BufferBox<T> {
 impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.ptr }
+        unsafe { self.ptr.as_mut() }
     }
 }
 
