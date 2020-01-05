@@ -1,6 +1,7 @@
 #![feature(arbitrary_self_types)]
 #![feature(bool_to_option)]
 #![feature(crate_visibility_modifier)]
+#![feature(maybe_uninit_extra)]
 #![feature(seek_convenience)]
 #![feature(try_blocks)]
 #![feature(type_ascription)]
