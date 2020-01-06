@@ -273,16 +273,3 @@ impl Device {
         Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    fn smoke_test(_vars: crate::testing::TestVars) {
-        // Do nothing
-    }
-
-    unit::declare_tests![
-        smoke_test,
-    ];
-}
-
-unit::collect_tests![tests];
