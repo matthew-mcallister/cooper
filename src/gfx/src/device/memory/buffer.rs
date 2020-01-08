@@ -57,6 +57,16 @@ impl DeviceBuffer {
     crate fn usage(&self) -> vk::BufferUsageFlags {
         self.usage
     }
+
+    unsafe fn bind(&mut self) {
+        let dt = &*self.device().table;
+        dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
+    }
+}
+
+// Odd that you have to implement this manually...
+impl AsRef<Self> for BufferRange {
+    fn as_ref(&self) -> &BufferRange { &self }
 }
 
 impl MemoryRegion for BufferRange {
@@ -94,6 +104,12 @@ impl BufferRange {
 impl<T: ?Sized> Drop for BufferBox<T> {
     fn drop(&mut self) {
         unsafe { std::ptr::drop_in_place(self.ptr.as_ptr()); }
+    }
+}
+
+impl<T: ?Sized> AsRef<BufferRange> for BufferBox<T> {
+    fn as_ref(&self) -> &BufferRange {
+        &self.alloc
     }
 }
 
@@ -405,13 +421,14 @@ impl BufferPool {
         };
         mem.init();
 
-        let buffer = DeviceBuffer {
+        let mut buffer = DeviceBuffer {
             memory: Arc::new(mem),
             inner: buffer,
             usage: self.usage(),
             binding: self.binding,
             mapping: self.mapping,
         };
+        buffer.bind();
 
         self.chunks.push(Arc::new(buffer));
         self.allocator.add_chunk(size);

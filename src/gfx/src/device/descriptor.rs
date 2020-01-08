@@ -12,6 +12,7 @@ use self::{
     DescriptorSet as Set, DescriptorSetLayout as Layout,
 };
 
+// TODO: This should just be a fixed-size array
 type DescriptorCounts = HashVector<vk::DescriptorType, u32>;
 
 crate fn pool_sizes(counts: &DescriptorCounts) -> Vec<vk::DescriptorPoolSize> {
@@ -66,10 +67,11 @@ crate struct DescriptorSetLayout {
     device: Arc<Device>,
     inner: vk::DescriptorSetLayout,
     flags: vk::DescriptorSetLayoutCreateFlags,
+    bindings: Box<[vk::DescriptorSetLayoutBinding]>,
     counts: Counts,
 }
 
-impl Drop for DescriptorSetLayout {
+impl Drop for Layout {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe { dt.destroy_descriptor_set_layout(self.inner, ptr::null()); }
@@ -98,12 +100,20 @@ impl Layout {
         Self::new(device, &create_info)
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     crate fn inner(&self) -> vk::DescriptorSetLayout {
         self.inner
     }
 
     crate fn flags(&self) -> vk::DescriptorSetLayoutCreateFlags {
         self.flags
+    }
+
+    crate fn bindings(&self) -> &[vk::DescriptorSetLayoutBinding] {
+        &self.bindings
     }
 
     crate fn counts(&self) -> &Counts {
@@ -128,11 +138,11 @@ unsafe fn create_descriptor_set_layout(
     create_info: &vk::DescriptorSetLayoutCreateInfo,
 ) -> DescriptorSetLayout {
     let dt = &*device.table;
-    let bindings = std::slice::from_raw_parts(
+    let bindings: Box<_> = std::slice::from_raw_parts(
         create_info.p_bindings,
         create_info.binding_count as _,
-    );
-    let counts = count_descriptors(bindings);
+    ).into();
+    let counts = count_descriptors(&bindings);
     let flags = create_info.flags;
     let mut inner = vk::null();
     dt.create_descriptor_set_layout(create_info, ptr::null(), &mut inner)
@@ -141,6 +151,7 @@ unsafe fn create_descriptor_set_layout(
         device,
         inner,
         flags,
+        bindings,
         counts,
     }
 }
@@ -152,13 +163,71 @@ crate struct DescriptorSet {
     inner: vk::DescriptorSet,
 }
 
+fn buffer_types() -> &'static [vk::DescriptorType] {
+    &[
+        vk::DescriptorType::UNIFORM_BUFFER,
+        vk::DescriptorType::STORAGE_BUFFER,
+        vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+        vk::DescriptorType::STORAGE_BUFFER_DYNAMIC,
+    ]
+}
+
 impl DescriptorSet {
+    crate fn device(&self) -> &Arc<Device> {
+        self.layout.device()
+    }
+
     crate fn inner(&self) -> vk::DescriptorSet {
         self.inner
     }
 
     crate fn layout(&self) -> &Arc<DescriptorSetLayout> {
         &self.layout
+    }
+
+    crate fn write_buffer(
+        &mut self,
+        binding: u32,
+        buffer: impl AsRef<BufferRange>,
+    ) {
+        self.write_buffers(binding, 0, std::slice::from_ref(buffer.as_ref()));
+    }
+
+    // N.B. direct writes scale badly compared to update templates.
+    crate fn write_buffers(
+        &mut self,
+        binding: u32,
+        first_element: u32,
+        buffers: &[impl AsRef<BufferRange>],
+    ) {
+        use vk::DescriptorType as Ty;
+        let dt = &self.layout.device().table;
+        assert_ne!(buffers.len(), 0);
+
+        let layout_binding = &self.layout.bindings()[0];
+        let len = buffers.len() as u32;
+        // N.B. Overrunning writes are actually allowed by the spec
+        assert!(first_element + len <= layout_binding.descriptor_count);
+
+        let ty = layout_binding.descriptor_type;
+        assert!(buffer_types().contains(&ty));
+
+        let info: Vec<_> = buffers.iter()
+            .map(|buffer| buffer.as_ref().buffer_info())
+            .collect();
+        let writes = [vk::WriteDescriptorSet {
+            dst_set: self.inner(),
+            dst_binding: binding,
+            dst_array_element: first_element,
+            descriptor_count: info.len() as _,
+            descriptor_type: ty,
+            p_buffer_info: info.as_ptr(),
+            ..Default::default()
+        }];
+        unsafe {
+            dt.update_descriptor_sets
+                (writes.len() as _, writes.as_ptr(), 0, ptr::null());
+        }
     }
 }
 
@@ -301,13 +370,11 @@ mod tests {
     use base::Name;
     use super::*;
 
-    unsafe fn create_test_set_layouts(device: &Arc<Device>) ->
-        fnv::FnvHashMap<Name, Arc<DescriptorSetLayout>>
+    unsafe fn scene_global_layout(device: &Arc<Device>) ->
+        Arc<DescriptorSetLayout>
     {
-        let mut map = FnvHashMap::default();
-
+        let device = Arc::clone(device);
         let flags = Default::default();
-
         let bindings = [
             vk::DescriptorSetLayoutBinding {
                 binding: 0,
@@ -317,21 +384,15 @@ mod tests {
                     | vk::ShaderStageFlags::FRAGMENT_BIT,
                 ..Default::default()
             },
-            vk::DescriptorSetLayoutBinding {
-                binding: 1,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            },
         ];
-        map.insert(
-            Name::new("scene_globals"),
-            Arc::new(DescriptorSetLayout::from_bindings(
-                Arc::clone(&device), flags, &bindings,
-            )),
-        );
+        DescriptorSetLayout::from_bindings(device, flags, &bindings).into()
+    }
 
+    unsafe fn material_layout(device: &Arc<Device>) ->
+        Arc<DescriptorSetLayout>
+    {
+        let device = Arc::clone(device);
+        let flags = Default::default();
         let bindings = [vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -339,31 +400,22 @@ mod tests {
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
             ..Default::default()
         }];
-        map.insert(
-            Name::new("material"),
-            Arc::new(DescriptorSetLayout::from_bindings(
-                Arc::clone(&device), flags, &bindings,
-            )),
-        );
-
-        map
+        DescriptorSetLayout::from_bindings(device, flags, &bindings).into()
     }
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn alloc_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
 
-        let layouts = create_test_set_layouts(&device);
-        let mut pool = create_global_pool(device);
+        let mut pool = create_global_pool(Arc::clone(&device));
+        let scene_global_layout = scene_global_layout(&device);
+        let material_layout = material_layout(&device);
 
-        let scene_global_layout = &layouts[&Name::new("scene_globals")];
-        let material_layout = &layouts[&Name::new("material")];
-
-        let set0 = pool.alloc(scene_global_layout);
-        let sets = pool.alloc_many(material_layout, 3);
+        let set0 = pool.alloc(&scene_global_layout);
+        let sets = pool.alloc_many(&material_layout, 3);
 
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 4);
-        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 2);
+        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 1);
         assert_eq!(used.get(&vk::DescriptorType::COMBINED_IMAGE_SAMPLER), 9);
 
         assert!(!sets.iter().any(|set| set.inner.is_null()));
@@ -377,8 +429,21 @@ mod tests {
         assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 0);
     }
 
+    unsafe fn write_test(vars: testing::TestVars) {
+        let device = Arc::clone(&vars.swapchain.device);
+
+        let layout = scene_global_layout(&device);
+        let mut pool = create_global_pool(Arc::clone(&device));
+        let mut buffers = BufferHeap::new(Arc::clone(&device));
+
+        let mut set = pool.alloc(&layout);
+        let buf = buffers.alloc(BufferBinding::Storage, false.into(), 256);
+        set.write_buffer(0, &buf);
+    }
+
     unit::declare_tests![
-        smoke_test,
+        alloc_test,
+        write_test,
     ];
 }
 
