@@ -1,7 +1,8 @@
 use std::ptr;
 use std::sync::Arc;
 
-use base::{HashVector, Sentinel};
+use base::{Sentinel, impl_bin_ops};
+use derive_more::*;
 use fnv::FnvHashMap;
 
 use crate::*;
@@ -12,55 +13,8 @@ use self::{
     DescriptorSet as Set, DescriptorSetLayout as Layout,
 };
 
-// TODO: This should just be a fixed-size array
-type DescriptorCounts = HashVector<vk::DescriptorType, u32>;
-
-crate fn pool_sizes(counts: &DescriptorCounts) -> Vec<vk::DescriptorPoolSize> {
-    counts.iter()
-        .map(|(&ty, &descriptor_count)| {
-            vk::DescriptorPoolSize { ty, descriptor_count }
-        })
-        .collect()
-}
-
-crate fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) ->
-    Counts
-{
-    bindings.iter()
-        .map(|binding| (binding.descriptor_type, binding.descriptor_count))
-        .sum()
-}
-
-/// Returns a reasonable number of descriptor sets and pool sizes for
-/// a global descriptor pool.
-crate fn global_descriptor_counts() -> (u32, Counts) {
-    let max_sets = 0x1_0000;
-    let max_descs = [
-        (vk::DescriptorType::SAMPLER,                   1 * max_sets),
-        (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),
-        (vk::DescriptorType::SAMPLED_IMAGE,             8 * max_sets),
-        (vk::DescriptorType::STORAGE_IMAGE,             1 * max_sets),
-        (vk::DescriptorType::UNIFORM_TEXEL_BUFFER,      1 * max_sets),
-        (vk::DescriptorType::STORAGE_TEXEL_BUFFER,      1 * max_sets),
-        (vk::DescriptorType::UNIFORM_BUFFER,            1 * max_sets),
-        (vk::DescriptorType::STORAGE_BUFFER,            1 * max_sets),
-        (vk::DescriptorType::INPUT_ATTACHMENT,          256),
-    ].iter().cloned().collect();
-    (max_sets, max_descs)
-}
-
-crate unsafe fn create_global_pool(device: Arc<Device>) -> DescriptorPool {
-    let (max_sets, max_descriptors) = global_descriptor_counts();
-    let pool_sizes = pool_sizes(&max_descriptors);
-    let create_info = vk::DescriptorPoolCreateInfo {
-        flags: vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT,
-        max_sets,
-        pool_size_count: pool_sizes.len() as _,
-        p_pool_sizes: pool_sizes.as_ptr(),
-        ..Default::default()
-    };
-    DescriptorPool::new(device, &create_info)
-}
+#[derive(Clone, Copy, Debug, Eq, From, Into, PartialEq)]
+crate struct DescriptorCounts(na::VectorN<u32, na::U11>);
 
 #[derive(Clone, Debug)]
 crate struct DescriptorSetLayout {
@@ -71,11 +25,34 @@ crate struct DescriptorSetLayout {
     counts: Counts,
 }
 
+#[derive(Debug)]
+crate struct DescriptorSet {
+    layout: Arc<DescriptorSetLayout>,
+    sentinel: Sentinel,
+    inner: vk::DescriptorSet,
+}
+
 impl Drop for Layout {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe { dt.destroy_descriptor_set_layout(self.inner, ptr::null()); }
     }
+}
+
+crate fn pool_sizes(counts: &DescriptorCounts) -> Vec<vk::DescriptorPoolSize> {
+    counts.iter()
+        .filter_map(|(ty, n)| (n > 0).then_some(
+            vk::DescriptorPoolSize { ty, descriptor_count: n }
+        ))
+        .collect()
+}
+
+crate fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) ->
+    Counts
+{
+    bindings.iter()
+        .map(|binding| (binding.descriptor_type, binding.descriptor_count))
+        .sum()
 }
 
 impl Layout {
@@ -131,36 +108,6 @@ impl Layout {
 
         flags
     }
-}
-
-unsafe fn create_descriptor_set_layout(
-    device: Arc<Device>,
-    create_info: &vk::DescriptorSetLayoutCreateInfo,
-) -> DescriptorSetLayout {
-    let dt = &*device.table;
-    let bindings: Box<_> = std::slice::from_raw_parts(
-        create_info.p_bindings,
-        create_info.binding_count as _,
-    ).into();
-    let counts = count_descriptors(&bindings);
-    let flags = create_info.flags;
-    let mut inner = vk::null();
-    dt.create_descriptor_set_layout(create_info, ptr::null(), &mut inner)
-        .check().unwrap();
-    DescriptorSetLayout {
-        device,
-        inner,
-        flags,
-        bindings,
-        counts,
-    }
-}
-
-#[derive(Debug)]
-crate struct DescriptorSet {
-    layout: Arc<DescriptorSetLayout>,
-    sentinel: Sentinel,
-    inner: vk::DescriptorSet,
 }
 
 fn buffer_types() -> &'static [vk::DescriptorType] {
@@ -228,6 +175,141 @@ impl DescriptorSet {
             dt.update_descriptor_sets
                 (writes.len() as _, writes.as_ptr(), 0, ptr::null());
         }
+    }
+}
+
+// Begin boilerplate
+
+impl Default for DescriptorCounts {
+    fn default() -> Self {
+        Self(na::zero())
+    }
+}
+
+impl DescriptorCounts {
+    crate fn new() -> Self { Default::default() }
+
+    crate fn iter(&self) ->
+        impl Iterator<Item = (vk::DescriptorType, u32)> + '_
+    {
+        self.0.iter().enumerate()
+            .map(|(i, v)| (vk::DescriptorType(i as _), *v))
+    }
+
+    crate fn iter_mut(&mut self) ->
+        impl Iterator<Item = (vk::DescriptorType, &mut u32)>
+    {
+        self.0.iter_mut().enumerate()
+            .map(|(i, v)| (vk::DescriptorType(i as _), v))
+    }
+}
+
+macro_rules! impl_vec_op {
+    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        impl std::ops::$OpAssign for DescriptorCounts {
+            fn $op_assign(&mut self, other: Self) {
+                std::ops::$OpAssign::$op_assign(&mut self.0, other.0);
+            }
+        }
+
+        impl<'rhs> std::ops::$OpAssign<&'rhs Self> for DescriptorCounts {
+            fn $op_assign(&mut self, other: &'rhs Self) {
+                std::ops::$OpAssign::$op_assign(&mut self.0, other.0);
+            }
+        }
+
+        impl_bin_ops!(
+            (DescriptorCounts), (DescriptorCounts),
+            $Op, $OpAssign, $op, $op_assign,
+        );
+    }
+}
+
+macro_rules! impl_scalar_op {
+    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        impl std::ops::$OpAssign<u32> for DescriptorCounts {
+            fn $op_assign(&mut self, other: u32) {
+                std::ops::$OpAssign::<u32>::$op_assign(&mut self.0, other);
+            }
+        }
+
+        impl<'rhs> std::ops::$OpAssign<&'rhs u32> for DescriptorCounts {
+            fn $op_assign(&mut self, other: &'rhs u32) {
+                std::ops::$OpAssign::<u32>::$op_assign(&mut self.0, *other);
+            }
+        }
+
+        impl_bin_ops!(
+            (DescriptorCounts), (u32),
+            $Op, $OpAssign, $op, $op_assign,
+        );
+    }
+}
+
+impl_vec_op!(Add, AddAssign, add, add_assign);
+impl_vec_op!(Sub, SubAssign, sub, sub_assign);
+impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
+impl_scalar_op!(Div, DivAssign, div, div_assign);
+
+impl std::ops::Index<vk::DescriptorType> for DescriptorCounts {
+    type Output = u32;
+    fn index(&self, idx: vk::DescriptorType) -> &Self::Output {
+        &self.0[idx.0 as usize]
+    }
+}
+
+impl std::ops::IndexMut<vk::DescriptorType> for DescriptorCounts {
+    fn index_mut(&mut self, idx: vk::DescriptorType) -> &mut Self::Output {
+        &mut self.0[idx.0 as usize]
+    }
+}
+
+impl std::iter::Sum<(vk::DescriptorType, u32)> for DescriptorCounts {
+    fn sum<I>(iter: I) -> Self
+        where I: Iterator<Item = (vk::DescriptorType, u32)>
+    {
+        let mut counts = DescriptorCounts::default();
+        for (k, v) in iter {
+            counts[k] += v;
+        }
+        counts
+    }
+}
+
+impl std::iter::FromIterator<(vk::DescriptorType, u32)> for DescriptorCounts {
+    fn from_iter<I>(iter: I) -> Self
+        where I: IntoIterator<Item = (vk::DescriptorType, u32)>
+    {
+        let mut counts = DescriptorCounts::default();
+        for (k, v) in iter {
+            counts[k] = v;
+        }
+        counts
+    }
+}
+
+// End boilerplate
+
+unsafe fn create_descriptor_set_layout(
+    device: Arc<Device>,
+    create_info: &vk::DescriptorSetLayoutCreateInfo,
+) -> DescriptorSetLayout {
+    let dt = &*device.table;
+    let bindings: Box<_> = std::slice::from_raw_parts(
+        create_info.p_bindings,
+        create_info.binding_count as _,
+    ).into();
+    let counts = count_descriptors(&bindings);
+    let flags = create_info.flags;
+    let mut inner = vk::null();
+    dt.create_descriptor_set_layout(create_info, ptr::null(), &mut inner)
+        .check().unwrap();
+    DescriptorSetLayout {
+        device,
+        inner,
+        flags,
+        bindings,
+        counts,
     }
 }
 
@@ -364,6 +446,37 @@ impl Pool {
     }
 }
 
+/// Returns a reasonable number of descriptor sets and pool sizes for
+/// a global descriptor pool.
+crate fn global_descriptor_counts() -> (u32, Counts) {
+    let max_sets = 0x1_0000;
+    let max_descs = [
+        (vk::DescriptorType::SAMPLER,                   1 * max_sets),
+        (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),
+        (vk::DescriptorType::SAMPLED_IMAGE,             8 * max_sets),
+        (vk::DescriptorType::STORAGE_IMAGE,             1 * max_sets),
+        (vk::DescriptorType::UNIFORM_TEXEL_BUFFER,      1 * max_sets),
+        (vk::DescriptorType::STORAGE_TEXEL_BUFFER,      1 * max_sets),
+        (vk::DescriptorType::UNIFORM_BUFFER,            1 * max_sets),
+        (vk::DescriptorType::STORAGE_BUFFER,            1 * max_sets),
+        (vk::DescriptorType::INPUT_ATTACHMENT,          256),
+    ].iter().cloned().collect();
+    (max_sets, max_descs)
+}
+
+crate unsafe fn create_global_pool(device: Arc<Device>) -> DescriptorPool {
+    let (max_sets, max_descriptors) = global_descriptor_counts();
+    let pool_sizes = pool_sizes(&max_descriptors);
+    let create_info = vk::DescriptorPoolCreateInfo {
+        flags: vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT,
+        max_sets,
+        pool_size_count: pool_sizes.len() as _,
+        p_pool_sizes: pool_sizes.as_ptr(),
+        ..Default::default()
+    };
+    DescriptorPool::new(device, &create_info)
+}
+
 #[cfg(test)]
 mod tests {
     use vk::traits::*;
@@ -415,8 +528,8 @@ mod tests {
 
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 4);
-        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 1);
-        assert_eq!(used.get(&vk::DescriptorType::COMBINED_IMAGE_SAMPLER), 9);
+        assert_eq!(used[vk::DescriptorType::STORAGE_BUFFER], 1);
+        assert_eq!(used[vk::DescriptorType::COMBINED_IMAGE_SAMPLER], 9);
 
         assert!(!sets.iter().any(|set| set.inner.is_null()));
         assert_ne!(sets[0].inner, sets[1].inner);
@@ -426,7 +539,7 @@ mod tests {
         pool.free(set0);
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 3);
-        assert_eq!(used.get(&vk::DescriptorType::STORAGE_BUFFER), 0);
+        assert_eq!(used[vk::DescriptorType::STORAGE_BUFFER], 0);
     }
 
     unsafe fn write_test(vars: testing::TestVars) {
