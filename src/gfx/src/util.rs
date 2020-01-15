@@ -9,7 +9,7 @@ use std::sync::Arc;
 use prelude::*;
 
 #[macro_export]
-macro_rules! opt {
+macro_rules! try_opt {
     ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
 }
 
@@ -104,4 +104,27 @@ crate fn as_uninit<T>(src: &T) -> &MaybeUninit<T> {
 #[inline]
 crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
     unsafe { std::mem::transmute(src) }
+}
+
+#[macro_export]
+macro_rules! set_layout_bindings {
+    ($(($($binding:tt)*)),*$(,)?) => {
+        [$(set_layout_bindings!(@binding ($($binding)*)),)*]
+    };
+    (@binding (
+        $binding:expr, $type:ident$([$count:expr])? $(, $($stages:ident)+)?)
+    ) => {
+        #[allow(path_statements)]
+        vk::DescriptorSetLayoutBinding {
+            binding: $binding,
+            descriptor_type: vk::DescriptorType::$type,
+            descriptor_count: { 1 $(; $count)? },
+            stage_flags: {
+                vk::ShaderStageFlags::ALL
+                $(; vk::ShaderStageFlags::empty()
+                    $(| vk::ShaderStageFlags::$stages)*)?
+            },
+            ..Default::default()
+        }
+    };
 }

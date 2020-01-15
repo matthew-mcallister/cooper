@@ -25,6 +25,9 @@ crate struct DescriptorSetLayout {
     counts: Counts,
 }
 
+// This alias is commonly appropriate.
+crate type SetLayout = DescriptorSetLayout;
+
 #[derive(Debug)]
 crate struct DescriptorSet {
     layout: Arc<DescriptorSetLayout>,
@@ -58,23 +61,34 @@ crate fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) ->
 impl Layout {
     crate unsafe fn new(
         device: Arc<Device>,
-        create_info: &vk::DescriptorSetLayoutCreateInfo,
-    ) -> Self {
-        create_descriptor_set_layout(device, &create_info)
-    }
-
-    crate unsafe fn from_bindings(
-        device: Arc<Device>,
         flags: vk::DescriptorSetLayoutCreateFlags,
         bindings: &[vk::DescriptorSetLayoutBinding],
     ) -> Self {
+        let dt = &*device.table;
         let create_info = vk::DescriptorSetLayoutCreateInfo {
             flags,
             binding_count: bindings.len() as _,
             p_bindings: bindings.as_ptr(),
             ..Default::default()
         };
-        Self::new(device, &create_info)
+        let counts = count_descriptors(bindings);
+        let mut inner = vk::null();
+        dt.create_descriptor_set_layout(&create_info, ptr::null(), &mut inner)
+            .check().unwrap();
+        DescriptorSetLayout {
+            device,
+            inner,
+            flags,
+            bindings: bindings.into(),
+            counts,
+        }
+    }
+
+    crate unsafe fn from_bindings(
+        device: Arc<Device>,
+        bindings: &[vk::DescriptorSetLayoutBinding],
+    ) -> Self {
+        Self::new(device, Default::default(), bindings)
     }
 
     crate fn device(&self) -> &Arc<Device> {
@@ -140,7 +154,7 @@ impl DescriptorSet {
         self.write_buffers(binding, 0, std::slice::from_ref(buffer.as_ref()));
     }
 
-    // N.B. direct writes scale badly compared to update templates.
+    // N.B. direct writes scale poorly compared to update templates.
     crate fn write_buffers(
         &mut self,
         binding: u32,
@@ -290,29 +304,6 @@ impl std::iter::FromIterator<(vk::DescriptorType, u32)> for DescriptorCounts {
 
 // End boilerplate
 
-unsafe fn create_descriptor_set_layout(
-    device: Arc<Device>,
-    create_info: &vk::DescriptorSetLayoutCreateInfo,
-) -> DescriptorSetLayout {
-    let dt = &*device.table;
-    let bindings: Box<_> = std::slice::from_raw_parts(
-        create_info.p_bindings,
-        create_info.binding_count as _,
-    ).into();
-    let counts = count_descriptors(&bindings);
-    let flags = create_info.flags;
-    let mut inner = vk::null();
-    dt.create_descriptor_set_layout(create_info, ptr::null(), &mut inner)
-        .check().unwrap();
-    DescriptorSetLayout {
-        device,
-        inner,
-        flags,
-        bindings,
-        counts,
-    }
-}
-
 /// Fixed-size general-purpose descriptor pool.
 #[derive(Debug)]
 crate struct DescriptorPool {
@@ -389,7 +380,7 @@ impl Pool {
         &self.used_descriptors
     }
 
-    crate unsafe fn alloc_many(
+    crate fn alloc_many(
         &mut self,
         layout: &Arc<DescriptorSetLayout>,
         count: u32,
@@ -409,8 +400,10 @@ impl Pool {
             p_set_layouts: layouts.as_ptr(),
             ..Default::default()
         };
-        dt.allocate_descriptor_sets(&alloc_info, sets.as_mut_ptr())
-            .check().unwrap();
+        unsafe {
+            dt.allocate_descriptor_sets(&alloc_info, sets.as_mut_ptr())
+                .check().unwrap();
+        }
 
         sets.into_iter().map(|inner| {
             DescriptorSet {
@@ -421,12 +414,12 @@ impl Pool {
         }).collect()
     }
 
-    crate unsafe fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set
+    crate fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set
     {
         self.alloc_many(layout, 1).pop().unwrap()
     }
 
-    crate unsafe fn free(&mut self, set: Set) {
+    crate fn free(&mut self, set: Set) {
         assert!(self.can_free());
         assert_eq!(self.sentinel, set.sentinel);
 
@@ -435,8 +428,10 @@ impl Pool {
 
         let dt = &*self.device.table;
         let sets = std::slice::from_ref(&set.inner);
-        dt.free_descriptor_sets(self.inner, sets.len() as _, sets.as_ptr())
-            .check().unwrap();
+        unsafe {
+            dt.free_descriptor_sets(self.inner, sets.len() as _, sets.as_ptr())
+                .check().unwrap();
+        }
     }
 
     crate unsafe fn reset(&mut self) {
@@ -464,7 +459,9 @@ crate fn global_descriptor_counts() -> (u32, Counts) {
     (max_sets, max_descs)
 }
 
-crate unsafe fn create_global_pool(device: Arc<Device>) -> DescriptorPool {
+crate fn create_global_descriptor_pool(device: Arc<Device>) ->
+    DescriptorPool
+{
     let (max_sets, max_descriptors) = global_descriptor_counts();
     let pool_sizes = pool_sizes(&max_descriptors);
     let create_info = vk::DescriptorPoolCreateInfo {
@@ -474,7 +471,7 @@ crate unsafe fn create_global_pool(device: Arc<Device>) -> DescriptorPool {
         p_pool_sizes: pool_sizes.as_ptr(),
         ..Default::default()
     };
-    DescriptorPool::new(device, &create_info)
+    unsafe { DescriptorPool::new(device, &create_info) }
 }
 
 #[cfg(test)]
@@ -487,7 +484,6 @@ mod tests {
         Arc<DescriptorSetLayout>
     {
         let device = Arc::clone(device);
-        let flags = Default::default();
         let bindings = [
             vk::DescriptorSetLayoutBinding {
                 binding: 0,
@@ -498,14 +494,13 @@ mod tests {
                 ..Default::default()
             },
         ];
-        DescriptorSetLayout::from_bindings(device, flags, &bindings).into()
+        DescriptorSetLayout::from_bindings(device, &bindings).into()
     }
 
     unsafe fn material_layout(device: &Arc<Device>) ->
         Arc<DescriptorSetLayout>
     {
         let device = Arc::clone(device);
-        let flags = Default::default();
         let bindings = [vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -513,13 +508,13 @@ mod tests {
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
             ..Default::default()
         }];
-        DescriptorSetLayout::from_bindings(device, flags, &bindings).into()
+        DescriptorSetLayout::from_bindings(device, &bindings).into()
     }
 
     unsafe fn alloc_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
 
-        let mut pool = create_global_pool(Arc::clone(&device));
+        let mut pool = create_global_descriptor_pool(Arc::clone(&device));
         let scene_global_layout = scene_global_layout(&device);
         let material_layout = material_layout(&device);
 
@@ -546,7 +541,7 @@ mod tests {
         let device = Arc::clone(&vars.swapchain.device);
 
         let layout = scene_global_layout(&device);
-        let mut pool = create_global_pool(Arc::clone(&device));
+        let mut pool = create_global_descriptor_pool(Arc::clone(&device));
         let mut buffers = BufferHeap::new(Arc::clone(&device));
 
         let mut set = pool.alloc(&layout);

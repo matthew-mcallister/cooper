@@ -32,6 +32,12 @@ crate struct TestVars {
     crate queues: Vec<Vec<Arc<Queue>>>,
 }
 
+impl TestVars {
+    crate fn device(&self) -> &Arc<Device> {
+        self.swapchain.device()
+    }
+}
+
 const WINDOW_DIMS: (u32, u32) = (320, 200);
 
 impl VulkanTestContext {

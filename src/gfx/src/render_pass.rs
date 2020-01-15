@@ -29,7 +29,6 @@ struct SubpassState {
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct Subpass {
-    // TODO: Could be OwningRef<&SubpassState>
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     pass: Arc<RenderPass>,
@@ -39,8 +38,7 @@ impl Eq for Subpass {}
 
 #[derive(Debug, Default)]
 crate struct SubpassDesc {
-    // TODO?:
-    //crate name: Name,
+    // TODO: Name subpasses?
     crate layouts: Vec<vk::ImageLayout>,
     crate input_attchs: Vec<u32>,
     crate color_attchs: Vec<u32>,
@@ -76,10 +74,15 @@ impl RenderPass {
     }
 
     crate fn subpasses<'a>(self: &'a Arc<Self>) ->
-        impl Iterator<Item = Subpass> + 'a
+        impl Iterator<Item = Subpass> + ExactSizeIterator + 'a
     {
         (0..self.subpasses.len())
             .map(move |index| Subpass { pass: Arc::clone(self), index })
+    }
+
+    crate fn subpass<'a>(self: &'a Arc<Self>, index: usize) -> Subpass {
+        assert!(index < self.subpasses.len());
+        Subpass { pass: Arc::clone(self), index }
     }
 }
 

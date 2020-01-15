@@ -12,6 +12,7 @@ crate struct Device {
     crate app_info: Arc<AppInfo>,
     crate pdev: vk::PhysicalDevice,
     crate props: Box<vk::PhysicalDeviceProperties>,
+    crate queue_families: Vec<vk::QueueFamilyProperties>,
     crate mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
     crate table: Arc<vkl::DeviceTable>,
 }
@@ -190,6 +191,7 @@ impl Device {
             Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
         let props = instance.get_properties(pdev);
+        let queue_families = instance.get_queue_family_properties(pdev);
         let mut mem_props: Box<vk::PhysicalDeviceMemoryProperties> =
             Default::default();
         it.get_physical_device_memory_properties(pdev, &mut *mem_props);
@@ -199,6 +201,7 @@ impl Device {
             app_info,
             pdev,
             props,
+            queue_families,
             mem_props,
             table,
         });
@@ -209,7 +212,7 @@ impl Device {
     }
 
     unsafe fn get_queues(self: &Arc<Self>) -> Vec<Vec<Arc<Queue>>> {
-        let props = self.instance.get_queue_family_properties(self.pdev);
+        let props = self.queue_families();
 
         let family = Arc::new(QueueFamily {
             index: 0,
@@ -231,6 +234,10 @@ impl Device {
 
     crate fn properties(&self) -> &vk::PhysicalDeviceProperties {
         &self.props
+    }
+
+    crate fn queue_families(&self) -> &[vk::QueueFamilyProperties] {
+        &self.queue_families
     }
 
     crate fn limits(&self) -> &vk::PhysicalDeviceLimits {

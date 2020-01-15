@@ -192,6 +192,12 @@ impl ShaderSpec {
     }
 }
 
+impl From<Arc<Shader>> for ShaderSpec {
+    fn from(shader: Arc<Shader>) -> Self {
+        Self::new(shader)
+    }
+}
+
 impl SpecConstDecl {
     fn typed<T>(name: &str, id: u32) -> Self {
         SpecConstDecl {
@@ -252,125 +258,20 @@ impl ShaderVarType {
         Self::new(ShaderScalar::Double, dim)
     }
 
-    const INT: Self     = Self::int(ShaderDim::One);
-    const IVEC2: Self   = Self::int(ShaderDim::Two);
-    const IVEC3: Self   = Self::int(ShaderDim::Three);
-    const IVEC4: Self   = Self::int(ShaderDim::Four);
-    const UINT: Self    = Self::uint(ShaderDim::One);
-    const UVEC2: Self   = Self::uint(ShaderDim::Two);
-    const UVEC3: Self   = Self::uint(ShaderDim::Three);
-    const UVEC4: Self   = Self::uint(ShaderDim::Four);
-    const FLOAT: Self   = Self::float(ShaderDim::One);
-    const VEC2: Self    = Self::float(ShaderDim::Two);
-    const VEC3: Self    = Self::float(ShaderDim::Three);
-    const VEC4: Self    = Self::float(ShaderDim::Four);
-    const DOUBLE: Self  = Self::double(ShaderDim::One);
-    const DVEC2: Self   = Self::double(ShaderDim::Two);
-    const DVEC3: Self   = Self::double(ShaderDim::Three);
-    const DVEC4: Self   = Self::double(ShaderDim::Four);
+    crate const INT: Self     = Self::int(ShaderDim::One);
+    crate const IVEC2: Self   = Self::int(ShaderDim::Two);
+    crate const IVEC3: Self   = Self::int(ShaderDim::Three);
+    crate const IVEC4: Self   = Self::int(ShaderDim::Four);
+    crate const UINT: Self    = Self::uint(ShaderDim::One);
+    crate const UVEC2: Self   = Self::uint(ShaderDim::Two);
+    crate const UVEC3: Self   = Self::uint(ShaderDim::Three);
+    crate const UVEC4: Self   = Self::uint(ShaderDim::Four);
+    crate const FLOAT: Self   = Self::float(ShaderDim::One);
+    crate const VEC2: Self    = Self::float(ShaderDim::Two);
+    crate const VEC3: Self    = Self::float(ShaderDim::Three);
+    crate const VEC4: Self    = Self::float(ShaderDim::Four);
+    crate const DOUBLE: Self  = Self::double(ShaderDim::One);
+    crate const DVEC2: Self   = Self::double(ShaderDim::Two);
+    crate const DVEC3: Self   = Self::double(ShaderDim::Three);
+    crate const DVEC4: Self   = Self::double(ShaderDim::Four);
 }
-
-#[derive(Debug)]
-crate struct BuiltinShaders {
-    crate example_frag: Arc<Shader>,
-    crate example_vert: Arc<Shader>,
-}
-
-mod sources {
-    // TODO: Load from disk, hot reloading
-    macro_rules! include_shaders {
-        ($($ident:ident = $name:expr;)*) => {
-            $(crate const $ident: &'static [u8] = include_bytes!(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/generated/shaders/", $name, ".spv",
-                )
-            );)*
-        }
-    }
-
-    include_shaders! {
-        EXAMPLE_VERT = "example_vert";
-        EXAMPLE_FRAG = "example_frag";
-    }
-}
-
-macro_rules! vertex_inputs {
-    ($(location($loc:expr) $type:ident $Attr:ident;)*) => {
-        [$(
-            ShaderVar {
-                location: $loc,
-                ty: ShaderVarType::$type,
-                attr: Some(VertexAttrName::$Attr),
-                attch: None,
-            },
-        )*]
-    }
-}
-
-macro_rules! fragment_outputs {
-    ($(location($loc:expr) $type:ident $Attch:ident;)*) => {
-        [$(
-            ShaderVar {
-                location: $loc,
-                ty: ShaderVarType::$type,
-                attr: None,
-                attch: Some(AttachmentName::$Attch),
-            },
-        )*]
-    }
-}
-
-impl BuiltinShaders {
-    crate fn new(device: &Arc<Device>) -> Self {
-        let consts = [
-            SpecConstDecl::typed::<f32>("PHONG_SHININESS", 1),
-        ];
-        unsafe {
-            let example_vert = Arc::new(Shader::new(
-                Arc::clone(&device),
-                sources::EXAMPLE_VERT.to_vec(),
-                ShaderStage::Vertex,
-                vertex_inputs! {
-                    location(0) VEC3 Position;
-                    location(1) VEC3 Normal;
-                }.to_vec(),
-                // Intermediates are ignored for now
-                Vec::new(),
-                consts.to_vec(),
-            ));
-            let example_frag = Arc::new(Shader::new(
-                Arc::clone(&device),
-                sources::EXAMPLE_FRAG.to_vec(),
-                ShaderStage::Fragment,
-                Vec::new(),
-                fragment_outputs! {
-                    location(0) VEC3 Color;
-                }.to_vec(),
-                consts.to_vec(),
-            ));
-            BuiltinShaders {
-                example_frag,
-                example_vert,
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use enum_map::enum_map;
-    use crate::*;
-    use super::*;
-
-    fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device());
-        let _shaders = BuiltinShaders::new(&device);
-    }
-
-    unit::declare_tests![
-        smoke_test,
-    ];
-}
-
-unit::collect_tests![tests];

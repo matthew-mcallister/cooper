@@ -176,9 +176,6 @@ repr_bool! {
     }
 }
 
-// TODO:
-//crate enum Lifetime { Frame, Static }
-
 #[derive(Clone, Copy, Debug, Default)]
 crate struct HeapInfo {
     reserved: vk::DeviceSize,

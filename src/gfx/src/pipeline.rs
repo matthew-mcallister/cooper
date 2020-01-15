@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::ffi::c_void;
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ptr;
 use std::sync::Arc;
@@ -6,6 +8,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use enum_map::EnumMap;
 use fnv::FnvHashMap;
+use parking_lot::Mutex;
 use prelude::*;
 
 use crate::*;
@@ -45,51 +48,13 @@ crate struct GraphicsPipelineDesc {
     crate depth_write: bool,
     crate depth_cmp_op: vk::CompareOp,
     crate depth_bias: bool,
-    // We have no use case yet for distinct color blending states.
-    crate blend_state: AttachmentBlendDesc,
+    // We have no use case yet for multiple color blending states.
+    crate blend_state: vk::PipelineColorBlendAttachmentState,
     #[derivative(Hash(hash_with = "byte_eq"))]
     #[derivative(Hash(hash_with = "byte_hash"))]
     crate blend_consts: [f32; 4],
 }
 impl Eq for GraphicsPipelineDesc {}
-
-fn color_write_mask_all() -> vk::ColorComponentFlags {
-    vk::ColorComponentFlags::R_BIT
-        | vk::ColorComponentFlags::G_BIT
-        | vk::ColorComponentFlags::B_BIT
-        | vk::ColorComponentFlags::A_BIT
-}
-
-#[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
-#[derivative(Default)]
-crate struct AttachmentBlendDesc {
-    crate blend_enable: bool,
-    crate src_color_blend_factor: vk::BlendFactor,
-    crate dst_color_blend_factor: vk::BlendFactor,
-    crate color_blend_op: vk::BlendOp,
-    crate src_alpha_blend_factor: vk::BlendFactor,
-    crate dst_alpha_blend_factor: vk::BlendFactor,
-    crate alpha_blend_op: vk::BlendOp,
-    // I've been left scratching my head a few times after forgetting to
-    // fill this field out.
-    #[derivative(Default(value = "color_write_mask_all()"))]
-    crate color_write_mask: vk::ColorComponentFlags,
-}
-
-impl From<AttachmentBlendDesc> for vk::PipelineColorBlendAttachmentState {
-    fn from(desc: AttachmentBlendDesc) -> Self {
-        Self {
-            blend_enable: bool32(desc.blend_enable),
-            src_color_blend_factor: desc.src_color_blend_factor,
-            dst_color_blend_factor: desc.dst_color_blend_factor,
-            color_blend_op: desc.color_blend_op,
-            src_alpha_blend_factor: desc.src_alpha_blend_factor,
-            dst_alpha_blend_factor: desc.dst_alpha_blend_factor,
-            alpha_blend_op: desc.alpha_blend_op,
-            color_write_mask: desc.color_write_mask,
-        }
-    }
-}
 
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
@@ -99,7 +64,14 @@ impl Drop for PipelineLayout {
 }
 
 impl PipelineLayout {
-    crate unsafe fn new(
+    crate fn new(
+        device: Arc<Device>,
+        set_layouts: Vec<Arc<DescriptorSetLayout>>,
+    ) -> Self {
+        unsafe { Self::unsafe_new(device, set_layouts) }
+    }
+
+    unsafe fn unsafe_new(
         device: Arc<Device>,
         set_layouts: Vec<Arc<DescriptorSetLayout>>,
     ) -> Self {
@@ -168,6 +140,13 @@ impl GraphicsPipeline {
     }
 }
 
+fn color_write_mask_all() -> vk::ColorComponentFlags {
+    vk::ColorComponentFlags::R_BIT
+        | vk::ColorComponentFlags::G_BIT
+        | vk::ColorComponentFlags::B_BIT
+        | vk::ColorComponentFlags::A_BIT
+}
+
 impl GraphicsPipelineDesc {
     crate fn new(
         subpass: Subpass,
@@ -179,13 +158,16 @@ impl GraphicsPipelineDesc {
             layout,
             vertex_layout,
             stages: Default::default(),
-            cull_mode: Default::default(),
+            cull_mode: vk::CullModeFlags::BACK_BIT,
             wireframe: Default::default(),
             depth_test: Default::default(),
             depth_write: Default::default(),
             depth_cmp_op: Default::default(),
             depth_bias: Default::default(),
-            blend_state: Default::default(),
+            blend_state: vk::PipelineColorBlendAttachmentState {
+                color_write_mask: color_write_mask_all(),
+                ..Default::default()
+            },
             blend_consts: Default::default(),
         }
     }
@@ -276,8 +258,7 @@ unsafe fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let attachment: vk::PipelineColorBlendAttachmentState =
-        desc.blend_state.into();
+    let attachment: vk::PipelineColorBlendAttachmentState = desc.blend_state;
     let attachments = vec![attachment; desc.subpass.color_attchs().len()];
     let color_blend = vk::PipelineColorBlendStateCreateInfo {
         attachment_count: attachments.len() as _,
@@ -335,49 +316,199 @@ unsafe fn create_graphics_pipeline(
     }))
 }
 
+/// Implements the caching logic for pipelines, defined separately to
+/// clarify the caching logic.
+// TODO: This doesn't actually allow *parallel* pipeline creation due
+// to the lock. If that is a problem, it would best be solved by async
+// programming, seeing as pipeline creation is fairly rare.
+#[derive(Derivative)]
+#[derivative(Debug(bound = "FnvHashMap<K, V>: Debug"))]
+crate struct StagedCache<K, V> {
+    committed: FnvHashMap<K, V>,
+    staged: Mutex<FnvHashMap<K, V>>,
+}
+
+impl<K: Eq + Hash, V> Default for StagedCache<K, V> {
+    fn default() -> Self {
+        StagedCache {
+            committed: Default::default(),
+            staged: Default::default(),
+        }
+    }
+}
+
+impl<K, V> StagedCache<K, V>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+{
+    crate fn new() -> Self {
+        Default::default()
+    }
+
+    /// Gets a committed entry with zero synchronization guaranteed.
+    crate fn get_committed(&self, key: &K) -> Option<&V> {
+        self.committed.get(key)
+    }
+
+    /// Commits all staged additions.
+    crate fn commit(&mut self) {
+        self.committed.extend(std::mem::take(self.staged.get_mut()));
+    }
+
+    // TODO: Allow f fallible.
+    crate fn get_or_insert_with(
+        &self,
+        key: &K,
+        f: impl FnOnce() -> V,
+    ) -> Cow<V> {
+        try_opt! { return Cow::Borrowed(self.get_committed(key)?); };
+        let mut staged = self.staged.lock();
+        // NB: hold the lock while creating entry to avoid racing
+        let val = staged.entry(key.clone()).or_insert_with(f);
+        Cow::Owned(val.clone())
+    }
+}
+
+macro_rules! pipeline_cache {
+    (
+        name: $name:ident,
+        pipeline: $pipeline:ident,
+        desc: $desc:ident,
+        factory: $factory:ident$(,)?
+    ) => {
+        #[derive(Debug)]
+        crate struct $name {
+            device: Arc<Device>,
+            inner: StagedCache<$desc, Arc<$pipeline>>,
+        }
+
+        impl $name {
+            crate fn new(device: Arc<Device>) -> Self {
+                $name {
+                    device,
+                    inner: Default::default(),
+                }
+            }
+
+            crate fn commit(&mut self) {
+                self.inner.commit();
+            }
+
+            crate fn get_committed(&self, desc: &$desc) ->
+                Option<&Arc<$pipeline>>
+            {
+                self.inner.get_committed(desc)
+            }
+
+            crate fn get_or_create(&self, desc: &$desc) ->
+                Cow<Arc<$pipeline>>
+            {
+                self.inner.get_or_insert_with(desc, || unsafe {
+                    $factory(
+                        Arc::clone(&self.device),
+                        desc.clone(),
+                    ).unwrap()
+                })
+            }
+        }
+    }
+}
+
+pipeline_cache! {
+    name: GraphicsPipelineCache,
+    pipeline: GraphicsPipeline,
+    desc: GraphicsPipelineDesc,
+    factory: create_graphics_pipeline,
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
     use enum_map::enum_map;
     use crate::*;
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    fn trivial_pipe_desc(
+        globals: &Globals,
+        trivial: &TrivialRenderer,
+    ) -> GraphicsPipelineDesc {
+        let mut desc = GraphicsPipelineDesc::new(
+            globals.screen_pass.color.clone(),
+            Arc::clone(&trivial.pipeline_layout()),
+            Arc::clone(&globals.empty_vertex_layout),
+        );
+
+        let shaders = &globals.shaders;
+        desc.stages[ShaderStage::Vertex] =
+            Some(Arc::new(Arc::clone(&shaders.trivial_vert).into()));
+        desc.stages[ShaderStage::Fragment] =
+            Some(Arc::new(Arc::clone(&shaders.trivial_frag).into()));
+
+        desc.depth_test = false;
+
+        desc
+    }
+
+    unsafe fn create_test(vars: testing::TestVars) {
         use VertexAttrName as Attr;
 
-        let device = Arc::clone(&vars.swapchain.device);
-        let set_layouts = BuiltinSetLayouts::new(&device);
-        let shaders = BuiltinShaders::new(&device);
+        let device = Arc::clone(vars.device());
+        let globals = Globals::new(Arc::clone(&device));
+        let mut state = SystemState::new(Arc::clone(&device));
+        let trivial = TrivialRenderer::new(&globals, &mut state);
 
-        let pass = ScreenPass::new(Arc::clone(&device));
-        let subpass = pass.color.clone();
-
-        let layout = Arc::new(PipelineLayout::new(
-            Arc::clone(&device),
-            vec![
-                Arc::clone(&set_layouts.example_globals),
-                Arc::clone(&set_layouts.example_instances),
-            ],
-        ));
-
-        let attrs = &[
-            (Attr::Position,    vk::Format::R32G32B32_SFLOAT,   12),
-            (Attr::Normal,      vk::Format::R32G32B32_SFLOAT,   12),
-        ];
-        let vert_layout = Arc::new(VertexLayout::from_attrs_unpacked(attrs));
-
-        let mut desc = GraphicsPipelineDesc::new(subpass, layout, vert_layout);
-        desc.cull_mode = vk::CullModeFlags::BACK_BIT;
-
-        desc.stages[ShaderStage::Vertex] =
-            Some(Arc::new(ShaderSpec::new(Arc::clone(&shaders.example_vert))));
-        desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(ShaderSpec::new(Arc::clone(&shaders.example_frag))));
-
+        let desc = trivial_pipe_desc(&globals, &trivial);
         let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
     }
 
+    // TODO: Doesn't require device
+    unsafe fn staged_cache_test(_: crate::testing::TestVars) {
+        use std::sync::atomic::Ordering::Relaxed;
+
+        let new = || Arc::new(AtomicUsize::new(0));
+
+        let mut cache = StagedCache::new();
+        let i = cache.get_or_insert_with(&-12, new);
+        i.fetch_add(1, Relaxed);
+        assert_eq!(i.load(Relaxed), 1);
+        assert!(i.is_owned());
+
+        cache.commit();
+
+        cache.get_or_insert_with(&0, new);
+        assert!(cache.get_committed(&0).is_none());
+        assert!(cache.get_or_insert_with(&0, new).is_owned());
+
+        assert_eq!(cache.get_committed(&-12).unwrap().load(Relaxed), 1);
+        assert!(cache.get_or_insert_with(&-12, new).is_borrowed());
+    }
+
+    unsafe fn cache_test(vars: crate::testing::TestVars) {
+        let device = Arc::clone(vars.device());
+
+        let globals = Globals::new(Arc::clone(&device));
+        let mut state = SystemState::new(Arc::clone(&device));
+        let trivial = TrivialRenderer::new(&globals, &mut state);
+
+        let mut cache = GraphicsPipelineCache::new(Arc::clone(&device));
+
+        let mut desc = trivial_pipe_desc(&globals, &trivial);
+        let _pipe0 = Arc::clone(&cache.get_or_create(&desc));
+
+        desc.depth_test = true;
+        let pipe1 = Arc::clone(&cache.get_or_create(&desc));
+
+        cache.commit();
+
+        assert!(Arc::ptr_eq(cache.get_committed(&desc).unwrap(), &pipe1));
+    }
+
     unit::declare_tests![
-        smoke_test,
+        create_test,
+        staged_cache_test,
+        cache_test,
     ];
 }
 
