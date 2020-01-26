@@ -21,6 +21,7 @@ bitflags! {
         const DEPTH_STENCIL_ATTACHMENT = bit!(3);
         /// Image may be used as an input attachment.
         const INPUT_ATTACHMENT = bit!(4);
+        // TODO: If
     }
 }
 
@@ -174,6 +175,10 @@ impl Image {
         }
     }
 
+    crate fn inner(&self) -> vk::Image {
+        self.inner
+    }
+
     crate fn format(&self) -> Format {
         self.format
     }
@@ -233,6 +238,10 @@ impl ImageView {
             subresources,
             inner: view,
         }
+    }
+
+    crate fn inner(&self) -> vk::ImageView {
+        self.inner
     }
 
     crate fn format(&self) -> Format {

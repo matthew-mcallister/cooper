@@ -110,7 +110,7 @@ impl GlobalShaders {
             ShaderStage::Fragment,
             Vec::new(),
             fragment_outputs! {
-                location(0) VEC4 Color;
+                location(0) VEC4 Backbuffer;
             }.to_vec(),
             consts.to_vec(),
         ));
@@ -124,12 +124,11 @@ impl GlobalShaders {
 
 #[cfg(test)]
 mod tests {
-    use enum_map::enum_map;
     use crate::*;
     use super::*;
 
     fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.swapchain.device());
+        let device = Arc::clone(vars.device());
         let _ = Globals::new(device);
     }
 

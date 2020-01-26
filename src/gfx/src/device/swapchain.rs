@@ -12,6 +12,23 @@ crate struct Surface {
     crate inner: vk::SurfaceKHR,
 }
 
+#[derive(Debug)]
+crate struct Swapchain {
+    crate surface: Arc<Surface>,
+    crate device: Arc<Device>,
+    crate inner: vk::SwapchainKHR,
+    crate extent: Extent2D,
+    crate images: Vec<vk::Image>,
+}
+
+/// Specialized image view for the swapchain.
+#[derive(Debug)]
+crate struct SwapchainView {
+    swapchain: Arc<Swapchain>,
+    index: u32,
+    inner: vk::ImageView,
+}
+
 impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
@@ -21,8 +38,8 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    crate unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
-        Result<Self, AnyError>
+    crate unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>)
+        -> Result<Self, AnyError>
     {
         let inner = window.create_surface(instance.table.instance)?;
         Ok(Surface {
@@ -31,42 +48,6 @@ impl Surface {
             inner,
         })
     }
-}
-
-crate unsafe fn device_for_surface(surface: &Surface) ->
-    Result<vk::PhysicalDevice, AnyError>
-{
-    let instance = &*surface.instance;
-    let surface = surface.inner;
-
-    let pdevices = instance.get_physical_devices();
-    for pd in pdevices.into_iter() {
-        let qf = 0u32;
-        let props = instance.get_queue_family_properties(pd)[qf as usize];
-        let required_bits = vk::QueueFlags::GRAPHICS_BIT
-            | vk::QueueFlags::COMPUTE_BIT
-            | vk::QueueFlags::TRANSFER_BIT;
-        if !props.queue_flags.contains(required_bits) { continue; }
-
-        let mut surface_supp = 0;
-        instance.table.get_physical_device_surface_support_khr
-            (pd, qf, surface, &mut surface_supp).check()?;
-        if surface_supp != vk::TRUE { continue; }
-
-        return Ok(pd);
-    }
-
-    Err("no presentable graphics device".into())
-}
-
-#[derive(Debug)]
-crate struct Swapchain {
-    crate surface: Arc<Surface>,
-    crate device: Arc<Device>,
-    crate inner: vk::SwapchainKHR,
-    crate format: vk::Format,
-    crate extent: vk::Extent2D,
-    crate images: Vec<vk::Image>,
 }
 
 impl Drop for Swapchain {
@@ -83,7 +64,6 @@ impl Swapchain {
             surface,
             device,
             inner: vk::null(),
-            format: Default::default(),
             extent: Default::default(),
             images: Vec::new(),
         };
@@ -92,16 +72,8 @@ impl Swapchain {
         Ok(result)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
-        &self.device
-    }
-
-    crate fn inner(&self) -> vk::SwapchainKHR {
-        self.inner
-    }
-
     crate fn rect(&self) -> vk::Rect2D {
-        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent)
+        vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent.into())
     }
 
     crate fn viewport(&self) -> vk::Viewport {
@@ -121,7 +93,7 @@ impl Swapchain {
 
     crate unsafe fn recreate(&mut self) -> Result<(), AnyError> {
         let dt = &*self.device.table;
-        let it: &vkl::InstanceTable = &self.device.instance.table;
+        let it = &*self.device.instance.table;
         let pdev = self.device.pdev;
 
         let mut caps: vk::SurfaceCapabilitiesKHR = Default::default();
@@ -150,8 +122,6 @@ impl Swapchain {
             Err("surface format not supported")?;
         }
 
-        self.format = format;
-
         // FIXME: On Wayland, the surface extent is defined by the
         // application, so we need to pull window dimensions from config
         // rather than the surface object.
@@ -161,7 +131,7 @@ impl Swapchain {
         // create a swapchain for a minimized window.
         assert_ne!(caps.current_extent, (0, 0).into());
 
-        self.extent = caps.current_extent;
+        self.extent = caps.current_extent.into();
 
         let composite_alpha = vk::CompositeAlphaFlagsKHR::OPAQUE_BIT_KHR;
         if !caps.supported_composite_alpha.intersects(composite_alpha)
@@ -203,6 +173,90 @@ impl Swapchain {
 
         Ok(())
     }
+
+    crate fn create_views(self: &Arc<Self>) -> Vec<Arc<SwapchainView>> {
+        (0..self.images.len()).map(|index| {
+            Arc::new(SwapchainView::new(Arc::clone(self), index as _))
+        }).collect()
+    }
+
+    crate fn format(&self) -> Format {
+        Format::BGRA8_SRGB
+    }
+}
+
+impl Drop for SwapchainView {
+    fn drop(&mut self) {
+        let dt = &*self.swapchain.device.table;
+        unsafe {
+            dt.destroy_image_view(self.inner, ptr::null());
+        }
+    }
+}
+
+impl SwapchainView {
+    fn new(swapchain: Arc<Swapchain>, index: u32) -> Self {
+        let dt = &*swapchain.device.table;
+        let create_info = vk::ImageViewCreateInfo {
+            image: swapchain.images[index as usize],
+            view_type: vk::ImageViewType::_2D,
+            format: swapchain.format().into(),
+            components: Default::default(),
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        };
+        let mut view = vk::null();
+        unsafe {
+            dt.create_image_view(&create_info, ptr::null(), &mut view)
+                .check().unwrap();
+        }
+
+        SwapchainView {
+            swapchain,
+            index,
+            inner: view,
+        }
+    }
+
+    crate fn swapchain(&self) -> &Arc<Swapchain> {
+        &self.swapchain
+    }
+
+    crate fn inner(&self) -> vk::ImageView {
+        self.inner
+    }
+}
+
+crate unsafe fn device_for_surface(surface: &Surface) ->
+    Result<vk::PhysicalDevice, AnyError>
+{
+    let instance = &*surface.instance;
+    let surface = surface.inner;
+
+    let pdevices = instance.get_physical_devices();
+    for pd in pdevices.into_iter() {
+        let qf = 0u32;
+        let props = instance.get_queue_family_properties(pd)[qf as usize];
+        let required_bits = vk::QueueFlags::GRAPHICS_BIT
+            | vk::QueueFlags::COMPUTE_BIT
+            | vk::QueueFlags::TRANSFER_BIT;
+        if !props.queue_flags.contains(required_bits) { continue; }
+
+        let mut surface_supp = 0;
+        instance.table.get_physical_device_surface_support_khr
+            (pd, qf, surface, &mut surface_supp).check()?;
+        if surface_supp != vk::TRUE { continue; }
+
+        return Ok(pd);
+    }
+
+    Err("no presentable graphics device".into())
 }
 
 crate unsafe fn init_swapchain(
@@ -216,3 +270,16 @@ crate unsafe fn init_swapchain(
     let (device, queues) = Device::new(instance, pdev)?;
     Ok((Swapchain::new(surface, device)?, queues))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    unsafe fn view_test(vars: testing::TestVars) {
+        let _attchs = vars.swapchain.create_views();
+    }
+
+    unit::declare_tests![view_test];
+}
+
+unit::collect_tests![tests];

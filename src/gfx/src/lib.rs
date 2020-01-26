@@ -50,7 +50,7 @@ pub use config::*;
 unit::collect_tests![
     device,
     format,
-    //framebuffer,
+    framebuffer,
     global,
     image,
     pipeline,
