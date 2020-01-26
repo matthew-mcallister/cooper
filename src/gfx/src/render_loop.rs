@@ -35,4 +35,8 @@ impl SystemState {
             gfx_pipes,
         }
     }
+
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
 }

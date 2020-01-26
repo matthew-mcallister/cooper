@@ -4,8 +4,8 @@ use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ptr;
-use std::sync::Arc;
 
+use derive_more::*;
 use prelude::*;
 
 #[macro_export]
@@ -49,6 +49,13 @@ macro_rules! repr_bool {
             }
         }
     };
+}
+
+#[macro_export]
+macro_rules! bit {
+    ($bit:expr) => {
+        (1 << $bit)
+    }
 }
 
 #[inline]
@@ -127,4 +134,55 @@ macro_rules! set_layout_bindings {
             ..Default::default()
         }
     };
+}
+
+#[derive(Clone, Copy, Constructor, Debug, Default, Eq, From, Hash, Into,
+    PartialEq)]
+crate struct Extent2D {
+    crate width: u32,
+    crate height: u32,
+}
+
+#[derive(Clone, Copy, Constructor, Debug, Default, Eq, From, Hash, Into,
+    PartialEq)]
+crate struct Extent3D {
+    crate width: u32,
+    crate height: u32,
+    crate depth: u32,
+}
+
+impl From<Extent3D> for Extent2D {
+    fn from(extent: Extent3D) -> Self {
+        (extent.width, extent.height).into()
+    }
+}
+
+impl From<Extent2D> for vk::Extent2D {
+    fn from(Extent2D { width, height }: Extent2D) -> Self {
+        Self { width, height }
+    }
+}
+
+impl From<vk::Extent2D> for Extent2D {
+    fn from(vk::Extent2D { width, height }: vk::Extent2D) -> Self {
+        Self { width, height }
+    }
+}
+
+impl From<Extent2D> for Extent3D {
+    fn from(extent: Extent2D) -> Self {
+        (extent.width, extent.height, 1).into()
+    }
+}
+
+impl From<Extent3D> for vk::Extent3D {
+    fn from(Extent3D { width, height, depth }: Extent3D) -> Self {
+        Self { width, height, depth }
+    }
+}
+
+impl From<vk::Extent3D> for Extent3D {
+    fn from(vk::Extent3D { width, height, depth }: vk::Extent3D) -> Self {
+        Self { width, height, depth }
+    }
 }

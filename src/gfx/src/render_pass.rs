@@ -1,8 +1,7 @@
 use std::ptr;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use derivative::Derivative;
-use fnv::FnvHashMap;
 use prelude::*;
 
 use crate::*;
@@ -11,7 +10,7 @@ use crate::*;
 crate struct RenderPass {
     device: Arc<Device>,
     inner: vk::RenderPass,
-    attachments: Vec<vk::AttachmentDescription>,
+    attachments: Vec<AttachmentDescription>,
     subpasses: Vec<SubpassState>,
     dependencies: Vec<vk::SubpassDependency>,
 }
@@ -23,7 +22,7 @@ struct SubpassState {
     resolve_attchs: Vec<vk::AttachmentReference>,
     preserve_attchs: Vec<u32>,
     depth_stencil_attch: Option<vk::AttachmentReference>,
-    samples: vk::SampleCountFlags,
+    samples: SampleCount,
 }
 
 #[derive(Clone, Debug, Derivative)]
@@ -39,12 +38,31 @@ impl Eq for Subpass {}
 #[derive(Debug, Default)]
 crate struct SubpassDesc {
     // TODO: Name subpasses?
-    crate layouts: Vec<vk::ImageLayout>,
     crate input_attchs: Vec<u32>,
     crate color_attchs: Vec<u32>,
     crate resolve_attchs: Vec<u32>,
     crate preserve_attchs: Vec<u32>,
     crate depth_stencil_attch: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, Derivative)]
+#[derivative(Default)]
+crate struct AttachmentDescription {
+    #[derivative(Default(value = "Format::R8"))]
+    crate format: Format,
+    crate samples: SampleCount,
+    // These fields follow a reasonable sounding convention: "if you
+    // don't specify it, you don't care about it".
+    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
+    crate load_op: vk::AttachmentLoadOp,
+    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
+    crate store_op: vk::AttachmentStoreOp,
+    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
+    crate stencil_load_op: vk::AttachmentLoadOp,
+    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
+    crate stencil_store_op: vk::AttachmentStoreOp,
+    crate initial_layout: vk::ImageLayout,
+    crate final_layout: vk::ImageLayout,
 }
 
 impl Drop for RenderPass {
@@ -65,7 +83,7 @@ impl RenderPass {
         self.inner
     }
 
-    crate fn attachments(&self) -> &[vk::AttachmentDescription] {
+    crate fn attachments(&self) -> &[AttachmentDescription] {
         &self.attachments
     }
 
@@ -84,6 +102,13 @@ impl RenderPass {
         assert!(index < self.subpasses.len());
         Subpass { pass: Arc::clone(self), index }
     }
+
+    crate fn is_input_attachment(&self, index: usize) -> bool {
+        assert!(index < self.attachments.len());
+        self.subpasses.iter()
+            .flat_map(|subpass| subpass.input_attchs.iter())
+            .any(|aref| aref.attachment == index as u32)
+    }
 }
 
 impl Subpass {
@@ -99,7 +124,7 @@ impl Subpass {
         self.index as _
     }
 
-    crate fn samples(&self) -> vk::SampleCountFlags {
+    crate fn samples(&self) -> SampleCount {
         self.state().samples
     }
 
@@ -125,61 +150,167 @@ impl Subpass {
     }
 }
 
+impl From<AttachmentDescription> for vk::AttachmentDescription {
+    fn from(desc: AttachmentDescription) -> Self {
+        Self {
+            format: desc.format.into(),
+            samples: desc.samples.into(),
+            load_op: desc.load_op,
+            store_op: desc.store_op,
+            stencil_load_op: desc.stencil_load_op,
+            stencil_store_op: desc.stencil_store_op,
+            initial_layout: desc.initial_layout,
+            final_layout: desc.final_layout,
+            ..Default::default()
+        }
+    }
+}
+
+fn subpass_samples(
+    attachments: &[AttachmentDescription],
+    desc: &SubpassDesc,
+) -> SampleCount {
+    let idx = desc.color_attchs.first()
+        .or(desc.input_attchs.first())
+        .or(desc.depth_stencil_attch.as_ref());
+    try_opt! { return attachments[*idx? as usize].samples; };
+    SampleCount::One
+}
+
 fn subpass_state(
-    attachments: &[vk::AttachmentDescription],
+    attachments: &[AttachmentDescription],
     desc: SubpassDesc,
 ) -> SubpassState {
     let get = |idx: u32| &attachments[idx as usize];
 
-    // Infer sample count
-    let samples = if let Some(&idx) = desc.color_attchs.first() {
-        attachments[idx as usize].samples
-    } else if let Some(idx) = desc.depth_stencil_attch {
-        attachments[idx as usize].samples
-    } else {
-        vk::SampleCountFlags::_1_BIT
-    };
+    validate_subpass(attachments, &desc);
 
-    // Validate sample counts
-    for &idx in desc.color_attchs.iter().chain(desc.depth_stencil_attch.iter())
+    let samples = subpass_samples(attachments, &desc);
+
+    let input_attchs: Vec<_> = desc.input_attchs.iter().map(|&idx| {
+        let layout = if get(idx).format.is_depth_stencil() {
+            vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
+        } else {
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        };
+        vk::AttachmentReference { attachment: idx, layout }
+    }).collect();
+    let color_attchs: Vec<_> = desc.color_attchs.iter().map(|&idx| {
+        let layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
+        vk::AttachmentReference { attachment: idx, layout }
+    }).collect();
+    let depth_stencil_attch = try_opt!(vk::AttachmentReference {
+        attachment: desc.depth_stencil_attch?,
+        // TODO: DEPTH_STENCIL_READ_ONLY_OPTIMAL may be useful here
+        layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    });
+    let resolve_attchs = desc.resolve_attchs.iter().map(|&idx| {
+        vk::AttachmentReference {
+            attachment: idx,
+            layout: vk::ImageLayout::UNDEFINED,
+        }
+    }).collect();
+
+    SubpassState {
+        input_attchs,
+        color_attchs,
+        resolve_attchs,
+        preserve_attchs: desc.preserve_attchs,
+        depth_stencil_attch,
+        samples,
+    }
+}
+
+fn validate_subpass(
+    attachments: &[AttachmentDescription],
+    desc: &SubpassDesc,
+) {
+    let get = |idx: u32| &attachments[idx as usize];
+
+    // Sample count
+    let samples = subpass_samples(attachments, desc);
+    for &idx in desc.color_attchs.iter()
+        .chain(desc.input_attchs.iter())
+        .chain(desc.depth_stencil_attch.iter())
     {
         assert_eq!(get(idx).samples, samples);
     }
+
+    // Disallow unused references except as resolve attachments
+    for &idx in desc.color_attchs.iter()
+        .chain(desc.input_attchs.iter())
+        .chain(desc.preserve_attchs.iter())
+        .chain(desc.depth_stencil_attch.iter())
+    {
+        assert_ne!(idx, vk::ATTACHMENT_UNUSED);
+    }
+
+    // Disallow multiple attachment use. This is sometimes allowed
+    // (e.g. input feedback) but not really desired.
+    let mut counts = vec![0u32; attachments.len()];
+    for &idx in desc.color_attchs.iter()
+        .chain(desc.input_attchs.iter())
+        .chain(desc.preserve_attchs.iter())
+        .chain(desc.depth_stencil_attch.iter())
+        .chain(desc.resolve_attchs.iter())
+        .filter(|&&idx| idx != vk::ATTACHMENT_UNUSED)
+    {
+        counts[idx as usize] += 1;
+    }
+    for (i, count) in counts.into_iter().enumerate() {
+        assert!(count <= 1, "[{}] = {}", i, count);
+    }
+
+    // Validate sample counts
+    let samples = subpass_samples(attachments, desc);
+    for &idx in desc.color_attchs.iter()
+        .chain(desc.input_attchs.iter())
+        .chain(desc.depth_stencil_attch.iter())
+    {
+        assert_eq!(get(idx).samples, samples);
+    }
+
+    // Resolve attachments
     if !desc.resolve_attchs.is_empty() {
         assert_eq!(desc.color_attchs.len(), desc.resolve_attchs.len());
-        for &idx in desc.resolve_attchs.iter() {
-            assert_eq!(get(idx).samples, vk::SampleCountFlags::_1_BIT);
+        for (src, &dst) in desc.resolve_attchs.iter().enumerate() {
+            assert_eq!(get(dst).samples, SampleCount::One);
+            assert_eq!(get(src as _).format, get(dst).format)
         }
     }
 
-    let layouts = desc.layouts;
-    let to_ref = |idx| {
-        assert!((idx == vk::ATTACHMENT_UNUSED)
-            | ((idx as usize) < attachments.len()));
-        vk::AttachmentReference {
-            attachment: idx,
-            layout: layouts[idx as usize],
-        }
-    };
-    let to_refs = |attchs: Vec<_>| attchs.into_iter()
-        .map(to_ref).collect(): Vec<_>;
-    SubpassState {
-        input_attchs: to_refs(desc.input_attchs),
-        color_attchs: to_refs(desc.color_attchs),
-        resolve_attchs: to_refs(desc.resolve_attchs),
-        preserve_attchs: desc.preserve_attchs,
-        depth_stencil_attch: desc.depth_stencil_attch.map(to_ref),
-        samples,
+    // Formats
+    for &idx in desc.color_attchs.iter() {
+        assert!(!get(idx).format.is_depth_stencil());
+    }
+    if let Some(idx) = desc.depth_stencil_attch {
+        assert!(get(idx).format.is_depth_stencil());
+    }
+}
+
+fn validate_dependencies(
+    subpasses: &[SubpassState],
+    dependencies: &[vk::SubpassDependency],
+) {
+    for dep in dependencies.iter() {
+        assert!((dep.src_subpass == vk::SUBPASS_EXTERNAL)
+            | (dep.src_subpass < subpasses.len() as _));
+        assert!((dep.dst_subpass == vk::SUBPASS_EXTERNAL)
+            | (dep.dst_subpass < subpasses.len() as _));
     }
 }
 
 crate unsafe fn create_render_pass(
     device: Arc<Device>,
-    attachments: Vec<vk::AttachmentDescription>,
+    attachments: Vec<AttachmentDescription>,
     subpasses: Vec<SubpassDesc>,
     dependencies: Vec<vk::SubpassDependency>,
 ) -> Arc<RenderPass> {
     let dt = &*device.table;
+
+    let vk_attachments: Vec<vk::AttachmentDescription> = attachments.iter()
+        .map(|&attch| attch.into())
+        .collect();
 
     let subpasses: Vec<_> = subpasses.into_iter()
         .map(|desc| subpass_state(&attachments, desc)).collect();
@@ -199,9 +330,11 @@ crate unsafe fn create_render_pass(
         }
     }).collect();
 
+    validate_dependencies(&subpasses, &dependencies);
+
     let create_info = vk::RenderPassCreateInfo {
-        attachment_count: attachments.len() as _,
-        p_attachments: attachments.as_ptr(),
+        attachment_count: vk_attachments.len() as _,
+        p_attachments: vk_attachments.as_ptr(),
         subpass_count: vk_subpasses.len() as _,
         p_subpasses: vk_subpasses.as_ptr(),
         dependency_count: dependencies.len() as _,
@@ -237,19 +370,14 @@ unsafe fn create_screen_pass(device: Arc<Device>) -> ScreenPass {
     let pass = create_render_pass(
         device,
         vec![
-            vk::AttachmentDescription {
-                format: vk::Format::B8G8R8A8_SRGB,
-                samples: vk::SampleCountFlags::_1_BIT,
-                load_op: vk::AttachmentLoadOp::DONT_CARE,
-                store_op: vk::AttachmentStoreOp::STORE,
-                initial_layout: vk::ImageLayout::UNDEFINED,
+            AttachmentDescription {
+                format: Format::BGRA8_SRGB,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             },
         ],
         vec![
             SubpassDesc {
-                layouts: vec![vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL],
                 color_attchs: vec![0],
                 ..Default::default()
             },
@@ -264,17 +392,124 @@ unsafe fn create_screen_pass(device: Arc<Device>) -> ScreenPass {
     }
 }
 
+// Simplified render pass with G-buffer.
+#[cfg(test)]
+crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
+    use vk::AccessFlags as Af;
+    use vk::PipelineStageFlags as Pf;
+
+    // Defining render passes is rather technical and so is done
+    // manually rather than via a half-baked algorithm.
+    create_render_pass(
+        device,
+        vec![
+            // Screen
+            AttachmentDescription {
+                format: Format::BGRA8_SRGB,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                ..Default::default()
+            },
+            // HDR image
+            // TODO: Not sure if it's a better practice to set
+            // initial_layout or not.
+            AttachmentDescription {
+                format: Format::RGB16F,
+                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                ..Default::default()
+            },
+            // Depth/stencil
+            AttachmentDescription {
+                format: Format::D32F_S8,
+                load_op: vk::AttachmentLoadOp::CLEAR,
+                final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                ..Default::default()
+            },
+            // Normals
+            AttachmentDescription {
+                format: Format::RGBA8,
+                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                ..Default::default()
+            },
+            // Albedo
+            AttachmentDescription {
+                format: Format::RGBA8,
+                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                ..Default::default()
+            },
+        ],
+        vec![
+            // G-buffer pass
+            SubpassDesc {
+                color_attchs: vec![3, 4],
+                depth_stencil_attch: Some(2),
+                ..Default::default()
+            },
+            // Lighting pass
+            SubpassDesc {
+                color_attchs: vec![1],
+                input_attchs: vec![2, 3, 4],
+                ..Default::default()
+            },
+            // Tonemapping
+            SubpassDesc {
+                color_attchs: vec![0],
+                input_attchs: vec![1],
+                ..Default::default()
+            },
+        ],
+        vec![
+            // Image layout transition barrier; see Vulkan
+            // synchronization examples webpage
+            vk::SubpassDependency {
+                src_subpass: vk::SUBPASS_EXTERNAL,
+                dst_subpass: 2,
+                src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                dst_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                src_access_mask: Default::default(),
+                dst_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
+                ..Default::default()
+            },
+            vk::SubpassDependency {
+                src_subpass: 0,
+                dst_subpass: 1,
+                src_stage_mask: Pf::EARLY_FRAGMENT_TESTS_BIT
+                    | Pf::LATE_FRAGMENT_TESTS_BIT
+                    | Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
+                src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT
+                    | Af::DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
+                dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
+            },
+            vk::SubpassDependency {
+                src_subpass: 1,
+                dst_subpass: 2,
+                src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
+                src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
+                dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
+                dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
+            },
+            // Post-pass synchronization is implicit.
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
     use super::*;
 
+    unsafe fn screen_test(vars: testing::TestVars) {
+        let _screen_pass = ScreenPass::new(Arc::clone(&vars.device()));
+    }
+
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device);
-        let _screen_pass = ScreenPass::new(device);
+        let _pass = create_test_pass(Arc::clone(vars.device()));
     }
 
     unit::declare_tests![
+        screen_test,
         smoke_test,
     ];
 }

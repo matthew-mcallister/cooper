@@ -3,7 +3,9 @@ use std::ptr;
 use std::sync::Arc;
 
 use bitflags::*;
+use derivative::*;
 
+// TODO: This issues an unused import warning which is a bug
 use crate::*;
 
 bitflags! {
@@ -35,8 +37,10 @@ crate enum ImageType {
     Cube,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
+#[derivative(Default)]
 crate enum SampleCount {
+    #[derivative(Default)]
     One,
     Two,
     Four,
@@ -53,9 +57,9 @@ crate struct Image {
     ty: ImageType,
     format: Format,
     samples: SampleCount,
-    extent: vk::Extent3D,
+    extent: Extent3D,
     mip_levels: u32,
-    array_layers: u32,
+    layers: u32,
     inner: vk::Image,
     // TODO: Memory allocations really need to follow RAII
     alloc: ManuallyDrop<DeviceRange>,
@@ -68,7 +72,7 @@ crate struct ImageView {
     ty: vk::ImageViewType,
     format: Format,
     components: vk::ComponentMapping,
-    subresource_range: vk::ImageSubresourceRange,
+    subresources: vk::ImageSubresourceRange,
     inner: vk::ImageView,
 }
 
@@ -90,23 +94,23 @@ impl Image {
         ty: ImageType,
         format: Format,
         samples: SampleCount,
-        extent: vk::Extent3D,
+        extent: Extent3D,
         mip_levels: u32,
-        array_layers: u32,
+        layers: u32,
     ) -> Self {
-        let device = Arc::clone(state.device());
+        let device: Arc<Device> = Arc::clone(state.device());
         let dt = &*device.table;
 
         validate_image_creation(&state.device, flags, ty, format, samples,
-            extent, mip_levels, array_layers);
+            extent, mip_levels, layers);
 
         let create_info = vk::ImageCreateInfo {
             flags: ty.flags(),
             image_type: ty.into(),
             format: format.into(),
-            extent,
+            extent: extent.into(),
             mip_levels,
-            array_layers,
+            array_layers: layers,
             samples: samples.into(),
             tiling: vk::ImageTiling::OPTIMAL,
             usage: flags.usage(),
@@ -129,7 +133,7 @@ impl Image {
             samples,
             extent,
             mip_levels,
-            array_layers,
+            layers,
             inner: image,
             alloc: ManuallyDrop::new(alloc),
             state,
@@ -142,7 +146,7 @@ impl Image {
             base_mip_level: 0,
             level_count: self.mip_levels,
             base_array_layer: 0,
-            layer_count: self.array_layers,
+            layer_count: self.layers,
         }
     }
 
@@ -150,12 +154,12 @@ impl Image {
         use ImageType::*;
         use vk::ImageViewType as T;
         let ty = match self.ty {
-            OneDim if self.array_layers == 0 => T::_1D,
+            OneDim if self.layers == 0 => T::_1D,
             OneDim => T::_1D_ARRAY,
-            TwoDim if self.array_layers == 0 => T::_2D,
+            TwoDim if self.layers == 0 => T::_2D,
             TwoDim => T::_2D_ARRAY,
             ThreeDim => T::_3D,
-            Cube if self.array_layers == 0 => T::CUBE,
+            Cube if self.layers == 0 => T::CUBE,
             Cube => T::CUBE_ARRAY,
         };
         // This ought to be safe if it isn't
@@ -168,6 +172,22 @@ impl Image {
                 self.all_subresources(),
             ))
         }
+    }
+
+    crate fn format(&self) -> Format {
+        self.format
+    }
+
+    crate fn samples(&self) -> SampleCount {
+        self.samples
+    }
+
+    crate fn extent(&self) -> Extent3D {
+        self.extent
+    }
+
+    crate fn layers(&self) -> u32 {
+        self.layers
     }
 }
 
@@ -186,19 +206,19 @@ impl ImageView {
         ty: vk::ImageViewType,
         format: Format,
         components: vk::ComponentMapping,
-        subresource_range: vk::ImageSubresourceRange,
+        subresources: vk::ImageSubresourceRange,
     ) -> Self {
         let dt = &*image.device.table;
 
         validate_image_view_creation(&image, ty, format, components,
-            subresource_range);
+            subresources);
 
         let create_info = vk::ImageViewCreateInfo {
             image: image.inner,
             view_type: ty,
             format: format.into(),
             components,
-            subresource_range,
+            subresource_range: subresources,
             ..Default::default()
         };
         let mut view = vk::null();
@@ -210,9 +230,33 @@ impl ImageView {
             ty,
             format,
             components,
-            subresource_range,
+            subresources,
             inner: view,
         }
+    }
+
+    crate fn format(&self) -> Format {
+        self.format
+    }
+
+    crate fn samples(&self) -> SampleCount {
+        self.image.samples
+    }
+
+    crate fn extent(&self) -> Extent3D {
+        self.image.extent
+    }
+
+    crate fn subresources(&self) -> vk::ImageSubresourceRange {
+        self.subresources
+    }
+
+    crate fn layers(&self) -> u32 {
+        self.subresources.layer_count
+    }
+
+    crate fn mip_levels(&self) -> u32 {
+        self.subresources.level_count
     }
 }
 
@@ -291,16 +335,16 @@ fn validate_image_creation(
     ty: ImageType,
     format: Format,
     _samples: SampleCount,
-    extent: vk::Extent3D,
+    extent: Extent3D,
     mip_levels: u32,
-    array_layers: u32,
+    layers: u32,
 ) {
     assert!(extent.width > 0);
     assert!(extent.height > 0);
     assert!(extent.depth > 0);
     assert!(mip_levels > 0);
     assert!(mip_levels <= num_mip_levels(extent));
-    assert!(array_layers > 0);
+    assert!(layers > 0);
 
     let limits = device.limits();
     let max_dim = match ty {
@@ -311,11 +355,11 @@ fn validate_image_creation(
     };
     assert!((extent.width <= max_dim) & (extent.height <= max_dim) &
             (extent.depth <= max_dim));
-    assert!(array_layers <= limits.max_image_array_layers);
+    assert!(layers <= limits.max_image_array_layers);
 
     if ty == ImageType::Cube {
         assert_eq!(extent.width, extent.height);
-        assert!(array_layers >= 6);
+        assert!(layers >= 6);
     }
 
     let dim: vk::ImageType = ty.into();
@@ -328,7 +372,7 @@ fn validate_image_creation(
     if flags.is_attachment() {
         assert!(extent.width <= limits.max_framebuffer_width);
         assert!(extent.height <= limits.max_framebuffer_height);
-        assert!(array_layers <= limits.max_framebuffer_layers);
+        assert!(layers <= limits.max_framebuffer_layers);
     }
 
     if flags.contains(ImageFlags::DEPTH_STENCIL_ATTACHMENT) {
@@ -336,9 +380,7 @@ fn validate_image_creation(
     }
 }
 
-crate fn num_mip_levels(
-    vk::Extent3D { width, height, depth }: vk::Extent3D,
-) -> u32 {
+crate fn num_mip_levels(Extent3D { width, height, depth }: Extent3D) -> u32 {
     use std::cmp::max;
     fn log2(n: u32) -> u32 {
         assert!(n > 0);
@@ -377,7 +419,7 @@ fn validate_image_view_creation(
         assert!(base + len <= max);
     }
     range_check(range.base_mip_level, range.level_count, image.mip_levels);
-    range_check(range.base_array_layer, range.layer_count, image.array_layers);
+    range_check(range.base_array_layer, range.layer_count, image.layers);
 }
 
 impl From<SampleCount> for vk::SampleCountFlags {
@@ -408,8 +450,8 @@ mod tests {
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
 
         // Create some render targets
-        let extent = vk::Extent3D::new(320, 200, 1);
-        let light = Arc::new(Image::new(
+        let extent = Extent3D::new(320, 200, 1);
+        let hdr = Arc::new(Image::new(
             Arc::clone(&state),
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::TwoDim,
@@ -419,7 +461,7 @@ mod tests {
             1,
             1,
         ));
-        let _light_view = light.create_default_view();
+        let _hdr_view = hdr.create_default_view();
         let depth = Arc::new(Image::new(
             Arc::clone(&state),
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
@@ -439,7 +481,7 @@ mod tests {
             ImageType::Cube,
             Format::RGB16F,
             SampleCount::One,
-            vk::Extent3D::new(256, 256, 1),
+            Extent3D::new(256, 256, 1),
             1,
             6,
         ));

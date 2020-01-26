@@ -29,12 +29,12 @@ crate struct VulkanTestContext {
 crate struct TestVars {
     crate config: Config,
     crate swapchain: Arc<Swapchain>,
-    crate queues: Vec<Vec<Arc<Queue>>>,
+    crate gfx_queue: Arc<Queue>,
 }
 
 impl TestVars {
     crate fn device(&self) -> &Arc<Device> {
-        self.swapchain.device()
+        &self.swapchain.device
     }
 }
 
@@ -71,10 +71,11 @@ impl VulkanTestContext {
         let pdev = device_for_surface(&surface)?;
         let (device, queues) = instance.create_device(pdev)?;
         let swapchain = device.create_swapchain(&surface)?;
+        let gfx_queue = Arc::clone(&queues[0][0]);
         Ok(TestVars {
             config,
             swapchain,
-            queues,
+            gfx_queue,
         })
     }
 }

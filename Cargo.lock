@@ -71,6 +71,7 @@ dependencies = [
 name = "cooper-gfx"
 version = "0.1.0"
 dependencies = [
+ "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cooper-base 0.1.0",
  "cooper-math 0.1.0",
  "cooper-prelude 0.1.0",

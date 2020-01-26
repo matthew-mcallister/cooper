@@ -1,5 +1,3 @@
-use crate::*;
-
 macro_rules! impl_format {
     ($($name:ident($vk_format:ident, $($aspect:ident)|*),)*) => {
         /// A selection of the most useful data formats. Keep in mind
@@ -87,10 +85,10 @@ impl From<Dimension> for usize {
 
 #[cfg(test)]
 mod tests {
+    use crate::*;
     use super::*;
 
     unsafe fn smoke_test(_: testing::TestVars) {
-        use Dimension::*;
         use Format::*;
 
         let fmt = RGBA16F;

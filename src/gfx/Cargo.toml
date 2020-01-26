@@ -10,6 +10,7 @@ harness = false
 
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
+bitflags = "^1.2.1"
 derive_more = "0.15"
 derivative = "^1.0.3"
 enum-map = "^0.6.1"

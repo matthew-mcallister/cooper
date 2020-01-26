@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use base::Name;
 use derivative::Derivative;
-use derive_more::Constructor;
 use enum_map::Enum;
 use fnv::FnvHashMap;
 use prelude::*;
@@ -46,14 +45,11 @@ crate struct SpecConstDecl {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum ShaderScalar { Int, Uint, Float, Double }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum ShaderDim { One, Two, Three, Four }
-
 /// The GLSL type of a shader interface (`in` or `out`) variable.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate struct ShaderVarType {
     crate scalar: ShaderScalar,
-    crate dim: ShaderDim,
+    crate dim: Dimension,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -223,55 +219,44 @@ impl From<ShaderStage> for vk::ShaderStageFlags {
     }
 }
 
-impl From<ShaderDim> for u32 {
-    fn from(dim: ShaderDim) -> Self {
-        match dim {
-            ShaderDim::One => 1,
-            ShaderDim::Two => 2,
-            ShaderDim::Three => 3,
-            ShaderDim::Four => 4,
-        }
-    }
-}
-
 impl ShaderVarType {
     crate const fn new(
         scalar: ShaderScalar,
-        dim: ShaderDim,
+        dim: Dimension,
     ) -> Self {
         Self { scalar, dim }
     }
 
-    crate const fn int(dim: ShaderDim) -> Self {
+    crate const fn int(dim: Dimension) -> Self {
         Self::new(ShaderScalar::Int, dim)
     }
 
-    crate const fn uint(dim: ShaderDim) -> Self {
+    crate const fn uint(dim: Dimension) -> Self {
         Self::new(ShaderScalar::Uint, dim)
     }
 
-    crate const fn float(dim: ShaderDim) -> Self {
+    crate const fn float(dim: Dimension) -> Self {
         Self::new(ShaderScalar::Float, dim)
     }
 
-    crate const fn double(dim: ShaderDim) -> Self {
+    crate const fn double(dim: Dimension) -> Self {
         Self::new(ShaderScalar::Double, dim)
     }
 
-    crate const INT: Self     = Self::int(ShaderDim::One);
-    crate const IVEC2: Self   = Self::int(ShaderDim::Two);
-    crate const IVEC3: Self   = Self::int(ShaderDim::Three);
-    crate const IVEC4: Self   = Self::int(ShaderDim::Four);
-    crate const UINT: Self    = Self::uint(ShaderDim::One);
-    crate const UVEC2: Self   = Self::uint(ShaderDim::Two);
-    crate const UVEC3: Self   = Self::uint(ShaderDim::Three);
-    crate const UVEC4: Self   = Self::uint(ShaderDim::Four);
-    crate const FLOAT: Self   = Self::float(ShaderDim::One);
-    crate const VEC2: Self    = Self::float(ShaderDim::Two);
-    crate const VEC3: Self    = Self::float(ShaderDim::Three);
-    crate const VEC4: Self    = Self::float(ShaderDim::Four);
-    crate const DOUBLE: Self  = Self::double(ShaderDim::One);
-    crate const DVEC2: Self   = Self::double(ShaderDim::Two);
-    crate const DVEC3: Self   = Self::double(ShaderDim::Three);
-    crate const DVEC4: Self   = Self::double(ShaderDim::Four);
+    crate const INT: Self     = Self::int(Dimension::One);
+    crate const IVEC2: Self   = Self::int(Dimension::Two);
+    crate const IVEC3: Self   = Self::int(Dimension::Three);
+    crate const IVEC4: Self   = Self::int(Dimension::Four);
+    crate const UINT: Self    = Self::uint(Dimension::One);
+    crate const UVEC2: Self   = Self::uint(Dimension::Two);
+    crate const UVEC3: Self   = Self::uint(Dimension::Three);
+    crate const UVEC4: Self   = Self::uint(Dimension::Four);
+    crate const FLOAT: Self   = Self::float(Dimension::One);
+    crate const VEC2: Self    = Self::float(Dimension::Two);
+    crate const VEC3: Self    = Self::float(Dimension::Three);
+    crate const VEC4: Self    = Self::float(Dimension::Four);
+    crate const DOUBLE: Self  = Self::double(Dimension::One);
+    crate const DVEC2: Self   = Self::double(Dimension::Two);
+    crate const DVEC3: Self   = Self::double(Dimension::Three);
+    crate const DVEC4: Self   = Self::double(Dimension::Four);
 }

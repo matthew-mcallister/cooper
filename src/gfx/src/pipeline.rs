@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::ffi::c_void;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::ptr;
 use std::sync::Arc;
 
@@ -9,7 +8,6 @@ use derivative::Derivative;
 use enum_map::EnumMap;
 use fnv::FnvHashMap;
 use parking_lot::Mutex;
-use prelude::*;
 
 use crate::*;
 
@@ -245,7 +243,7 @@ unsafe fn create_graphics_pipeline(
     };
 
     let multisample = vk::PipelineMultisampleStateCreateInfo {
-        rasterization_samples: desc.subpass.samples(),
+        rasterization_samples: desc.subpass.samples().into(),
         ..Default::default()
     };
 
@@ -426,7 +424,6 @@ pipeline_cache! {
 mod tests {
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
-    use enum_map::enum_map;
     use crate::*;
     use super::*;
 
@@ -452,8 +449,6 @@ mod tests {
     }
 
     unsafe fn create_test(vars: testing::TestVars) {
-        use VertexAttrName as Attr;
-
         let device = Arc::clone(vars.device());
         let globals = Globals::new(Arc::clone(&device));
         let mut state = SystemState::new(Arc::clone(&device));
