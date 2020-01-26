@@ -1,9 +1,7 @@
 use std::ops::Range;
-use std::ptr;
 
 use prelude::*;
 
-use crate::*;
 use super::*;
 
 /// Address-ordered FIFO allocation algorithm.

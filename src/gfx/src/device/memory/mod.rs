@@ -3,9 +3,7 @@ use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::Arc;
 
-use derivative::Derivative;
 use enum_map::Enum;
-use prelude::*;
 
 use crate::*;
 
@@ -13,7 +11,7 @@ mod alloc;
 mod heap;
 mod buffer;
 
-crate use alloc::*;
+pub(self) use alloc::*;
 crate use heap::*;
 crate use buffer::*;
 
@@ -151,6 +149,7 @@ crate struct DeviceMemory {
 }
 
 /// A suballocation of a VkMemory object.
+// TODO: This type probably should free the allocation in its destructor
 #[derive(Clone, Debug)]
 crate struct DeviceRange {
     memory: Arc<DeviceMemory>,

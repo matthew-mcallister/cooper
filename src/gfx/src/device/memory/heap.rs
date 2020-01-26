@@ -1,10 +1,8 @@
-use std::ptr;
 use std::sync::Arc;
 
 use enum_map::EnumMap;
 use prelude::*;
 
-use crate::*;
 use super::*;
 
 #[derive(Debug)]
@@ -89,6 +87,7 @@ impl HeapPool {
 
     unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
         let chunk = self.chunks.len() as u32;
+        // TODO: Possibly size should be a power-of-two of chunk size
         let size = align(self.chunk_size(), min_size);
         let inner = alloc_device_memory(&self.device, size, self.type_index);
         let mut mem = DeviceMemory {

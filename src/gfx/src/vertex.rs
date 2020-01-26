@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use enum_map::{Enum, EnumMap};
-use fnv::FnvHashMap;
 
 use crate::*;
 
@@ -99,7 +96,7 @@ impl VertexLayout {
 
 #[cfg(test)]
 mod tests {
-    use enum_map::enum_map;
+    use std::sync::Arc;
     use crate::*;
     use super::*;
 
@@ -108,7 +105,7 @@ mod tests {
     {
         use VertexAttrName as Attr;
 
-        let mut map = FnvHashMap::default();
+        let mut map = fnv::FnvHashMap::default();
 
         let attrs = &[(Attr::Position, vk::Format::R32G32B32_SFLOAT, 12)];
         let layout = VertexLayout::from_attrs_unpacked(attrs);

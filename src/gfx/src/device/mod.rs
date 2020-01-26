@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 mod debug;
 mod descriptor;
 mod device;
@@ -37,5 +35,6 @@ mod tests {
 unit::collect_tests![
     descriptor,
     memory,
+    swapchain,
     tests,
 ];

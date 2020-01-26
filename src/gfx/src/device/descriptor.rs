@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use base::{Sentinel, impl_bin_ops};
 use derive_more::*;
-use fnv::FnvHashMap;
 
 use crate::*;
 
@@ -161,7 +160,6 @@ impl DescriptorSet {
         first_element: u32,
         buffers: &[impl AsRef<BufferRange>],
     ) {
-        use vk::DescriptorType as Ty;
         let dt = &self.layout.device().table;
         assert_ne!(buffers.len(), 0);
 
@@ -477,7 +475,6 @@ crate fn create_global_descriptor_pool(device: Arc<Device>) ->
 #[cfg(test)]
 mod tests {
     use vk::traits::*;
-    use base::Name;
     use super::*;
 
     unsafe fn scene_global_layout(device: &Arc<Device>) ->
