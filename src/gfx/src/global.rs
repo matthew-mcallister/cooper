@@ -4,11 +4,14 @@ use crate::*;
 
 #[derive(Debug)]
 crate struct Globals {
+    crate shaders: GlobalShaders,
     crate screen_pass: Arc<ScreenPass>,
     crate empty_vertex_layout: Arc<VertexLayout>,
-    crate scene_global_layout: Arc<DescriptorSetLayout>,
-    // TODO: Null resources/descriptors
-    crate shaders: GlobalShaders,
+    crate empty_uniform_buffer: Arc<BufferRange>,
+    crate empty_storage_buffer: Arc<BufferRange>,
+    crate empty_image_2d: Arc<ImageView>,
+    crate empty_storage_image_2d: Arc<ImageView>,
+    crate empty_sampler: Arc<Sampler>,
 }
 
 #[derive(Debug)]
@@ -18,13 +21,14 @@ crate struct GlobalShaders {
 }
 
 impl Globals {
-    crate fn new(device: Arc<Device>) -> Self {
-        unsafe { Self::unsafe_new(device) }
+    crate fn new(state: Arc<SystemState>) -> Self {
+        unsafe { Self::unsafe_new(state) }
     }
 
-    unsafe fn unsafe_new(device: Arc<Device>) -> Self {
-        let shaders = GlobalShaders::new(&device);
+    unsafe fn unsafe_new(state: Arc<SystemState>) -> Self {
+        let device = Arc::clone(&state.device);
 
+        let shaders = GlobalShaders::new(&device);
         let screen_pass = Arc::new(ScreenPass::new(Arc::clone(&device)));
 
         let empty_vertex_layout = Arc::new(VertexLayout {
@@ -33,15 +37,58 @@ impl Globals {
             attrs: Default::default(),
         });
 
-        let bindings = set_layout_bindings![(0, UNIFORM_BUFFER)];
-        let scene_global_layout =
-            Arc::new(SetLayout::from_bindings(Arc::clone(&device), &bindings));
+        // TODO: Manually acquiring this lock is so dumb
+        let mut buffers = state.buffers.lock();
+        let empty_uniform_buffer = Arc::new(buffers.alloc(
+            BufferBinding::Uniform,
+            MemoryMapping::Unmapped,
+            256,
+        ));
+        let empty_storage_buffer = Arc::new(buffers.alloc(
+            BufferBinding::Storage,
+            MemoryMapping::Unmapped,
+            256,
+        ));
+        std::mem::drop(buffers);
+
+        let empty_image_2d = Arc::new(Image::new(
+            Arc::clone(&state),
+            Default::default(),
+            ImageType::TwoDim,
+            Format::RGBA8,
+            SampleCount::One,
+            (1, 1).into(),
+            1,
+            1,
+        )).create_full_view();
+        let empty_storage_image_2d = Arc::new(Image::new(
+            Arc::clone(&state),
+            ImageFlags::STORAGE,
+            ImageType::TwoDim,
+            Format::RGBA8,
+            SampleCount::One,
+            (1, 1).into(),
+            1,
+            1,
+        )).create_full_view();
+        let desc = SamplerDesc {
+            mag_filter: Filter::Linear,
+            min_filter: Filter::Linear,
+            mipmap_mode: SamplerMipmapMode::Linear,
+            anisotropy_level: AnisotropyLevel::Sixteen,
+            ..Default::default()
+        };
+        let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
 
         Globals {
+            shaders,
             screen_pass,
             empty_vertex_layout,
-            scene_global_layout,
-            shaders,
+            empty_uniform_buffer,
+            empty_storage_buffer,
+            empty_image_2d,
+            empty_storage_image_2d,
+            empty_sampler,
         }
     }
 }
@@ -74,7 +121,7 @@ macro_rules! fragment_outputs {
 }
 
 mod shader_sources {
-    // TODO: Load from disk, hot reloading
+    // TODO: Hot reloading
     macro_rules! include_shaders {
         ($($ident:ident = $name:expr;)*) => {
             $(crate const $ident: &'static [u8] = include_bytes!(
@@ -128,8 +175,8 @@ mod tests {
     use super::*;
 
     fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let _ = Globals::new(device);
+        let state = Arc::new(SystemState::new(Arc::clone(vars.device())));
+        let _ = Globals::new(state);
     }
 
     unit::declare_tests![

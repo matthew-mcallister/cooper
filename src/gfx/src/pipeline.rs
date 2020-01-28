@@ -363,11 +363,9 @@ pipeline_cache! {
     factory: create_graphics_pipeline,
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::sync::atomic::AtomicUsize;
     use crate::*;
     use super::*;
 
@@ -394,9 +392,9 @@ mod tests {
 
     unsafe fn create_test(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
-        let globals = Globals::new(Arc::clone(&device));
-        let mut state = SystemState::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&globals, &mut state);
+        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let globals = Globals::new(Arc::clone(&state));
+        let trivial = TrivialRenderer::new(&state);
 
         let desc = trivial_pipe_desc(&globals, &trivial);
         let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
@@ -404,10 +402,9 @@ mod tests {
 
     unsafe fn cache_test(vars: crate::testing::TestVars) {
         let device = Arc::clone(vars.device());
-
-        let globals = Globals::new(Arc::clone(&device));
-        let mut state = SystemState::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&globals, &mut state);
+        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let globals = Globals::new(Arc::clone(&state));
+        let trivial = TrivialRenderer::new(&state);
 
         let mut cache = GraphicsPipelineCache::new(Arc::clone(&device));
 
@@ -424,10 +421,8 @@ mod tests {
 
     unit::declare_tests![
         create_test,
-        staged_cache_test,
         cache_test,
     ];
 }
 
 unit::collect_tests![tests];
-*/

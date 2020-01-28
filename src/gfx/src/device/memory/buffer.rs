@@ -16,6 +16,16 @@ crate struct DeviceBuffer {
     mapping: MemoryMapping,
 }
 
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+crate enum BufferBinding {
+    Storage,
+    Uniform,
+    StorageTexel,
+    UniformTexel,
+    Vertex,
+    Index,
+}
+
 /// A suballocation of a VkBuffer object.
 #[derive(Clone, Debug)]
 crate struct BufferRange {
@@ -203,16 +213,6 @@ struct BufferPool {
     mapping: MemoryMapping,
     allocator: FreeListAllocator,
     chunks: Vec<Arc<DeviceBuffer>>,
-}
-
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum BufferBinding {
-    Storage,
-    Uniform,
-    StorageTexel,
-    UniformTexel,
-    Vertex,
-    Index,
 }
 
 impl BufferHeap {

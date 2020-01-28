@@ -209,7 +209,7 @@ crate fn create_render_target(
             extent.into(),
             1,
             1,
-        )).create_default_view()
+        )).create_full_view()
     }
 }
 

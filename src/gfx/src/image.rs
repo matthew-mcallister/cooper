@@ -151,7 +151,7 @@ impl Image {
         }
     }
 
-    crate fn create_default_view(self: &Arc<Self>) -> Arc<ImageView> {
+    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
         use ImageType::*;
         use vk::ImageViewType as T;
         let ty = match self.ty {
@@ -470,7 +470,7 @@ mod tests {
             1,
             1,
         ));
-        let _hdr_view = hdr.create_default_view();
+        let _hdr_view = hdr.create_full_view();
         let depth = Arc::new(Image::new(
             Arc::clone(&state),
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
@@ -481,7 +481,7 @@ mod tests {
             1,
             1,
         ));
-        let _depth_view = depth.create_default_view();
+        let _depth_view = depth.create_full_view();
 
         // HDR cube texture
         let env = Arc::new(Image::new(
@@ -494,7 +494,7 @@ mod tests {
             1,
             6,
         ));
-        let _env_view = env.create_default_view();
+        let _env_view = env.create_full_view();
     }
 
     unit::declare_tests![smoke_test];
