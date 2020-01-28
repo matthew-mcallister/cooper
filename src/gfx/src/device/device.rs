@@ -8,13 +8,14 @@ use crate::*;
 
 #[derive(Debug)]
 crate struct Device {
+    crate table: Arc<vkl::DeviceTable>,
     crate instance: Arc<Instance>,
     crate app_info: Arc<AppInfo>,
     crate pdev: vk::PhysicalDevice,
-    crate props: Box<vk::PhysicalDeviceProperties>,
+    crate props: vk::PhysicalDeviceProperties,
     crate queue_families: Vec<vk::QueueFamilyProperties>,
-    crate mem_props: Box<vk::PhysicalDeviceMemoryProperties>,
-    crate table: Arc<vkl::DeviceTable>,
+    crate mem_props: vk::PhysicalDeviceMemoryProperties,
+    crate features: vk::PhysicalDeviceFeatures,
 }
 
 impl Drop for Device {
@@ -95,48 +96,6 @@ impl Queue {
     }
 }
 
-macro_rules! check_for_features {
-    ($expected:expr, $actual:expr; $($member:ident,)*) => {
-        $(
-            if ($expected.$member == vk::TRUE) & ($actual.$member != vk::TRUE)
-            {
-                Err(concat!(
-                    "graphics device missing required feature:",
-                    stringify!($member),
-                ))?;
-            }
-        )*
-    }
-}
-
-unsafe fn check_for_features(
-    it: &vkl::InstanceTable,
-    pdev: vk::PhysicalDevice,
-    _desired_features: &vk::PhysicalDeviceFeatures,
-    desired_descriptor_indexing_features:
-        &vk::PhysicalDeviceDescriptorIndexingFeaturesEXT,
-) -> Result<(), AnyError> {
-    let mut descriptor_indexing_features =
-        vk::PhysicalDeviceDescriptorIndexingFeaturesEXT::default();
-    let mut features = vk::PhysicalDeviceFeatures2 {
-        p_next: &mut descriptor_indexing_features as *mut _ as _,
-        ..Default::default()
-    };
-    it.get_physical_device_features_2(pdev, &mut features);
-
-    // TODO: Add boolean methods to Vk*Features in vulkan bindings
-    check_for_features!(
-        desired_descriptor_indexing_features, descriptor_indexing_features;
-        shader_sampled_image_array_non_uniform_indexing,
-        descriptor_binding_sampled_image_update_after_bind,
-        descriptor_binding_update_unused_while_pending,
-        descriptor_binding_partially_bound,
-        runtime_descriptor_array,
-    );
-
-    Ok(())
-}
-
 impl Device {
     crate unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
         Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
@@ -147,22 +106,12 @@ impl Device {
         // TODO: check that extensions are actually supported
         let exts = [
             vk::KHR_SWAPCHAIN_EXTENSION_NAME,
-            vk::EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
         ];
 
-        let features = Default::default();
-        // TODO: Don't really need these
-        let descriptor_indexing_features =
-            vk::PhysicalDeviceDescriptorIndexingFeaturesEXT {
-                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
-                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
-                descriptor_binding_update_unused_while_pending: vk::TRUE,
-                descriptor_binding_partially_bound: vk::TRUE,
-                runtime_descriptor_array: vk::TRUE,
-                ..Default::default()
-            };
-        check_for_features
-            (it, pdev, &features, &descriptor_indexing_features)?;
+        let features = vk::PhysicalDeviceFeatures {
+            sampler_anisotropy: vk::TRUE,
+            ..Default::default()
+        };
 
         let queue_infos = [vk::DeviceQueueCreateInfo {
             queue_family_index: 0,
@@ -172,7 +121,6 @@ impl Device {
         }];
 
         let create_info = vk::DeviceCreateInfo {
-            p_next: &descriptor_indexing_features as *const _ as _,
             queue_create_info_count: queue_infos.len() as _,
             p_queue_create_infos: queue_infos.as_ptr(),
             enabled_extension_count: exts.len() as _,
@@ -192,18 +140,18 @@ impl Device {
 
         let props = instance.get_properties(pdev);
         let queue_families = instance.get_queue_family_properties(pdev);
-        let mut mem_props: Box<vk::PhysicalDeviceMemoryProperties> =
-            Default::default();
-        it.get_physical_device_memory_properties(pdev, &mut *mem_props);
+        let mut mem_props = Default::default();
+        it.get_physical_device_memory_properties(pdev, &mut mem_props);
 
         let device = Arc::new(Device {
+            table,
             instance,
             app_info,
             pdev,
             props,
             queue_families,
             mem_props,
-            table,
+            features,
         });
 
         let queues = device.get_queues();
@@ -242,6 +190,10 @@ impl Device {
 
     crate fn limits(&self) -> &vk::PhysicalDeviceLimits {
         &self.properties().limits
+    }
+
+    crate fn features(&self) -> &vk::PhysicalDeviceFeatures {
+        &self.features
     }
 
     crate unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)

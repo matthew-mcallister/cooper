@@ -24,10 +24,12 @@ mod framebuffer;
 mod global;
 mod image;
 mod pipeline;
-mod render;
+//mod render;
 mod render_loop;
 mod render_pass;
+mod sampler;
 mod shader;
+mod staged_cache;
 mod vertex;
 
 crate use device::*;
@@ -37,10 +39,12 @@ crate use global::*;
 crate use image::*;
 crate use pipeline::*;
 #[allow(unused_imports)]
-crate use render::*;
+//crate use render::*;
 crate use render_loop::*;
 crate use render_pass::*;
+crate use sampler::*;
 crate use shader::*;
+crate use staged_cache::*;
 crate use vertex::*;
 
 mod config;
@@ -53,8 +57,10 @@ unit::collect_tests![
     framebuffer,
     global,
     image,
-    pipeline,
+    //pipeline,
     render_pass,
+    sampler,
+    staged_cache,
     vertex,
 ];
 

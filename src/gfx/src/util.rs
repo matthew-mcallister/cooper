@@ -175,6 +175,12 @@ impl From<Extent2D> for Extent3D {
     }
 }
 
+impl From<(u32, u32)> for Extent3D {
+    fn from((width, height): (u32, u32)) -> Self {
+        (width, height, 1).into()
+    }
+}
+
 impl From<Extent3D> for vk::Extent3D {
     fn from(Extent3D { width, height, depth }: Extent3D) -> Self {
         Self { width, height, depth }
@@ -184,5 +190,32 @@ impl From<Extent3D> for vk::Extent3D {
 impl From<vk::Extent3D> for Extent3D {
     fn from(vk::Extent3D { width, height, depth }: vk::Extent3D) -> Self {
         Self { width, height, depth }
+    }
+}
+
+#[macro_export]
+macro_rules! wrap_vk_enum {
+    (
+        $(#[$($meta:meta)*])*
+        $vis:vis enum $name:ident {
+            $(
+                $(#[$($var_meta:meta)*])*
+                $var:ident = $vk_var:ident,
+            )*
+        }
+    ) => {
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        $(#[$($meta)*])*
+        $vis enum $name {
+            $($(#[$($var_meta)*])* $var,)*
+        }
+
+        impl From<$name> for vk::$name {
+            fn from(val: $name) -> Self {
+                match val {
+                    $($name::$var => vk::$name::$vk_var,)*
+                }
+            }
+        }
     }
 }

@@ -121,10 +121,10 @@ impl Instance {
     }
 
     crate unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
-        Box<vk::PhysicalDeviceProperties>
+        vk::PhysicalDeviceProperties
     {
-        let mut res = Box::new(Default::default());
-        self.table.get_physical_device_properties(pdev, &mut *res);
+        let mut res = Default::default();
+        self.table.get_physical_device_properties(pdev, &mut res);
         res
     }
 
