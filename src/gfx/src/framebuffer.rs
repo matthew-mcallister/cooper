@@ -4,21 +4,8 @@ use std::ptr;
 use std::sync::Arc;
 
 use derive_more::*;
-use enum_map::Enum;
 
 use crate::*;
-
-// TODO: Get rid of this type?
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum AttachmentName {
-    /// SRGB screen buffer
-    Backbuffer,
-    DepthStencil,
-    /// HDR light buffer
-    Hdr,
-    Normal,
-    Albedo,
-}
 
 #[derive(Debug)]
 crate struct Framebuffer {
@@ -27,14 +14,8 @@ crate struct Framebuffer {
     inner: vk::Framebuffer,
 }
 
-#[derive(Debug)]
-crate struct Attachment {
-    crate name: AttachmentName,
-    crate data: AttachmentData,
-}
-
 #[derive(Debug, From)]
-crate enum AttachmentData {
+crate enum Attachment {
     Image(Arc<ImageView>),
     Swapchain(Arc<SwapchainView>),
 }
@@ -82,44 +63,31 @@ impl Framebuffer {
 }
 
 impl Attachment {
-    crate fn new<T: Into<AttachmentData>>(name: AttachmentName, data: T) ->
-        Self
-    {
-        Self {
-            name,
-            data: data.into(),
-        }
-    }
-
     crate fn view(&self) -> vk::ImageView {
-        use AttachmentData::*;
-        match &self.data {
-            Image(view) => view.inner(),
-            Swapchain(view) => view.inner(),
+        match &self {
+            Self::Image(view) => view.inner(),
+            Self::Swapchain(view) => view.inner(),
         }
     }
 
     crate fn extent(&self) -> Extent2D {
-        use AttachmentData::*;
-        match &self.data {
-            Image(view) => view.extent().into(),
-            Swapchain(view) => view.swapchain().extent,
+        match &self {
+            Self::Image(view) => view.extent().into(),
+            Self::Swapchain(view) => view.swapchain().extent,
         }
     }
 
     crate fn format(&self) -> Format {
-        use AttachmentData::*;
-        match &self.data {
-            Image(view) => view.format(),
-            Swapchain(view) => view.swapchain().format(),
+        match &self {
+            Self::Image(view) => view.format(),
+            Self::Swapchain(view) => view.swapchain().format(),
         }
     }
 
     crate fn samples(&self) -> SampleCount {
-        use AttachmentData::*;
-        match &self.data {
-            Image(img) => img.samples(),
-            Swapchain(_) => SampleCount::One,
+        match &self {
+            Self::Image(img) => img.samples(),
+            Self::Swapchain(_) => SampleCount::One,
         }
     }
 }
@@ -133,12 +101,11 @@ unsafe fn create_framebuffer(
     validate_framebuffer_creation(&render_pass, &attachments);
 
     let extent = attachments[0].extent();
-    let vk_attachments: Vec<_> = attachments.iter().map(|a| a.view())
-        .collect();
+    let vk_attchs: Vec<_> = attachments.iter().map(|a| a.view()).collect();
     let create_info = vk::FramebufferCreateInfo {
         render_pass: render_pass.inner(),
-        attachment_count: vk_attachments.len() as _,
-        p_attachments: vk_attachments.as_ptr(),
+        attachment_count: vk_attchs.len() as _,
+        p_attachments: vk_attchs.as_ptr(),
         width: extent.width,
         height: extent.height,
         layers: 1,
@@ -159,8 +126,6 @@ fn validate_framebuffer_creation(
     render_pass: &RenderPass,
     attachments: &[Attachment],
 ) {
-    use AttachmentData::*;
-
     assert!(attachments.len() > 0);
     assert_eq!(attachments.len(), render_pass.attachments().len());
 
@@ -173,7 +138,7 @@ fn validate_framebuffer_creation(
 
         assert_eq!(attch.extent(), extent);
 
-        if let Image(view) = &attch.data {
+        if let Attachment::Image(view) = &attch {
             assert_eq!(view.layers(), 1);
             assert_eq!(view.mip_levels(), 1);
         }
@@ -219,28 +184,25 @@ crate unsafe fn create_test_framebuffer(swapchain: &Arc<Swapchain>) {
 
     let device = Arc::clone(&swapchain.device);
     let state = Arc::new(SystemState::new(device));
+    let get_state = || Arc::clone(&state);
 
     let pass = create_test_pass(Arc::clone(&swapchain.device));
 
     let extent = swapchain.extent;
-    let hdr =
-        create_render_target(Arc::clone(&state), &pass, 1, extent, false);
-    let depth =
-        create_render_target(Arc::clone(&state), &pass, 2, extent, false);
-    let normal =
-        create_render_target(Arc::clone(&state), &pass, 3, extent, false);
-    let albedo =
-        create_render_target(Arc::clone(&state), &pass, 4, extent, false);
+    let hdr = create_render_target(get_state(), &pass, 1, extent, false);
+    let depth = create_render_target(get_state(), &pass, 2, extent, false);
+    let normal = create_render_target(get_state(), &pass, 3, extent, false);
+    let albedo = create_render_target(get_state(), &pass, 4, extent, false);
 
     let views = swapchain.create_views();
     let back = Arc::clone(&views[0]);
 
     let _fb = Framebuffer::new(pass, vec![
-        Attachment::new(Backbuffer, back),
-        Attachment::new(Hdr, hdr),
-        Attachment::new(DepthStencil, depth),
-        Attachment::new(Normal, normal),
-        Attachment::new(Albedo, albedo),
+        back.into(),
+        hdr.into(),
+        depth.into(),
+        normal.into(),
+        albedo.into(),
     ]);
 }
 

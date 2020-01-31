@@ -2,6 +2,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use derivative::Derivative;
+use enum_map::Enum;
 use prelude::*;
 
 use crate::*;
@@ -13,6 +14,42 @@ crate struct RenderPass {
     attachments: Vec<AttachmentDescription>,
     subpasses: Vec<SubpassState>,
     dependencies: Vec<vk::SubpassDependency>,
+}
+
+// TODO: Get rid of this type?
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+crate enum AttachmentName {
+    /// SRGB screen buffer
+    Backbuffer,
+    DepthStencil,
+    /// HDR light buffer
+    Hdr,
+    Normal,
+    Albedo,
+}
+
+#[derive(Clone, Copy, Debug, Derivative)]
+#[derivative(Default)]
+crate struct AttachmentDescription {
+    // TODO: It's unfortunate that this has a default value. Maybe
+    // default() should just panic?
+    #[derivative(Default(value = "AttachmentName::Backbuffer"))]
+    crate name: AttachmentName,
+    #[derivative(Default(value = "Format::R8"))]
+    crate format: Format,
+    crate samples: SampleCount,
+    // These fields follow a reasonable-sounding convention: "if you
+    // don't specify it, you don't care about it".
+    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
+    crate load_op: vk::AttachmentLoadOp,
+    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
+    crate store_op: vk::AttachmentStoreOp,
+    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
+    crate stencil_load_op: vk::AttachmentLoadOp,
+    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
+    crate stencil_store_op: vk::AttachmentStoreOp,
+    crate initial_layout: vk::ImageLayout,
+    crate final_layout: vk::ImageLayout,
 }
 
 #[derive(Debug)]
@@ -43,26 +80,6 @@ crate struct SubpassDesc {
     crate resolve_attchs: Vec<u32>,
     crate preserve_attchs: Vec<u32>,
     crate depth_stencil_attch: Option<u32>,
-}
-
-#[derive(Clone, Copy, Debug, Derivative)]
-#[derivative(Default)]
-crate struct AttachmentDescription {
-    #[derivative(Default(value = "Format::R8"))]
-    crate format: Format,
-    crate samples: SampleCount,
-    // These fields follow a reasonable sounding convention: "if you
-    // don't specify it, you don't care about it".
-    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
-    crate load_op: vk::AttachmentLoadOp,
-    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
-    crate store_op: vk::AttachmentStoreOp,
-    #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
-    crate stencil_load_op: vk::AttachmentLoadOp,
-    #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
-    crate stencil_store_op: vk::AttachmentStoreOp,
-    crate initial_layout: vk::ImageLayout,
-    crate final_layout: vk::ImageLayout,
 }
 
 impl Drop for RenderPass {
@@ -358,23 +375,25 @@ crate unsafe fn create_render_pass(
     })
 }
 
+/// Render pass with a single subpass and single backbuffer attachment.
 #[derive(Debug)]
-crate struct ScreenPass {
+crate struct TrivialPass {
     crate pass: Arc<RenderPass>,
-    crate color: Subpass,
+    crate subpass: Subpass,
 }
 
-impl ScreenPass {
+impl TrivialPass {
     crate fn new(device: Arc<Device>) -> Self {
-        unsafe { create_screen_pass(device) }
+        unsafe { create_trivial_pass(device) }
     }
 }
 
-unsafe fn create_screen_pass(device: Arc<Device>) -> ScreenPass {
+unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
     let pass = create_render_pass(
         device,
         vec![
             AttachmentDescription {
+                name: AttachmentName::Backbuffer,
                 format: Format::BGRA8_SRGB,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
@@ -390,9 +409,9 @@ unsafe fn create_screen_pass(device: Arc<Device>) -> ScreenPass {
     );
 
     let mut subpasses = pass.subpasses();
-    ScreenPass {
+    TrivialPass {
         pass: Arc::clone(&pass),
-        color: subpasses.next().unwrap(),
+        subpass: subpasses.next().unwrap(),
     }
 }
 
@@ -409,20 +428,23 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
         vec![
             // Screen
             AttachmentDescription {
+                name: AttachmentName::Backbuffer,
                 format: Format::BGRA8_SRGB,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             },
-            // HDR image
+            // HDR lighting buffer
             // TODO: Not sure if it's a better practice to set
             // initial_layout or not.
             AttachmentDescription {
+                name: AttachmentName::Hdr,
                 format: Format::RGB16F,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
             },
             // Depth/stencil
             AttachmentDescription {
+                name: AttachmentName::DepthStencil,
                 format: Format::D32F_S8,
                 load_op: vk::AttachmentLoadOp::CLEAR,
                 final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -430,12 +452,14 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
             },
             // Normals
             AttachmentDescription {
+                name: AttachmentName::Normal,
                 format: Format::RGBA8,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
             },
             // Albedo
             AttachmentDescription {
+                name: AttachmentName::Albedo,
                 format: Format::RGBA8,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
@@ -504,17 +528,17 @@ mod tests {
     use crate::*;
     use super::*;
 
-    unsafe fn screen_test(vars: testing::TestVars) {
-        let _screen_pass = ScreenPass::new(Arc::clone(&vars.device()));
+    unsafe fn smoke_test(vars: testing::TestVars) {
+        let _trivial_pass = TrivialPass::new(Arc::clone(&vars.device()));
     }
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn deferred_test(vars: testing::TestVars) {
         let _pass = create_test_pass(Arc::clone(vars.device()));
     }
 
     unit::declare_tests![
-        screen_test,
         smoke_test,
+        deferred_test,
     ];
 }
 

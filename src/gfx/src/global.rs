@@ -5,7 +5,6 @@ use crate::*;
 #[derive(Debug)]
 crate struct Globals {
     crate shaders: GlobalShaders,
-    crate screen_pass: Arc<ScreenPass>,
     crate empty_vertex_layout: Arc<VertexLayout>,
     crate empty_uniform_buffer: Arc<BufferRange>,
     crate empty_storage_buffer: Arc<BufferRange>,
@@ -29,7 +28,6 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
-        let screen_pass = Arc::new(ScreenPass::new(Arc::clone(&device)));
 
         let empty_vertex_layout = Arc::new(VertexLayout {
             topology: vk::PrimitiveTopology::TRIANGLE_LIST,
@@ -82,7 +80,6 @@ impl Globals {
 
         Globals {
             shaders,
-            screen_pass,
             empty_vertex_layout,
             empty_uniform_buffer,
             empty_storage_buffer,

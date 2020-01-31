@@ -371,10 +371,11 @@ mod tests {
 
     fn trivial_pipe_desc(
         globals: &Globals,
+        pass: &TrivialPass,
         trivial: &TrivialRenderer,
     ) -> GraphicsPipelineDesc {
         let mut desc = GraphicsPipelineDesc::new(
-            globals.screen_pass.color.clone(),
+            pass.subpass.clone(),
             Arc::clone(&trivial.pipeline_layout()),
             Arc::clone(&globals.empty_vertex_layout),
         );
@@ -394,9 +395,10 @@ mod tests {
         let device = Arc::clone(vars.device());
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
         let globals = Globals::new(Arc::clone(&state));
+        let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, &globals);
 
-        let desc = trivial_pipe_desc(&globals, &trivial);
+        let desc = trivial_pipe_desc(&globals, &pass, &trivial);
         let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
     }
 
@@ -404,11 +406,12 @@ mod tests {
         let device = Arc::clone(vars.device());
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
         let globals = Globals::new(Arc::clone(&state));
+        let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, &globals);
 
         let mut cache = GraphicsPipelineCache::new(Arc::clone(&device));
 
-        let mut desc = trivial_pipe_desc(&globals, &trivial);
+        let mut desc = trivial_pipe_desc(&globals, &pass, &trivial);
         let _pipe0 = Arc::clone(&cache.get_or_create(&desc));
 
         desc.depth_test = true;
