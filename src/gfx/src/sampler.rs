@@ -137,6 +137,10 @@ impl Sampler {
         }
     } }
 
+    crate fn inner(&self) -> vk::Sampler {
+        self.inner
+    }
+
     crate fn desc(&self) -> &SamplerDesc {
         &self.desc
     }

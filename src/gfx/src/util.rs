@@ -121,13 +121,13 @@ macro_rules! set_layout_bindings {
     (@binding (
         $binding:expr, $type:ident$([$count:expr])? $(, $($stages:ident)+)?)
     ) => {
-        #[allow(path_statements)]
         vk::DescriptorSetLayoutBinding {
             binding: $binding,
             descriptor_type: vk::DescriptorType::$type,
             descriptor_count: { 1 $(; $count)? },
             stage_flags: {
-                vk::ShaderStageFlags::ALL
+                // TODO: Maybe should be VERTEX | FRAGMENT by default
+                (vk::ShaderStageFlags::ALL)
                 $(; vk::ShaderStageFlags::empty()
                     $(| vk::ShaderStageFlags::$stages)*)?
             },

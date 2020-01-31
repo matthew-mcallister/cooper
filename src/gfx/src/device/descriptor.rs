@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use base::{Sentinel, impl_bin_ops};
 use derive_more::*;
+use vk::traits::*;
 
 use crate::*;
 
@@ -15,6 +16,8 @@ use self::{
 #[derive(Clone, Copy, Debug, Eq, From, Into, PartialEq)]
 crate struct DescriptorCounts(na::VectorN<u32, na::U11>);
 
+// TODO: Buffers need an overhaul, as choosing between
+// uniform/storage and dynamic/static is an implementation detail
 #[derive(Clone, Debug)]
 crate struct DescriptorSetLayout {
     device: Arc<Device>,
@@ -24,7 +27,7 @@ crate struct DescriptorSetLayout {
     counts: Counts,
 }
 
-// This alias is commonly appropriate.
+// This alias is appropriate to use anywhere.
 crate type SetLayout = DescriptorSetLayout;
 
 #[derive(Debug)]
@@ -57,13 +60,35 @@ crate fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) ->
         .sum()
 }
 
+fn is_valid_type(ty: vk::DescriptorType) -> bool {
+    // Not supported yet: texel buffers, dynamic buffers
+    [
+        vk::DescriptorType::SAMPLER,
+        vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        vk::DescriptorType::SAMPLED_IMAGE,
+        vk::DescriptorType::STORAGE_IMAGE,
+        vk::DescriptorType::UNIFORM_BUFFER,
+        vk::DescriptorType::STORAGE_BUFFER,
+        vk::DescriptorType::INPUT_ATTACHMENT,
+    ].contains(&ty)
+}
+
 impl Layout {
+    // TODO: Bindless descriptors should be handled by a different type
     crate unsafe fn new(
         device: Arc<Device>,
         flags: vk::DescriptorSetLayoutCreateFlags,
         bindings: &[vk::DescriptorSetLayoutBinding],
     ) -> Self {
         let dt = &*device.table;
+
+        // Validation
+        {
+            for binding in bindings.iter() {
+                assert!(is_valid_type(binding.descriptor_type));
+            }
+        }
+
         let create_info = vk::DescriptorSetLayoutCreateInfo {
             flags,
             binding_count: bindings.len() as _,
@@ -123,13 +148,17 @@ impl Layout {
     }
 }
 
-fn buffer_types() -> &'static [vk::DescriptorType] {
-    &[
-        vk::DescriptorType::UNIFORM_BUFFER,
-        vk::DescriptorType::STORAGE_BUFFER,
-        vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
-        vk::DescriptorType::STORAGE_BUFFER_DYNAMIC,
-    ]
+fn is_buffer(ty: vk::DescriptorType) -> bool {
+    (ty == vk::DescriptorType::UNIFORM_BUFFER)
+        | (ty == vk::DescriptorType::STORAGE_BUFFER)
+}
+
+fn is_uniform_buffer(ty: vk::DescriptorType) -> bool {
+    ty == vk::DescriptorType::UNIFORM_BUFFER
+}
+
+fn is_storage_buffer(ty: vk::DescriptorType) -> bool {
+    ty == vk::DescriptorType::STORAGE_BUFFER
 }
 
 impl DescriptorSet {
@@ -153,6 +182,8 @@ impl DescriptorSet {
         self.write_buffers(binding, 0, std::slice::from_ref(buffer.as_ref()));
     }
 
+    /// Writes uniform or storage buffers. Doesn't work with texel
+    /// buffers as they require a buffer view object.
     // N.B. direct writes scale poorly compared to update templates.
     crate fn write_buffers(
         &mut self,
@@ -163,16 +194,25 @@ impl DescriptorSet {
         let dt = &self.layout.device().table;
         assert_ne!(buffers.len(), 0);
 
-        let layout_binding = &self.layout.bindings()[0];
+        let layout_binding = &self.layout.bindings()[binding as usize];
         let len = buffers.len() as u32;
-        // N.B. Overrunning writes are actually allowed by the spec
-        assert!(first_element + len <= layout_binding.descriptor_count);
-
         let ty = layout_binding.descriptor_type;
-        assert!(buffer_types().contains(&ty));
+
+        // Validation
+        {
+            // N.B. Overrunning writes are actually allowed by the spec
+            assert!(first_element + len <= layout_binding.descriptor_count);
+            for range in buffers.iter() {
+                match range.as_ref().buffer().binding() {
+                    BufferBinding::Uniform => assert!(is_uniform_buffer(ty)),
+                    BufferBinding::Storage => assert!(is_storage_buffer(ty)),
+                    _ => panic!("incompatible descriptor type"),
+                };
+            }
+        }
 
         let info: Vec<_> = buffers.iter()
-            .map(|buffer| buffer.as_ref().buffer_info())
+            .map(|buffer| buffer.as_ref().descriptor_info())
             .collect();
         let writes = [vk::WriteDescriptorSet {
             dst_set: self.inner(),
@@ -187,6 +227,109 @@ impl DescriptorSet {
             dt.update_descriptor_sets
                 (writes.len() as _, writes.as_ptr(), 0, ptr::null());
         }
+    }
+
+    crate unsafe fn write_image(
+        &mut self,
+        binding: u32,
+        view: &Arc<ImageView>,
+        sampler: Option<&Arc<Sampler>>,
+    ) {
+        self.write_images(binding, 0, &[view], try_opt!(&[sampler?][..]));
+    }
+
+    /// Writes image to the descriptor set. Combined image/samplers
+    /// must specify an array of samplers.
+    // TODO: Perhaps should take an iterator
+    crate unsafe fn write_images(
+        &mut self,
+        binding: u32,
+        first_element: u32,
+        views: &[&Arc<ImageView>],
+        samplers: Option<&[&Arc<Sampler>]>,
+    ) {
+        if let Some(samplers) = samplers {
+            assert_eq!(samplers.len(), views.len());
+        }
+
+        for (i, &view) in views.iter().enumerate() {
+            let sampler = try_opt!(samplers?[i]);
+            let elem = first_element + i as u32;
+            self.write_image_element(binding, elem, view, sampler);
+        }
+    }
+
+    unsafe fn write_image_element(
+        &mut self,
+        binding: u32,
+        element: u32,
+        view: &Arc<ImageView>,
+        sampler: Option<&Arc<Sampler>>,
+    ) {
+        use vk::DescriptorType as Dt;
+
+        let dt = &self.layout.device().table;
+        let layout_binding = &self.layout.bindings()[binding as usize];
+        let ty = layout_binding.descriptor_type;
+
+        let sampler = try_opt!(sampler?.inner()).unwrap_or(vk::null());
+
+        // Validation
+        {
+            assert!(element < layout_binding.descriptor_count);
+            let flags = view.image().flags();
+            match ty {
+                Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
+                    assert!(!flags.contains(ImageFlags::NO_SAMPLE)),
+                Dt::STORAGE_IMAGE =>
+                    assert!(flags.contains(ImageFlags::STORAGE)),
+                Dt::INPUT_ATTACHMENT =>
+                    assert!(flags.contains(ImageFlags::INPUT_ATTACHMENT)),
+                _ => unreachable!(),
+            }
+            // combined image/sampler <=> sampler not null
+            assert_eq!(ty == Dt::COMBINED_IMAGE_SAMPLER, !sampler.is_null());
+        }
+
+        // TODO: More sophisticated layout decision making will probably
+        // be required eventually.
+        let image_layout = match ty {
+            Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
+                if view.format().is_depth_stencil() {
+                    vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                } else {
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+                },
+            Dt::STORAGE_IMAGE => vk::ImageLayout::GENERAL,
+            Dt::INPUT_ATTACHMENT => input_attachment_layout(view.format()),
+            _ => unreachable!(),
+        };
+
+        let info = [vk::DescriptorImageInfo {
+            sampler,
+            image_view: view.inner(),
+            image_layout,
+        }];
+        let writes = [vk::WriteDescriptorSet {
+            dst_set: self.inner(),
+            dst_binding: binding,
+            dst_array_element: element,
+            descriptor_count: info.len() as _,
+            descriptor_type: ty,
+            p_image_info: info.as_ptr(),
+            ..Default::default()
+        }];
+        dt.update_descriptor_sets
+            (writes.len() as _, writes.as_ptr(), 0, ptr::null());
+    }
+
+    crate unsafe fn write_samplers(
+        &mut self,
+        _binding: u32,
+        _first_element: u32,
+        _samplers: &[&Arc<Sampler>],
+    ) {
+        todo!()
     }
 }
 
@@ -477,7 +620,7 @@ mod tests {
     use vk::traits::*;
     use super::*;
 
-    unsafe fn scene_global_layout(device: &Arc<Device>) ->
+    unsafe fn constant_buffer_layout(device: &Arc<Device>) ->
         Arc<DescriptorSetLayout>
     {
         let device = Arc::clone(device);
@@ -512,10 +655,10 @@ mod tests {
         let device = Arc::clone(&vars.swapchain.device);
 
         let mut pool = create_global_descriptor_pool(Arc::clone(&device));
-        let scene_global_layout = scene_global_layout(&device);
+        let constant_buffer_layout = constant_buffer_layout(&device);
         let material_layout = material_layout(&device);
 
-        let set0 = pool.alloc(&scene_global_layout);
+        let set0 = pool.alloc(&constant_buffer_layout);
         let sets = pool.alloc_many(&material_layout, 3);
 
         let used = pool.used_descriptors();
@@ -535,15 +678,28 @@ mod tests {
     }
 
     unsafe fn write_test(vars: testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device);
+        let device = Arc::clone(vars.device());
+        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let globals = Globals::new(Arc::clone(&state));
 
-        let layout = scene_global_layout(&device);
-        let mut pool = create_global_descriptor_pool(Arc::clone(&device));
-        let mut buffers = BufferHeap::new(Arc::clone(&device));
+        // crate::globals tests possibilities more thoroughly
+        let bindings = set_layout_bindings![
+            (0, UNIFORM_BUFFER[2]),
+            (1, SAMPLED_IMAGE),
+            (2, COMBINED_IMAGE_SAMPLER[2]),
+        ];
+        let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
 
-        let mut set = pool.alloc(&layout);
-        let buf = buffers.alloc(BufferBinding::Storage, false.into(), 256);
-        set.write_buffer(0, &buf);
+        let mut descs = state.descriptors.lock();
+        let mut desc = descs.alloc(&layout);
+        desc.write_buffers(0, 0, &vec![&globals.empty_uniform_buffer; 2]);
+        desc.write_image(1, &globals.empty_image_2d, None);
+        desc.write_images(
+            2,
+            0,
+            &vec![&globals.empty_image_2d; 2],
+            Some(&vec![&globals.empty_sampler; 2]),
+        );
     }
 
     unit::declare_tests![

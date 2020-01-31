@@ -394,7 +394,7 @@ mod tests {
         let device = Arc::clone(vars.device());
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
         let globals = Globals::new(Arc::clone(&state));
-        let trivial = TrivialRenderer::new(&state);
+        let trivial = TrivialRenderer::new(&state, &globals);
 
         let desc = trivial_pipe_desc(&globals, &trivial);
         let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
@@ -404,7 +404,7 @@ mod tests {
         let device = Arc::clone(vars.device());
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
         let globals = Globals::new(Arc::clone(&state));
-        let trivial = TrivialRenderer::new(&state);
+        let trivial = TrivialRenderer::new(&state, &globals);
 
         let mut cache = GraphicsPipelineCache::new(Arc::clone(&device));
 

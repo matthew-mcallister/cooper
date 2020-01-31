@@ -16,7 +16,7 @@ impl TrivialRenderer {
         VERTEX_COUNT
     }
 
-    crate fn new(state: &SystemState) -> Self {
+    crate fn new(state: &SystemState, globals: &Globals) -> Self {
         let device = Arc::clone(&state.device);
 
         let bindings = set_layout_bindings![
@@ -30,6 +30,7 @@ impl TrivialRenderer {
         let bindings = set_layout_bindings![
             (0, COMBINED_IMAGE_SAMPLER),
             (1, STORAGE_IMAGE),
+            (2, SAMPLED_IMAGE),
         ];
         let layout1 = unsafe {
             Arc::new(SetLayout::from_bindings(Arc::clone(&device), &bindings))
@@ -41,13 +42,15 @@ impl TrivialRenderer {
         ]));
 
         let mut descs = state.descriptors.lock();
-        let desc0 = descs.alloc(&layout0);
-        let desc1 = descs.alloc(&layout1);
+        let mut descs = [descs.alloc(&layout0), descs.alloc(&layout1)];
+        for desc in descs.iter_mut() {
+            unsafe { globals.write_empty_descriptors(desc); }
+        }
 
         TrivialRenderer {
             set_layouts: [layout0, layout1],
             pipe_layout,
-            descs: [desc0, desc1],
+            descs,
         }
     }
 
@@ -63,3 +66,18 @@ impl TrivialRenderer {
         &self.descs[..]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe fn smoke_test(vars: testing::TestVars) {
+        let state = Arc::new(SystemState::new(Arc::clone(vars.device())));
+        let globals = Globals::new(Arc::clone(&state));
+        let _ = TrivialRenderer::new(&state, &globals);
+    }
+
+    unit::declare_tests![smoke_test];
+}
+
+unit::collect_tests![tests];

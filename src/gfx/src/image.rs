@@ -5,7 +5,6 @@ use std::sync::Arc;
 use bitflags::*;
 use derivative::*;
 
-// TODO: This issues an unused import warning which is a bug
 use crate::*;
 
 bitflags! {
@@ -14,6 +13,7 @@ bitflags! {
         /// Image will not be sampled by shaders.
         const NO_SAMPLE = bit!(0);
         /// Image may be used as a shader storage image.
+        // TODO: Will this *really* ever get used?
         const STORAGE = bit!(1);
         /// Image may be used as a color attachment.
         const COLOR_ATTACHMENT = bit!(2);
@@ -21,7 +21,6 @@ bitflags! {
         const DEPTH_STENCIL_ATTACHMENT = bit!(3);
         /// Image may be used as an input attachment.
         const INPUT_ATTACHMENT = bit!(4);
-        // TODO: If
     }
 }
 
@@ -179,6 +178,10 @@ impl Image {
         self.inner
     }
 
+    crate fn flags(&self) -> ImageFlags {
+        self.flags
+    }
+
     crate fn format(&self) -> Format {
         self.format
     }
@@ -242,6 +245,10 @@ impl ImageView {
 
     crate fn inner(&self) -> vk::ImageView {
         self.inner
+    }
+
+    crate fn image(&self) -> &Arc<Image> {
+        &self.image
     }
 
     crate fn format(&self) -> Format {
@@ -450,7 +457,6 @@ impl From<SampleCount> for vk::SampleCountFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         use ImageFlags as Flags;

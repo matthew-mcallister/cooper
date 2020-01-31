@@ -61,6 +61,10 @@ impl DeviceBuffer {
         self.inner
     }
 
+    crate fn binding(&self) -> BufferBinding {
+        self.binding
+    }
+
     crate fn usage(&self) -> vk::BufferUsageFlags {
         self.usage
     }
@@ -95,7 +99,7 @@ impl BufferRange {
         &self.buffer
     }
 
-    crate fn buffer_info(&self) -> vk::DescriptorBufferInfo {
+    crate fn descriptor_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.buffer.inner,
             offset: self.offset,

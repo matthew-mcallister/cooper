@@ -166,6 +166,14 @@ impl From<AttachmentDescription> for vk::AttachmentDescription {
     }
 }
 
+crate fn input_attachment_layout(format: Format) -> vk::ImageLayout {
+    if format.is_depth_stencil() {
+        vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    } else {
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+    }
+}
+
 fn subpass_samples(
     attachments: &[AttachmentDescription],
     desc: &SubpassDesc,
@@ -188,11 +196,7 @@ fn subpass_state(
     let samples = subpass_samples(attachments, &desc);
 
     let input_attchs: Vec<_> = desc.input_attchs.iter().map(|&idx| {
-        let layout = if get(idx).format.is_depth_stencil() {
-            vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
-        } else {
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-        };
+        let layout = input_attachment_layout(get(idx).format);
         vk::AttachmentReference { attachment: idx, layout }
     }).collect();
     let color_attchs: Vec<_> = desc.color_attchs.iter().map(|&idx| {

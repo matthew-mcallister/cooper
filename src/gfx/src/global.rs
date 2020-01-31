@@ -91,6 +91,50 @@ impl Globals {
             empty_sampler,
         }
     }
+
+    crate unsafe fn write_empty_descriptors(&self, desc: &mut DescriptorSet) {
+        let layout = Arc::clone(&desc.layout());
+        for i in 0..layout.bindings().len() {
+            self.write_empty_descriptors_binding(&layout, desc, i as _);
+        }
+    }
+
+    crate unsafe fn write_empty_descriptors_binding(
+        &self,
+        layout: &Arc<SetLayout>,
+        desc: &mut DescriptorSet,
+        binding: u32,
+    ) {
+        use vk::DescriptorType as Dt;
+        let layout_binding = &layout.bindings()[binding as usize];
+        let count = layout_binding.descriptor_count as usize;
+        match layout_binding.descriptor_type {
+            Dt::SAMPLER => todo!(),
+            Dt::COMBINED_IMAGE_SAMPLER => {
+                let views = vec![&self.empty_image_2d; count];
+                let samplers = vec![&self.empty_sampler; count];
+                desc.write_images(binding, 0, &views, Some(&samplers));
+            },
+            Dt::SAMPLED_IMAGE => {
+                let views = vec![&self.empty_image_2d; count];
+                desc.write_images(binding, 0, &views, None);
+            },
+            Dt::STORAGE_IMAGE => {
+                let views = vec![&self.empty_storage_image_2d; count];
+                desc.write_images(binding, 0, &views, None);
+            },
+            Dt::UNIFORM_BUFFER => {
+                let bufs = vec![&self.empty_uniform_buffer; count];
+                desc.write_buffers(binding, 0, &bufs);
+            },
+            Dt::STORAGE_BUFFER => {
+                let bufs = vec![&self.empty_storage_buffer; count];
+                desc.write_buffers(binding, 0, &bufs);
+            },
+            // TODO: Input attachment?
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[allow(unused_macros)]
@@ -174,13 +218,38 @@ mod tests {
     use crate::*;
     use super::*;
 
-    fn smoke_test(vars: testing::TestVars) {
+    unsafe fn smoke_test(vars: testing::TestVars) {
         let state = Arc::new(SystemState::new(Arc::clone(vars.device())));
         let _ = Globals::new(state);
     }
 
+    unsafe fn empty_descriptors_test(vars: testing::TestVars) {
+        let device = Arc::clone(vars.device());
+        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let globals = Globals::new(Arc::clone(&state));
+
+        let bindings = set_layout_bindings![
+            (0, UNIFORM_BUFFER),
+            (1, UNIFORM_BUFFER[2]),
+            (2, STORAGE_BUFFER),
+            (3, STORAGE_BUFFER[2]),
+            (4, COMBINED_IMAGE_SAMPLER),
+            (5, COMBINED_IMAGE_SAMPLER[2]),
+            (6, SAMPLED_IMAGE),
+            (7, SAMPLED_IMAGE[2]),
+            (8, STORAGE_IMAGE),
+            (9, STORAGE_IMAGE[2]),
+        ];
+        let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
+
+        let mut descs = state.descriptors.lock();
+        let mut desc = descs.alloc(&layout);
+        globals.write_empty_descriptors(&mut desc);
+    }
+
     unit::declare_tests![
         smoke_test,
+        empty_descriptors_test
     ];
 }
 
