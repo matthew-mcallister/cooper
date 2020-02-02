@@ -22,15 +22,11 @@ fn add_tests(builder: &mut TestDriverBuilder<PlainTest>) {
         .add_test(test!(test_failing_with_print));
 }
 
-fn disable_capture_test() {
+fn main() {
     use cooper_unit::*;
     let mut builder = TestDriverBuilder::new();
-    builder.set_config(RunnerConfig { disable_capture: true });
+    builder.set_config(RunnerConfig::parse_args());
     add_tests(&mut builder);
     let mut driver = builder.build_basic();
     driver.run();
-}
-
-fn main() {
-    disable_capture_test();
 }

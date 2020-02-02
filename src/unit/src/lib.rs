@@ -248,3 +248,20 @@ impl<D> TestDriver<D> {
 
     // TODO: fn run_parallel()
 }
+
+impl RunnerConfig {
+    /// Produces a config object by parsing command line args.
+    pub fn parse_args() -> Self {
+        let args = clap::App::new("test")
+            .arg(clap::Arg::with_name("nocapture")
+                .long("nocapture")
+                .help(concat!(
+                    "Inhibits capture of test output. Print statements ",
+                    "will show on stdout/stderr.",
+                )))
+            .get_matches();
+        Self {
+            disable_capture: args.is_present("nocapture"),
+        }
+    }
+}
