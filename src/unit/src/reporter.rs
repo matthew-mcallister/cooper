@@ -70,6 +70,7 @@ pub struct StandardTestReporter<W: io::Write + std::fmt::Debug> {
     out: W,
     summary: Summary,
     name_width: usize,
+    config: RunnerConfig,
 }
 
 impl StandardTestReporter<io::Stdout> {
@@ -84,6 +85,7 @@ impl<W: io::Write + std::fmt::Debug> StandardTestReporter<W> {
             out: output,
             summary: Summary::new(),
             name_width: 0,
+            config: Default::default(),
         }
     }
 }
@@ -91,6 +93,10 @@ impl<W: io::Write + std::fmt::Debug> StandardTestReporter<W> {
 impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
     for StandardTestReporter<W>
 {
+    fn set_config(&mut self, config: RunnerConfig) {
+        self.config = config;
+    }
+
     fn before_all(&mut self, tests: &[Test<D>]) {
         writeln!(self.out);
 
@@ -122,7 +128,12 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             Outcome::Ignored => "ignored",
             Outcome::Filtered => "filtered",
         };
-        writeln!(self.out, "{}", s);
+        if self.config.disable_capture {
+            // Make it easier to see the outcome through all the output
+            writeln!(self.out, ">>> {} <<<", s);
+        } else {
+            writeln!(self.out, "{}", s);
+        }
 
         self.summary.add_test(test, result);
     }

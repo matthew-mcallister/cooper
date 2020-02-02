@@ -6,6 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
+derivative = "^1.0.3"
 derive_more = "0.15"
 enum-map = "0.6"
 
@@ -15,4 +16,8 @@ harness = false
 
 [[test]]
 name = "module"
+harness = false
+
+[[test]]
+name = "config"
 harness = false

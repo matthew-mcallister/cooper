@@ -1,3 +1,4 @@
+#![feature(bool_to_option)]
 #![feature(set_stdio)]
 
 use enum_map::Enum;
@@ -13,6 +14,10 @@ pub use reporter::*;
 
 /// Provides the environment in which tests are run.
 pub trait TestContext<T>: std::fmt::Debug {
+    /// Configures the context.
+    fn set_config(&mut self, config: RunnerConfig);
+
+    /// Runs a single test.
     fn run(&mut self, test: &T) -> Result<(), Option<String>>;
 }
 
@@ -42,6 +47,9 @@ pub struct TestResult {
 
 /// Exports or displays test results.
 pub trait TestReporter<T>: std::fmt::Debug {
+    /// Configures the reporter.
+    fn set_config(&mut self, config: RunnerConfig);
+
     /// Called at the beginning of testing.
     fn before_all(&mut self, tests: &[T]);
 
@@ -60,6 +68,15 @@ pub struct TestAttrs {
     ignore: bool,
     xfail: bool,
     should_err: bool,
+}
+
+/// The "base" test type used by the driver.
+// TODO: Interface should be a trait
+#[derive(Clone, Debug)]
+pub struct Test<D> {
+    name: String,
+    attrs: TestAttrs,
+    data: D,
 }
 
 impl TestAttrs {
@@ -97,15 +114,6 @@ impl TestAttrs {
     }
 }
 
-/// The "base" test type used by the driver.
-// TODO: Interface should be a trait
-#[derive(Clone, Debug)]
-pub struct Test<D> {
-    name: String,
-    attrs: TestAttrs,
-    data: D,
-}
-
 impl<D> Test<D> {
     pub fn name(&self) -> &str {
         &self.name[..]
@@ -135,6 +143,21 @@ impl<D> Test<D> {
 pub struct TestDriverBuilder<T> {
     tests: Vec<T>,
     reporter: Option<Box<dyn TestReporter<T>>>,
+    config: RunnerConfig,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RunnerConfig {
+    pub disable_capture: bool,
+}
+
+/// Executes tests and reports results.
+#[derive(Debug)]
+pub struct TestDriver<D> {
+    tests: Vec<Test<D>>,
+    results: Vec<TestResult>,
+    reporter: Box<dyn TestReporter<Test<D>>>,
+    context: Box<dyn TestContext<Test<D>>>,
 }
 
 impl<T> TestDriverBuilder<T> {
@@ -142,6 +165,7 @@ impl<T> TestDriverBuilder<T> {
         TestDriverBuilder {
             tests: Vec::new(),
             reporter: None,
+            config: Default::default(),
         }
     }
 
@@ -163,6 +187,11 @@ impl<T> TestDriverBuilder<T> {
         self.reporter = Some(reporter);
         self
     }
+
+    pub fn set_config(&mut self, config: RunnerConfig) -> &mut Self {
+        self.config = config;
+        self
+    }
 }
 
 impl<D> TestDriverBuilder<Test<D>> {
@@ -170,12 +199,15 @@ impl<D> TestDriverBuilder<Test<D>> {
     {
         let reporter = self.reporter
             .unwrap_or_else(|| Box::new(StandardTestReporter::stdout()));
-        TestDriver {
+        let mut driver = TestDriver {
             tests: self.tests,
             results: Vec::new(),
             reporter,
             context,
-        }
+        };
+        driver.reporter.set_config(self.config.clone());
+        driver.context.set_config(self.config.clone());
+        driver
     }
 }
 
@@ -183,15 +215,6 @@ impl TestDriverBuilder<PlainTest> {
     pub fn build_basic(self) -> TestDriver<fn()> {
         self.build(Box::new(PanicTestContext::new(PlainTestInvoker::new())))
     }
-}
-
-/// Executes tests and reports results.
-#[derive(Debug)]
-pub struct TestDriver<D> {
-    tests: Vec<Test<D>>,
-    results: Vec<TestResult>,
-    reporter: Box<dyn TestReporter<Test<D>>>,
-    context: Box<dyn TestContext<Test<D>>>,
 }
 
 impl<D> TestDriver<D> {
