@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::*;
 
-const VERTEX_COUNT: usize = 3;
+const VERTEX_COUNT: u32 = 3;
 
 #[derive(Debug)]
 crate struct TrivialRenderer {
@@ -12,7 +12,7 @@ crate struct TrivialRenderer {
 }
 
 impl TrivialRenderer {
-    crate const fn vertex_count() -> usize {
+    crate const fn vertex_count() -> u32 {
         VERTEX_COUNT
     }
 

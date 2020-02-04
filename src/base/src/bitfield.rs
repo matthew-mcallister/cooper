@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 // N.B.: out-of-bounds indexing will cause a panic on shift overflow.
+// TODO: There ought to be a crate that provides this functionality
 pub trait BitField {
     fn get_bits(self, range: Range<u8>) -> Self;
     fn set_bits(self, range: Range<u8>, value: Self) -> Self;

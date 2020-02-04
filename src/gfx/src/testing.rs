@@ -36,6 +36,10 @@ impl TestVars {
     crate fn device(&self) -> &Arc<Device> {
         &self.swapchain.device
     }
+
+    crate fn gfx_queue(&self) -> &Arc<Queue> {
+        &self.gfx_queue
+    }
 }
 
 const WINDOW_DIMS: (u32, u32) = (320, 200);
@@ -111,6 +115,7 @@ crate fn run_tests() {
         let context = unit::PanicTestContext::new(context);
         let mut builder = unit::TestDriverBuilder::<VulkanTest>::new();
         crate::__collect_tests(&mut builder);
+        builder.set_config(unit::RunnerConfig::parse_args());
         let mut driver = builder.build(Box::new(context));
         driver.run();
     });

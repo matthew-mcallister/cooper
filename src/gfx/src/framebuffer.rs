@@ -60,6 +60,19 @@ impl Framebuffer {
     crate fn render_area(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent().into())
     }
+
+    crate fn viewport(&self) -> vk::Viewport {
+        let extent = self.extent();
+        vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: extent.width as _,
+            height: extent.height as _,
+            // Note how the depth is reversed
+            min_depth: 1.0,
+            max_depth: 0.0,
+        }
+    }
 }
 
 impl Attachment {

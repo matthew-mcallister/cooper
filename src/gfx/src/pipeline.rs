@@ -20,14 +20,15 @@ crate struct GraphicsPipeline {
     device: Arc<Device>,
     inner: vk::Pipeline,
     layout: Arc<PipelineLayout>,
-    pass: Arc<RenderPass>,
-    subpass: u32,
+    subpass: Subpass,
 }
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct GraphicsPipelineDesc {
     crate subpass: Subpass,
+    // TODO: Shouldn't this just be Vec<Arc<SetLayout>> with the
+    // pipeline layout pulled from a cache?
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     crate layout: Arc<PipelineLayout>,
@@ -127,11 +128,11 @@ impl GraphicsPipeline {
     }
 
     crate fn pass(&self) -> &Arc<RenderPass> {
-        &self.pass
+        &self.subpass.pass()
     }
 
-    crate fn subpass(&self) -> u32 {
-        self.subpass
+    crate fn subpass(&self) -> &Subpass {
+        &self.subpass
     }
 }
 
@@ -306,8 +307,7 @@ unsafe fn create_graphics_pipeline(
         device,
         inner: pipeline,
         layout,
-        pass: Arc::clone(&desc.subpass.pass()),
-        subpass: desc.subpass.index(),
+        subpass: desc.subpass.clone(),
     }))
 }
 

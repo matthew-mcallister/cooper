@@ -1,3 +1,4 @@
+mod commands;
 mod debug;
 mod descriptor;
 mod device;
@@ -5,6 +6,7 @@ mod instance;
 mod memory;
 mod swapchain;
 
+crate use commands::*;
 crate use debug::*;
 crate use descriptor::*;
 crate use device::*;
@@ -33,6 +35,7 @@ mod tests {
 }
 
 unit::collect_tests![
+    commands,
     descriptor,
     memory,
     swapchain,

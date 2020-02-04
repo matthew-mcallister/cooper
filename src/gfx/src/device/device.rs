@@ -27,32 +27,65 @@ impl Drop for Device {
     }
 }
 
-#[derive(Debug)]
-crate struct QueueFamily {
-    index: u32,
-    properties: vk::QueueFamilyProperties,
+/// Hierarchical queue capability classes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+crate enum QueueType {
+    /// Supports graphics, compute, transfer, and present operations.
+    Graphics,
+    /// Supports compute and transfer operations.
+    Compute,
+    /// Supports transfer operations only.
+    Transfer,
 }
 
-impl QueueFamily {
-    crate fn index(&self) -> u32 {
-        self.index
-    }
-
-    crate fn properties(&self) -> &vk::QueueFamilyProperties {
-        &self.properties
-    }
-
-    crate fn flags(&self) -> vk::QueueFlags {
-        self.properties.queue_flags
-    }
+#[derive(Debug)]
+crate struct QueueFamily<'dev> {
+    device: &'dev Arc<Device>,
+    index: u32,
 }
 
 #[derive(Debug)]
 crate struct Queue {
     device: Arc<Device>,
     inner: vk::Queue,
-    family: Arc<QueueFamily>,
+    family: u32,
     mutex: Mutex<()>,
+}
+
+impl<'dev> QueueFamily<'dev> {
+    crate fn device(&self) -> &'dev Arc<Device> {
+        self.device
+    }
+
+    crate fn index(&self) -> u32 {
+        self.index
+    }
+
+    crate fn properties(&self) -> &'dev vk::QueueFamilyProperties {
+        &self.device.queue_families[self.index as usize]
+    }
+
+    crate fn flags(&self) -> vk::QueueFlags {
+        self.properties().queue_flags
+    }
+
+    crate fn ty(&self) -> QueueType {
+        let flags = self.flags();
+        if flags.intersects(vk::QueueFlags::GRAPHICS_BIT) {
+            debug_assert!(flags.intersects(vk::QueueFlags::COMPUTE_BIT));
+            QueueType::Graphics
+        } else if flags.intersects(vk::QueueFlags::COMPUTE_BIT) {
+            QueueType::Compute
+        } else if flags.intersects(vk::QueueFlags::TRANSFER_BIT) {
+            QueueType::Transfer
+        } else {
+            unreachable!();
+        }
+    }
+
+    crate fn supports_graphics(&self) -> bool {
+        self.ty().supports(QueueType::Graphics)
+    }
 }
 
 impl Queue {
@@ -64,12 +97,16 @@ impl Queue {
         self.inner
     }
 
-    crate fn family(&self) -> &Arc<QueueFamily> {
-        &self.family
+    crate fn family(&self) -> QueueFamily<'_> {
+        self.device.queue_family(self.family)
     }
 
     crate fn flags(&self) -> vk::QueueFlags {
-        self.family.flags()
+        self.family().flags()
+    }
+
+    crate fn ty(&self) -> QueueType {
+        self.family().ty()
     }
 
     // TODO: Verify that submitted commands are executable by this type
@@ -93,6 +130,12 @@ impl Queue {
     {
         let _lock = self.mutex.lock();
         self.device.table.queue_present_khr(self.inner, present_info)
+    }
+}
+
+impl QueueType {
+    crate fn supports(self, other: Self) -> bool {
+        self <= other
     }
 }
 
@@ -160,20 +203,13 @@ impl Device {
     }
 
     unsafe fn get_queues(self: &Arc<Self>) -> Vec<Vec<Arc<Queue>>> {
-        let props = self.queue_families();
-
-        let family = Arc::new(QueueFamily {
-            index: 0,
-            properties: props[0],
-        });
-
         let mut inner = vk::null();
         self.table.get_device_queue(0, 0, &mut inner);
 
         let queue = Arc::new(Queue {
             device: Arc::clone(self),
             inner,
-            family,
+            family: 0,
             mutex: Mutex::new(()),
         });
 
@@ -184,8 +220,14 @@ impl Device {
         &self.props
     }
 
-    crate fn queue_families(&self) -> &[vk::QueueFamilyProperties] {
-        &self.queue_families
+    crate fn queue_family<'dev>(
+        self: &'dev Arc<Self>,
+        index: u32,
+    ) -> QueueFamily<'dev> {
+        QueueFamily {
+            device: self,
+            index,
+        }
     }
 
     crate fn limits(&self) -> &vk::PhysicalDeviceLimits {
