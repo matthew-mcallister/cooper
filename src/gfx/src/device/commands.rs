@@ -146,6 +146,11 @@ impl CmdPool {
         buffer
     }
 
+    crate unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
+        let dt = &*self.device.table;
+        dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
+    }
+
     crate unsafe fn reset(&mut self) {
         let dt = &*self.device.table;
         dt.reset_command_pool(self.inner, Default::default());
@@ -367,7 +372,7 @@ impl SubpassCmds {
         self.inner.reset_dynamic_state(&self.framebuffer);
     }
 
-    crate unsafe fn bind_gfx_descs(
+    crate fn bind_gfx_descs(
         &mut self,
         index: u32,
         set: &DescriptorSet,
@@ -381,19 +386,21 @@ impl SubpassCmds {
             &layout.set_layouts()[index as usize]
         ));
         let sets = [set.inner()];
-        self.dt().cmd_bind_descriptor_sets(
-            self.raw(),         // commandBuffer
-            bind_point,         // pipelineBindPoint
-            layout.inner(),     // layout
-            index,              // firstSet
-            sets.len() as _,    // descriptorSetCount
-            sets.as_ptr(),      // pDescriptorSets
-            0,                  // dynamicOffsetCount
-            ptr::null(),        // pDynamicOffsets
-        );
+        unsafe {
+            self.dt().cmd_bind_descriptor_sets(
+                self.raw(),         // commandBuffer
+                bind_point,         // pipelineBindPoint
+                layout.inner(),     // layout
+                index,              // firstSet
+                sets.len() as _,    // descriptorSetCount
+                sets.as_ptr(),      // pDescriptorSets
+                0,                  // dynamicOffsetCount
+                ptr::null(),        // pDynamicOffsets
+            );
+        }
     }
 
-    crate unsafe fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>)
+    crate fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>)
     {
         self.ensure_recording();
         try_opt! {
@@ -402,14 +409,17 @@ impl SubpassCmds {
             }
         };
         assert_eq!(&self.subpass, pipeline.subpass());
-        self.dt().cmd_bind_pipeline(
-            self.raw(),
-            vk::PipelineBindPoint::GRAPHICS,
-            pipeline.inner(),
-        );
+        unsafe {
+            self.dt().cmd_bind_pipeline(
+                self.raw(),
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline.inner(),
+            );
+        }
         self.graphics_pipe = Some(Arc::clone(pipeline));
     }
 
+    // Unsafe because the vertex count could be out of bounds
     crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
         self.ensure_recording();
         self.dt().cmd_draw(self.raw(), vertex_count, instance_count, 0, 0);
@@ -417,7 +427,7 @@ impl SubpassCmds {
 
     /// Stops recording commands within the current subpass. Does *not*
     /// advance to the next subpass.
-    crate unsafe fn exit_subpass(self) -> RenderPassCmds {
+    crate fn exit_subpass(self) -> RenderPassCmds {
         self.ensure_recording();
         assert!(self.is_inline());
         RenderPassCmds {
@@ -429,10 +439,10 @@ impl SubpassCmds {
     }
 
     /// Ends recording of a secondary render pass continuation.
-    crate unsafe fn end_secondary(mut self) -> CmdBuffer {
+    crate fn end_secondary(mut self) -> CmdBuffer {
         self.ensure_recording();
         assert!(!self.is_inline());
-        self.inner.end();
+        unsafe { self.inner.end(); }
         self.inner
     }
 
@@ -454,7 +464,7 @@ impl SubpassCmds {
 }
 
 impl RenderPassCmds {
-    crate unsafe fn new(
+    crate fn new(
         cmds: CmdBuffer,
         framebuffer: Arc<Framebuffer>,
         contents: SubpassContents,
@@ -467,7 +477,7 @@ impl RenderPassCmds {
             cur_subpass: -1,
             cur_contents: Default::default(),
         };
-        cmds.begin(contents);
+        unsafe { cmds.begin(contents); }
         cmds
     }
 
@@ -579,14 +589,14 @@ mod tests {
     use super::*;
 
     unsafe fn test_common(vars: &testing::TestVars) -> (
-        Arc<SystemState>, Globals, TrivialRenderer, TrivialPass,
+        SystemState, Arc<Globals>, TrivialRenderer, TrivialPass,
         Arc<Framebuffer>, Box<CmdPool>,
     ) {
         let device = Arc::clone(vars.device());
 
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Globals::new(Arc::clone(&state));
-        let trivial = TrivialRenderer::new(&state, &globals);
+        let state = SystemState::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state));
+        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
         let pass = TrivialPass::new(Arc::clone(&device));
         let views = vars.swapchain.create_views();

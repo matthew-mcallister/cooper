@@ -20,11 +20,11 @@ crate struct GlobalShaders {
 }
 
 impl Globals {
-    crate fn new(state: Arc<SystemState>) -> Self {
+    crate fn new(state: &SystemState) -> Self {
         unsafe { Self::unsafe_new(state) }
     }
 
-    unsafe fn unsafe_new(state: Arc<SystemState>) -> Self {
+    unsafe fn unsafe_new(state: &SystemState) -> Self {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
@@ -50,7 +50,7 @@ impl Globals {
         std::mem::drop(buffers);
 
         let empty_image_2d = Arc::new(Image::new(
-            Arc::clone(&state),
+            &state,
             Default::default(),
             ImageType::TwoDim,
             Format::RGBA8,
@@ -60,7 +60,7 @@ impl Globals {
             1,
         )).create_full_view();
         let empty_storage_image_2d = Arc::new(Image::new(
-            Arc::clone(&state),
+            &state,
             ImageFlags::STORAGE,
             ImageType::TwoDim,
             Format::RGBA8,
@@ -216,14 +216,14 @@ mod tests {
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let state = Arc::new(SystemState::new(Arc::clone(vars.device())));
-        let _ = Globals::new(state);
+        let state = SystemState::new(Arc::clone(vars.device()));
+        let _ = Globals::new(&state);
     }
 
     unsafe fn empty_descriptors_test(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Globals::new(Arc::clone(&state));
+        let state = SystemState::new(Arc::clone(&device));
+        let globals = Globals::new(&state);
 
         let bindings = set_layout_bindings![
             (0, UNIFORM_BUFFER),

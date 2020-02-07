@@ -195,6 +195,7 @@ impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
     }
 }
 
+// TODO: Frame-local allocations
 #[derive(Debug)]
 crate struct BufferHeap {
     device: Arc<Device>,

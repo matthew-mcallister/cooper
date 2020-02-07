@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use bitflags::*;
 use derivative::*;
+use parking_lot::Mutex;
 
 use crate::*;
 
@@ -63,7 +64,7 @@ crate struct Image {
     inner: vk::Image,
     // TODO: Memory allocations really need to follow RAII
     alloc: ManuallyDrop<DeviceRange>,
-    state: Arc<SystemState>,
+    heap: Arc<Mutex<DeviceHeap>>,
 }
 
 #[derive(Debug)]
@@ -78,10 +79,10 @@ crate struct ImageView {
 
 impl Drop for Image {
     fn drop(&mut self) {
-        let dt = &*self.state.device.table;
+        let dt = &*self.device.table;
         unsafe {
             dt.destroy_image(self.inner, ptr::null());
-            let mut heap = self.state.heap.lock();
+            let mut heap = self.heap.lock();
             heap.free(ManuallyDrop::take(&mut self.alloc));
         }
     }
@@ -89,7 +90,7 @@ impl Drop for Image {
 
 impl Image {
     crate unsafe fn new(
-        state: Arc<SystemState>,
+        state: &SystemState,
         flags: ImageFlags,
         ty: ImageType,
         format: Format,
@@ -101,7 +102,7 @@ impl Image {
         let device: Arc<Device> = Arc::clone(state.device());
         let dt = &*device.table;
 
-        validate_image_creation(&state.device, flags, ty, format, samples,
+        validate_image_creation(&device, flags, ty, format, samples,
             extent, mip_levels, layers);
 
         let create_info = vk::ImageCreateInfo {
@@ -120,8 +121,9 @@ impl Image {
         dt.create_image(&create_info, ptr::null(), &mut image)
             .check().unwrap();
 
+        let heap = Arc::clone(&state.heap);
         let alloc = {
-            let mut heap = state.heap.lock();
+            let mut heap = heap.lock();
             heap.alloc_image_memory(image, MemoryMapping::Unmapped)
         };
 
@@ -136,7 +138,7 @@ impl Image {
             layers,
             inner: image,
             alloc: ManuallyDrop::new(alloc),
-            state,
+            heap,
         }
     }
 
@@ -462,12 +464,12 @@ mod tests {
         use ImageFlags as Flags;
 
         let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let state = SystemState::new(Arc::clone(&device));
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);
         let hdr = Arc::new(Image::new(
-            Arc::clone(&state),
+            &state,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::TwoDim,
             Format::RGB16F,
@@ -478,7 +480,7 @@ mod tests {
         ));
         let _hdr_view = hdr.create_full_view();
         let depth = Arc::new(Image::new(
-            Arc::clone(&state),
+            &state,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
             ImageType::TwoDim,
             Format::D32F_S8,
@@ -491,7 +493,7 @@ mod tests {
 
         // HDR cube texture
         let env = Arc::new(Image::new(
-            Arc::clone(&state),
+            &state,
             Default::default(),
             ImageType::Cube,
             Format::RGB16F,

@@ -393,10 +393,10 @@ mod tests {
 
     unsafe fn create_test(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Globals::new(Arc::clone(&state));
+        let state = SystemState::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state));
         let pass = TrivialPass::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&state, &globals);
+        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
         let desc = trivial_pipe_desc(&globals, &pass, &trivial);
         let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
@@ -404,12 +404,12 @@ mod tests {
 
     unsafe fn cache_test(vars: crate::testing::TestVars) {
         let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Globals::new(Arc::clone(&state));
+        let mut state = SystemState::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state));
         let pass = TrivialPass::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&state, &globals);
+        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
-        let mut cache = GraphicsPipelineCache::new(Arc::clone(&device));
+        let cache = &mut state.gfx_pipes;
 
         let mut desc = trivial_pipe_desc(&globals, &pass, &trivial);
         let _pipe0 = Arc::clone(&cache.get_or_create(&desc));

@@ -679,8 +679,8 @@ mod tests {
 
     unsafe fn write_test(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Globals::new(Arc::clone(&state));
+        let state = SystemState::new(Arc::clone(&device));
+        let globals = Globals::new(&state);
 
         // crate::globals tests possibilities more thoroughly
         let bindings = set_layout_bindings![

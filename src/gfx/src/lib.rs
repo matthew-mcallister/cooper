@@ -35,11 +35,9 @@ mod vertex;
 crate use device::*;
 crate use format::*;
 crate use framebuffer::*;
-#[allow(unused_imports)]
 crate use global::*;
 crate use image::*;
 crate use pipeline::*;
-#[allow(unused_imports)]
 crate use render::*;
 crate use render_loop::*;
 crate use render_pass::*;

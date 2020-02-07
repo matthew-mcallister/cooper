@@ -5,6 +5,7 @@ mod device;
 mod instance;
 mod memory;
 mod swapchain;
+mod sync;
 
 crate use commands::*;
 crate use debug::*;
@@ -13,19 +14,23 @@ crate use device::*;
 pub use instance::*;
 crate use memory::*;
 crate use swapchain::*;
+crate use sync::*;
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     fn smoke_test(_vars: crate::testing::TestVars) {
         // Do nothing
     }
 
     fn validation_error_test(vars: crate::testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device);
         // Leak a semaphore
-        unsafe { device.create_semaphore(); }
+        let dt = &*vars.device().table;
+        let create_info = vk::SemaphoreCreateInfo::default();
+        let mut sem = vk::null();
+        unsafe {
+            dt.create_semaphore(&create_info, std::ptr::null(), &mut sem)
+                .check().unwrap();
+        }
     }
 
     unit::declare_tests![

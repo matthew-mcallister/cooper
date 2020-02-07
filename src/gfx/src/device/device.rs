@@ -52,6 +52,14 @@ crate struct Queue {
     mutex: Mutex<()>,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+crate struct SubmitInfo<'a> {
+    crate wait_sems: &'a [&'a Semaphore],
+    crate wait_stages: &'a [vk::PipelineStageFlags],
+    crate sig_sems: &'a [&'a Semaphore],
+    crate cmds: &'a [vk::CommandBuffer],
+}
+
 impl<'dev> QueueFamily<'dev> {
     crate fn device(&self) -> &'dev Arc<Device> {
         self.device
@@ -113,23 +121,59 @@ impl Queue {
     // of queue.
     crate unsafe fn submit(
         &self,
-        submissions: &[vk::SubmitInfo],
-        fence: vk::Fence,
+        submissions: &[SubmitInfo],
+        fence: &mut Fence,
     ) {
         let _lock = self.mutex.lock();
+
+        let mut sems = Vec::with_capacity(submissions.len());
+        let submissions: Vec<_> = submissions.iter().map(|info| {
+            let wait_sems: Vec<_> = info.wait_sems.iter()
+                .map(|sem| sem.inner()).collect();
+            let sig_sems: Vec<_> = info.sig_sems.iter()
+                .map(|sem| sem.inner()).collect();
+            let info = vk::SubmitInfo {
+                wait_semaphore_count: wait_sems.len() as _,
+                p_wait_semaphores: wait_sems.as_ptr(),
+                p_wait_dst_stage_mask: info.wait_stages.as_ptr(),
+                command_buffer_count: info.cmds.len() as _,
+                p_command_buffers: info.cmds.as_ptr(),
+                signal_semaphore_count: sig_sems.len() as _,
+                p_signal_semaphores: sig_sems.as_ptr(),
+                ..Default::default()
+            };
+            sems.push((wait_sems, sig_sems));
+            info
+        }).collect();
+
         self.device.table.queue_submit(
             self.inner,
             submissions.len() as _,
             submissions.as_ptr(),
-            fence,
+            fence.inner(),
         ).check().unwrap();
     }
 
-    crate unsafe fn present(&self, present_info: &vk::PresentInfoKHR) ->
-        vk::Result
-    {
+    crate unsafe fn present(
+        &self,
+        wait_sems: &[&Semaphore],
+        swapchain: &mut Swapchain,
+        image: u32,
+    ) -> vk::Result {
         let _lock = self.mutex.lock();
-        self.device.table.queue_present_khr(self.inner, present_info)
+        let wait_sems: Vec<_> = wait_sems.iter().map(|sem| sem.inner())
+            .collect();
+        let swapchains = [swapchain.inner];
+        let images = [image];
+        let present_info = vk::PresentInfoKHR {
+            wait_semaphore_count: wait_sems.len() as _,
+            p_wait_semaphores: wait_sems.as_ptr(),
+            swapchain_count: swapchains.len() as _,
+            p_swapchains: swapchains.as_ptr(),
+            p_image_indices: images.as_ptr(),
+            ..Default::default()
+        };
+        self.device.table.queue_present_khr(self.inner, &present_info)
     }
 }
 
@@ -247,25 +291,6 @@ impl Device {
             let name = CString::new(name.as_ref()).unwrap();
             set_debug_name(&self.table, obj, name.as_ptr());
         }
-    }
-
-    crate unsafe fn create_fence(&self, signaled: bool) -> vk::Fence {
-        let mut create_info = vk::FenceCreateInfo::default();
-        if signaled {
-            create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
-        }
-        let mut obj = vk::null();
-        self.table.create_fence(&create_info, ptr::null(), &mut obj)
-            .check().unwrap();
-        obj
-    }
-
-    crate unsafe fn create_semaphore(&self) -> vk::Semaphore {
-        let create_info = Default::default();
-        let mut obj = vk::null();
-        self.table.create_semaphore(&create_info, ptr::null(), &mut obj)
-            .check().unwrap();
-        obj
     }
 
     crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>)
