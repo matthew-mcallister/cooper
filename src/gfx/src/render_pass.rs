@@ -386,6 +386,19 @@ impl TrivialPass {
     crate fn new(device: Arc<Device>) -> Self {
         unsafe { create_trivial_pass(device) }
     }
+
+    crate fn create_framebuffers(&self, swapchain: &Arc<Swapchain>) ->
+        Vec<Arc<Framebuffer>>
+    {
+        unsafe {
+            swapchain.create_views().into_iter()
+                .map(|view| Arc::new(Framebuffer::new(
+                    Arc::clone(&self.pass),
+                    vec![view.into()],
+                )))
+                .collect()
+        }
+    }
 }
 
 unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {

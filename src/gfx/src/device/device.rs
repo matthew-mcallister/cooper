@@ -2,12 +2,15 @@ use std::ffi::CString;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
+use derivative::Derivative;
 use prelude::*;
 
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct Device {
+    #[derivative(Debug = "ignore")]
     crate table: Arc<vkl::DeviceTable>,
     crate instance: Arc<Instance>,
     crate app_info: Arc<AppInfo>,
@@ -122,7 +125,7 @@ impl Queue {
     crate unsafe fn submit(
         &self,
         submissions: &[SubmitInfo],
-        fence: &mut Fence,
+        fence: Option<&mut Fence>,
     ) {
         let _lock = self.mutex.lock();
 
@@ -146,12 +149,14 @@ impl Queue {
             info
         }).collect();
 
-        self.device.table.queue_submit(
+        let res = self.device.table.queue_submit(
             self.inner,
             submissions.len() as _,
             submissions.as_ptr(),
-            fence.inner(),
-        ).check().unwrap();
+            try_opt!(fence?.inner()).unwrap_or(vk::null()),
+        );
+        self.device.instance.check_validation_messages();
+        res.check().unwrap();
     }
 
     crate unsafe fn present(
@@ -297,5 +302,9 @@ impl Device {
         -> Result<Arc<Swapchain>, AnyError>
     {
         Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))
+    }
+
+    crate fn wait_idle(&self) {
+        unsafe { self.table.device_wait_idle(); }
     }
 }

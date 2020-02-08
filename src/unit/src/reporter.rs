@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Write;
 use std::time;
 
 use enum_map::EnumMap;
@@ -106,6 +107,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             .max()
             .unwrap_or(0);
         writeln!(self.out, "running {} tests", tests.len());
+        io::stdout().flush().unwrap();
 
         self.summary.begin();
     }
@@ -117,6 +119,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             test.name(),
             width = self.name_width,
         );
+        io::stdout().flush().unwrap();
     }
 
     fn after_each(&mut self, test: &Test<D>, result: &TestResult) {
@@ -134,6 +137,7 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
         } else {
             writeln!(self.out, "{}", s);
         }
+        io::stdout().flush().unwrap();
 
         self.summary.add_test(test, result);
     }
@@ -196,5 +200,6 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
         }
         writeln!(self.out);
         writeln!(self.out);
+        io::stdout().flush().unwrap();
     }
 }

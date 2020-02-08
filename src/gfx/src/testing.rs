@@ -84,14 +84,6 @@ impl VulkanTestContext {
     }
 }
 
-fn check_validation_messages(instance: &Instance) {
-    let messages = instance.get_debug_messages();
-    if messages.is_empty() { return; }
-    let messages: Vec<_> = messages.iter().map(ToString::to_string).collect();
-    let output = messages.join("");
-    panic!(output);
-}
-
 impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
     fn invoke(&self, test: &unit::Test<VulkanTestData>) {
         // Recreate the full state so that every test has a clean slate.
@@ -103,7 +95,7 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
 
             (test.data())(vars);
 
-            check_validation_messages(&instance);
+            instance.check_validation_messages();
         }
     }
 }

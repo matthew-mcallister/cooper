@@ -148,6 +148,9 @@ crate struct DeviceMemory {
     chunk: u32,
 }
 
+unsafe impl Send for DeviceMemory {}
+unsafe impl Sync for DeviceMemory {}
+
 /// A suballocation of a VkMemory object.
 // TODO: This type probably should free the allocation in its destructor
 #[derive(Clone, Debug)]

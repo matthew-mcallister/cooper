@@ -2,10 +2,11 @@ use std::ffi::{CStr, c_void};
 use std::fmt;
 use std::os::raw::c_char;
 use std::ptr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use derive_more::*;
 use itertools::Itertools;
+use parking_lot::Mutex;
 
 use crate::*;
 
@@ -95,7 +96,7 @@ crate unsafe fn set_debug_name<T: DebugUtils>(
     device.set_debug_utils_object_name_ext(&info);
 }
 
-crate trait DebugMessageHandler: fmt::Debug + Sync {
+crate trait DebugMessageHandler: fmt::Debug + Send + Sync {
     fn handle(
         &self,
         severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
@@ -336,7 +337,8 @@ impl fmt::Display for DebugMessagePayload {
     }
 }
 
-// TODO: Probably should be a circular queue
+// TODO: Don't even capture messages. Just log the error (to stderr or
+// whatever) and set a flag for the test framework to read back.
 #[derive(Debug, Default)]
 crate struct DebugMessageQueue {
     entries: Mutex<Vec<DebugMessagePayload>>,
@@ -345,7 +347,7 @@ crate struct DebugMessageQueue {
 impl DebugMessageQueue {
     /// Empties the queue and returns the elements contained.
     crate fn take(&self) -> Vec<DebugMessagePayload> {
-        std::mem::take(&mut *self.entries.lock().unwrap())
+        std::mem::take(&mut *self.entries.lock())
     }
 }
 
@@ -359,6 +361,6 @@ impl DebugMessageHandler for DebugMessageQueue {
         let payload = unsafe {
             DebugMessagePayload::from_vk(severity, types, data)
         };
-        self.entries.lock().unwrap().push(payload);
+        self.entries.lock().push(payload);
     }
 }

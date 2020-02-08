@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::ptr;
 use std::sync::Arc;
 
+use derivative::Derivative;
 use prelude::*;
 
 use crate::*;
@@ -15,10 +16,13 @@ pub struct AppInfo {
     pub test: bool,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct Instance {
     crate vk: window::VulkanPlatform,
+    #[derivative(Debug = "ignore")]
     crate entry: Arc<vkl::Entry>,
+    #[derivative(Debug = "ignore")]
     crate table: Arc<vkl::InstanceTable>,
     crate app_info: Arc<AppInfo>,
     debug_messengers: Vec<DebugMessenger>,
@@ -153,5 +157,15 @@ impl Instance {
 
     crate fn get_debug_messages(&self) -> Vec<DebugMessagePayload> {
         self.debug_msg_queue.take()
+    }
+
+    crate fn check_validation_messages(&self) {
+        if !cfg!(debug_assertions) { return; }
+        let messages = self.get_debug_messages();
+        if messages.is_empty() { return; }
+        let messages: Vec<_> = messages.iter().map(ToString::to_string)
+            .collect();
+        let output = messages.join("");
+        panic!(output);
     }
 }

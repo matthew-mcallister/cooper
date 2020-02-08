@@ -28,6 +28,7 @@ mod render;
 mod render_loop;
 mod render_pass;
 mod sampler;
+mod scheduler;
 mod shader;
 mod staged_cache;
 mod vertex;
@@ -42,6 +43,7 @@ crate use render::*;
 crate use render_loop::*;
 crate use render_pass::*;
 crate use sampler::*;
+crate use scheduler::*;
 crate use shader::*;
 crate use staged_cache::*;
 crate use vertex::*;
@@ -59,6 +61,7 @@ unit::collect_tests![
     pipeline,
     render_pass,
     sampler,
+    scheduler,
     staged_cache,
     vertex,
 ];
