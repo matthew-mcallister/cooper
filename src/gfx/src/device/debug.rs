@@ -3,10 +3,10 @@ use std::fmt;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use derive_more::*;
 use itertools::Itertools;
-use parking_lot::Mutex;
 
 use crate::*;
 
@@ -337,21 +337,18 @@ impl fmt::Display for DebugMessagePayload {
     }
 }
 
-// TODO: Don't even capture messages. Just log the error (to stderr or
-// whatever) and set a flag for the test framework to read back.
 #[derive(Debug, Default)]
-crate struct DebugMessageQueue {
-    entries: Mutex<Vec<DebugMessagePayload>>,
+crate struct DefaultDebugMessageHandler {
+    count: AtomicU32,
 }
 
-impl DebugMessageQueue {
-    /// Empties the queue and returns the elements contained.
-    crate fn take(&self) -> Vec<DebugMessagePayload> {
-        std::mem::take(&mut *self.entries.lock())
+impl DefaultDebugMessageHandler {
+    crate fn message_count(&self) -> u32 {
+        self.count.load(Ordering::Relaxed)
     }
 }
 
-impl DebugMessageHandler for DebugMessageQueue {
+impl DebugMessageHandler for DefaultDebugMessageHandler {
     fn handle(
         &self,
         severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
@@ -361,6 +358,7 @@ impl DebugMessageHandler for DebugMessageQueue {
         let payload = unsafe {
             DebugMessagePayload::from_vk(severity, types, data)
         };
-        self.entries.lock().push(payload);
+        eprintln!("{}", payload);
+        self.count.fetch_add(1, Ordering::Relaxed);
     }
 }

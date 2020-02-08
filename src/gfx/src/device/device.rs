@@ -149,14 +149,12 @@ impl Queue {
             info
         }).collect();
 
-        let res = self.device.table.queue_submit(
+        self.device.table.queue_submit(
             self.inner,
             submissions.len() as _,
             submissions.as_ptr(),
             try_opt!(fence?.inner()).unwrap_or(vk::null()),
-        );
-        self.device.instance.check_validation_messages();
-        res.check().unwrap();
+        ).check().unwrap();
     }
 
     crate unsafe fn present(

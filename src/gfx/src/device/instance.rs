@@ -26,7 +26,7 @@ crate struct Instance {
     crate table: Arc<vkl::InstanceTable>,
     crate app_info: Arc<AppInfo>,
     debug_messengers: Vec<DebugMessenger>,
-    debug_msg_queue: Arc<DebugMessageQueue>,
+    debug_handler: Arc<DefaultDebugMessageHandler>,
 }
 
 impl Drop for Instance {
@@ -92,7 +92,7 @@ impl Instance {
             table,
             app_info,
             debug_messengers: Vec::new(),
-            debug_msg_queue: Default::default(),
+            debug_handler: Default::default(),
         };
 
         if instance.app_info.test {
@@ -102,8 +102,8 @@ impl Instance {
             let ty
                 = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION_BIT_EXT
                 | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE_BIT_EXT;
-            let msg_queue = Arc::clone(&instance.debug_msg_queue);
-            instance.register_debug_messenger(severity, ty, msg_queue);
+            let handler = Arc::clone(&instance.debug_handler);
+            instance.register_debug_messenger(severity, ty, handler);
         }
 
         Ok(instance)
@@ -155,17 +155,7 @@ impl Instance {
         self.debug_messengers.push(messenger);
     }
 
-    crate fn get_debug_messages(&self) -> Vec<DebugMessagePayload> {
-        self.debug_msg_queue.take()
-    }
-
-    crate fn check_validation_messages(&self) {
-        if !cfg!(debug_assertions) { return; }
-        let messages = self.get_debug_messages();
-        if messages.is_empty() { return; }
-        let messages: Vec<_> = messages.iter().map(ToString::to_string)
-            .collect();
-        let output = messages.join("");
-        panic!(output);
+    crate fn debug_message_count(&self) -> u32 {
+        self.debug_handler.message_count()
     }
 }

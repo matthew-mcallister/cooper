@@ -95,7 +95,7 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
 
             (test.data())(vars);
 
-            instance.check_validation_messages();
+            assert_eq!(instance.debug_message_count(), 0);
         }
     }
 }
