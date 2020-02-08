@@ -20,14 +20,9 @@ crate use util::*;
 
 mod device;
 mod format;
-mod framebuffer;
 mod global;
-mod image;
-mod pipeline;
 mod render;
 mod render_loop;
-mod render_pass;
-mod sampler;
 mod scheduler;
 mod shader;
 mod staged_cache;
@@ -35,14 +30,9 @@ mod vertex;
 
 crate use device::*;
 crate use format::*;
-crate use framebuffer::*;
 crate use global::*;
-crate use image::*;
-crate use pipeline::*;
 crate use render::*;
 crate use render_loop::*;
-crate use render_pass::*;
-crate use sampler::*;
 crate use scheduler::*;
 crate use shader::*;
 crate use staged_cache::*;
@@ -55,12 +45,7 @@ pub use config::*;
 unit::collect_tests![
     device,
     format,
-    framebuffer,
     global,
-    image,
-    pipeline,
-    render_pass,
-    sampler,
     scheduler,
     staged_cache,
     vertex,

@@ -2,8 +2,13 @@ mod commands;
 mod debug;
 mod descriptor;
 mod device;
+mod framebuffer;
+mod image;
 mod instance;
 mod memory;
+mod pipeline;
+mod render_pass;
+mod sampler;
 mod swapchain;
 mod sync;
 
@@ -11,8 +16,13 @@ crate use commands::*;
 crate use debug::*;
 crate use descriptor::*;
 crate use device::*;
+crate use framebuffer::*;
+crate use image::*;
 pub use instance::*;
 crate use memory::*;
+crate use pipeline::*;
+crate use render_pass::*;
+crate use sampler::*;
 crate use swapchain::*;
 crate use sync::*;
 
@@ -42,7 +52,12 @@ mod tests {
 unit::collect_tests![
     commands,
     descriptor,
+    framebuffer,
+    image,
     memory,
+    pipeline,
+    render_pass,
+    sampler,
     swapchain,
     tests,
 ];
