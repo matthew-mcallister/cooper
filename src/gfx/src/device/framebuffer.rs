@@ -73,6 +73,10 @@ impl Framebuffer {
             max_depth: 0.0,
         }
     }
+
+    crate fn is_swapchain_valid(&self) -> bool {
+        self.attachments.iter().all(|attch| attch.is_valid())
+    }
 }
 
 impl Attachment {
@@ -86,14 +90,14 @@ impl Attachment {
     crate fn extent(&self) -> Extent2D {
         match &self {
             Self::Image(view) => view.extent().into(),
-            Self::Swapchain(view) => view.swapchain().extent,
+            Self::Swapchain(view) => view.extent(),
         }
     }
 
     crate fn format(&self) -> Format {
         match &self {
             Self::Image(view) => view.format(),
-            Self::Swapchain(view) => view.swapchain().format(),
+            Self::Swapchain(view) => view.format(),
         }
     }
 
@@ -102,6 +106,12 @@ impl Attachment {
             Self::Image(img) => img.samples(),
             Self::Swapchain(_) => SampleCount::One,
         }
+    }
+
+    crate fn is_valid(&self) -> bool {
+        if let Self::Swapchain(sw) = self {
+            sw.is_valid()
+        } else { true }
     }
 }
 
@@ -128,11 +138,13 @@ unsafe fn create_framebuffer(
     dt.create_framebuffer(&create_info, ptr::null(), &mut inner)
         .check().unwrap();
 
-    Framebuffer {
+    let framebuffer = Framebuffer {
         pass: render_pass,
         attachments,
         inner,
-    }
+    };
+    assert!(framebuffer.is_swapchain_valid());
+    framebuffer
 }
 
 fn validate_framebuffer_creation(
@@ -192,7 +204,7 @@ crate fn create_render_target(
 }
 
 #[cfg(test)]
-crate unsafe fn create_test_framebuffer(swapchain: &Arc<Swapchain>) {
+crate unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
     use AttachmentName::*;
 
     let device = Arc::clone(&swapchain.device);

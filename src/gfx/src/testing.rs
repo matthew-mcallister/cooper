@@ -28,7 +28,7 @@ crate struct VulkanTestContext {
 #[derive(Debug)]
 crate struct TestVars {
     crate config: Config,
-    crate swapchain: Arc<Swapchain>,
+    crate swapchain: Swapchain,
     crate gfx_queue: Arc<Queue>,
 }
 

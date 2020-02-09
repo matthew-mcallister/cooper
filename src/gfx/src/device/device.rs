@@ -297,9 +297,9 @@ impl Device {
     }
 
     crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>)
-        -> Result<Arc<Swapchain>, AnyError>
+        -> Result<Swapchain, AnyError>
     {
-        Ok(Arc::new(Swapchain::new(Arc::clone(surface), Arc::clone(self))?))
+        Ok(Swapchain::new(Arc::clone(surface), Arc::clone(self))?)
     }
 
     crate fn wait_idle(&self) {

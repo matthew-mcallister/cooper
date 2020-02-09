@@ -387,7 +387,7 @@ impl TrivialPass {
         unsafe { create_trivial_pass(device) }
     }
 
-    crate fn create_framebuffers(&self, swapchain: &Arc<Swapchain>) ->
+    crate fn create_framebuffers(&self, swapchain: &Swapchain) ->
         Vec<Arc<Framebuffer>>
     {
         unsafe {

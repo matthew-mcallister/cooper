@@ -1,4 +1,9 @@
 mod trivial;
+mod world;
 
-#[allow(unused_imports)]
 crate use trivial::*;
+crate use world::*;
+
+unit::collect_tests![
+    world,
+];

@@ -363,6 +363,7 @@ impl SubpassCmds {
     unsafe fn begin_secondary(&mut self) {
         assert_eq!(self.inner.level(), CmdBufferLevel::SubpassContinue);
         assert_eq!(self.inner.state(), CmdBufferState::Initial);
+        assert!(self.framebuffer.is_swapchain_valid());
         let inheritance_info = vk::CommandBufferInheritanceInfo {
             render_pass: self.subpass.pass().inner(),
             subpass: self.subpass.index(),
@@ -527,6 +528,8 @@ impl RenderPassCmds {
             self.inner.begin(None);
         }
         self.inner.reset_dynamic_state(&self.framebuffer);
+
+        assert!(self.framebuffer.is_swapchain_valid());
 
         let begin_info = vk::RenderPassBeginInfo {
             render_pass: self.framebuffer.pass().inner(),

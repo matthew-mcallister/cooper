@@ -1,5 +1,6 @@
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use prelude::*;
 
@@ -19,14 +20,23 @@ crate struct Swapchain {
     crate inner: vk::SwapchainKHR,
     crate extent: Extent2D,
     crate images: Vec<vk::Image>,
+    token: Token,
 }
 
 /// Specialized image view for the swapchain.
 #[derive(Debug)]
 crate struct SwapchainView {
-    swapchain: Arc<Swapchain>,
+    token: Token,
+    device: Arc<Device>,
+    extent: Extent2D,
     index: u32,
     inner: vk::ImageView,
+}
+
+/// Token that can be used to invalidate swapchain images.
+#[derive(Clone, Debug)]
+struct Token {
+    inner: Arc<AtomicBool>,
 }
 
 impl Drop for Surface {
@@ -66,6 +76,7 @@ impl Swapchain {
             inner: vk::null(),
             extent: Default::default(),
             images: Vec::new(),
+            token: Default::default(),
         };
         result.recreate()?;
 
@@ -174,20 +185,48 @@ impl Swapchain {
         Ok(())
     }
 
-    crate fn create_views(self: &Arc<Self>) -> Vec<Arc<SwapchainView>> {
-        (0..self.images.len()).map(|index| {
-            Arc::new(SwapchainView::new(Arc::clone(self), index as _))
-        }).collect()
+    crate fn create_views(&self) -> Vec<Arc<SwapchainView>> {
+        (0..self.images.len())
+            .map(|index| Arc::new(SwapchainView::new(&self, index as _)))
+            .collect()
     }
 
     crate fn format(&self) -> Format {
         Format::BGRA8_SRGB
     }
+
+    /// Note: A suboptimal swapchain will just return an error with no
+    /// swapchain index.
+    // TODO: Use case for synchronizing with a fence?
+    crate fn acquire_next_image(&mut self, sem: &mut Semaphore) ->
+        Result<u32, vk::Result>
+    {
+        self.acquire_next_image_with_timeout(sem, u64::max_value())
+    }
+
+    crate fn acquire_next_image_with_timeout(
+        &mut self,
+        sem: &mut Semaphore,
+        timeout: u64,
+    ) -> Result<u32, vk::Result> {
+        let dt = &*self.device.table;
+        let mut idx = 0;
+        unsafe {
+            dt.acquire_next_image_khr(
+                self.inner,
+                timeout,
+                sem.inner(),
+                vk::null(),
+                &mut idx,
+            ).check()?;
+        };
+        Ok(idx)
+    }
 }
 
 impl Drop for SwapchainView {
     fn drop(&mut self) {
-        let dt = &*self.swapchain.device.table;
+        let dt = &*self.device.table;
         unsafe {
             dt.destroy_image_view(self.inner, ptr::null());
         }
@@ -195,7 +234,7 @@ impl Drop for SwapchainView {
 }
 
 impl SwapchainView {
-    fn new(swapchain: Arc<Swapchain>, index: u32) -> Self {
+    fn new(swapchain: &Swapchain, index: u32) -> Self {
         let dt = &*swapchain.device.table;
         let create_info = vk::ImageViewCreateInfo {
             image: swapchain.images[index as usize],
@@ -218,18 +257,45 @@ impl SwapchainView {
         }
 
         SwapchainView {
-            swapchain,
+            token: swapchain.token.clone(),
+            device: Arc::clone(&swapchain.device),
+            extent: swapchain.extent,
             index,
             inner: view,
         }
     }
 
-    crate fn swapchain(&self) -> &Arc<Swapchain> {
-        &self.swapchain
-    }
-
     crate fn inner(&self) -> vk::ImageView {
         self.inner
+    }
+
+    crate fn extent(&self) -> Extent2D {
+        self.extent
+    }
+
+    crate fn format(&self) -> Format {
+        Format::BGRA8_SRGB
+    }
+
+    crate fn is_valid(&self) -> bool {
+        self.token.is_valid()
+    }
+}
+
+impl Token {
+    fn invalidate(&mut self) {
+        self.inner.store(false, Ordering::Relaxed);
+        *self = Default::default();
+    }
+
+    fn is_valid(&self) -> bool {
+        self.inner.load(Ordering::Relaxed)
+    }
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        Self { inner: Arc::new(AtomicBool::new(true)) }
     }
 }
 

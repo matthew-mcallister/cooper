@@ -46,7 +46,11 @@ impl Fence {
         self.inner
     }
 
-    crate fn wait(&self, timeout: u64) {
+    crate fn wait(&self) {
+        self.wait_with_timeout(u64::max_value());
+    }
+
+    crate fn wait_with_timeout(&self, timeout: u64) {
         let dt = &*self.device.table;
         unsafe {
             let fences = [self.inner];
@@ -59,8 +63,12 @@ impl Fence {
         }
     }
 
-    crate fn wait_forever(&self) {
-        self.wait(u64::max_value());
+    crate fn reset(&mut self) {
+        let dt = &*self.device.table;
+        unsafe {
+            let fences = [self.inner];
+            dt.reset_fences(fences.len() as _, fences.as_ptr());
+        }
     }
 }
 

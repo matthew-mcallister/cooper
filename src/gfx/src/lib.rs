@@ -46,6 +46,7 @@ unit::collect_tests![
     device,
     format,
     global,
+    render,
     scheduler,
     staged_cache,
     vertex,
