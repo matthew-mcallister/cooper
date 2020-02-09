@@ -18,7 +18,7 @@ crate use descriptor::*;
 crate use device::*;
 crate use framebuffer::*;
 crate use image::*;
-pub use instance::*;
+crate use instance::*;
 crate use memory::*;
 crate use pipeline::*;
 crate use render_pass::*;

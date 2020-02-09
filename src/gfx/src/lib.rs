@@ -22,7 +22,6 @@ mod device;
 mod format;
 mod global;
 mod render;
-mod render_loop;
 mod scheduler;
 mod shader;
 mod staged_cache;
@@ -32,15 +31,14 @@ crate use device::*;
 crate use format::*;
 crate use global::*;
 crate use render::*;
-crate use render_loop::*;
 crate use scheduler::*;
 crate use shader::*;
 crate use staged_cache::*;
 crate use vertex::*;
 
-mod config;
+mod render_loop;
 
-pub use config::*;
+pub use render_loop::*;
 
 unit::collect_tests![
     device,
@@ -51,6 +49,14 @@ unit::collect_tests![
     staged_cache,
     vertex,
 ];
+
+#[derive(Debug, Default)]
+pub struct AppInfo {
+    pub name: String,
+    pub version: [u32; 3],
+    pub debug: bool,
+    pub test: bool,
+}
 
 #[cfg(test)]
 mod testing;

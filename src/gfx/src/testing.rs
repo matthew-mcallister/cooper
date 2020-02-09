@@ -27,7 +27,6 @@ crate struct VulkanTestContext {
 
 #[derive(Debug)]
 crate struct TestVars {
-    crate config: Config,
     crate swapchain: Swapchain,
     crate gfx_queue: Arc<Queue>,
 }
@@ -46,11 +45,6 @@ const WINDOW_DIMS: (u32, u32) = (320, 200);
 
 impl VulkanTestContext {
     unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
-        let config = Config {
-            width: WINDOW_DIMS.0,
-            height: WINDOW_DIMS.1,
-        };
-
         const NAME: &'static str = "cooper unit test";
         let info = window::CreateInfo {
             title: NAME.to_owned(),
@@ -77,7 +71,6 @@ impl VulkanTestContext {
         let swapchain = device.create_swapchain(&surface)?;
         let gfx_queue = Arc::clone(&queues[0][0]);
         Ok(TestVars {
-            config,
             swapchain,
             gfx_queue,
         })
