@@ -21,4 +21,4 @@ package = "glfw-ffi"
 
 [dependencies.vk]
 git = "https://gitlab.com/matthew-mcallister/vk-ffi.git"
-package = "vk-ffi"
+package = "vulkan-headers"

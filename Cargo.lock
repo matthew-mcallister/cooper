@@ -118,8 +118,8 @@ dependencies = [
  "nalgebra 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "owning_ref 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
- "vk-ffi-loader 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
+ "vulkan-headers 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
+ "vulkan-loader 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]
 
 [[package]]
@@ -154,7 +154,7 @@ dependencies = [
  "crossbeam-channel 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "derive_more 0.14.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "glfw-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/glfw-ffi.git)",
- "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
+ "vulkan-headers 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]
 
 [[package]]
@@ -735,16 +735,16 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "vk-ffi"
+name = "vulkan-headers"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#aefc12bb57ce6e4f685c172211bf2f41d284effc"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#24ee599216ecced2db3430d8773b9851d34209ee"
 
 [[package]]
-name = "vk-ffi-loader"
+name = "vulkan-loader"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#aefc12bb57ce6e4f685c172211bf2f41d284effc"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#24ee599216ecced2db3430d8773b9851d34209ee"
 dependencies = [
- "vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
+ "vulkan-headers 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]
 
 [[package]]
@@ -849,8 +849,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum unicode-xid 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
 "checksum unicode-xid 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "826e7639553986605ec5979c7dd957c7895e93eabed50ab2ffa7f6128a75097c"
 "checksum vec_map 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "05c78687fb1a80548ae3250346c3db86a80a7cdd77bda190189f2d0a0987c81a"
-"checksum vk-ffi 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)" = "<none>"
-"checksum vk-ffi-loader 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)" = "<none>"
+"checksum vulkan-headers 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)" = "<none>"
+"checksum vulkan-loader 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)" = "<none>"
 "checksum winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "8093091eeb260906a183e6ae1abdba2ef5ef2257a21801128899c3fc699229c6"
 "checksum winapi-i686-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 "checksum winapi-x86_64-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"

@@ -21,7 +21,7 @@ win = { path = "../window", package = "cooper-window" }
 # TODO: Remove
 [dependencies.vk]
 git = "https://gitlab.com/matthew-mcallister/vk-ffi"
-package = "vk-ffi"
+package = "vulkan-headers"
 
 [[bin]]
 name = "cooper"
