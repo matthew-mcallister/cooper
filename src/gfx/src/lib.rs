@@ -25,7 +25,6 @@ mod render;
 mod scheduler;
 mod shader;
 mod staged_cache;
-mod vertex;
 
 crate use device::*;
 crate use format::*;
@@ -34,7 +33,6 @@ crate use render::*;
 crate use scheduler::*;
 crate use shader::*;
 crate use staged_cache::*;
-crate use vertex::*;
 
 mod render_loop;
 
@@ -44,10 +42,8 @@ unit::collect_tests![
     device,
     format,
     global,
-    render,
     scheduler,
     staged_cache,
-    vertex,
 ];
 
 #[derive(Debug, Default)]

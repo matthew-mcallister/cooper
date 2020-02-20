@@ -451,7 +451,7 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
             // initial_layout or not.
             AttachmentDescription {
                 name: AttachmentName::Hdr,
-                format: Format::RGB16F,
+                format: Format::RGBA16F,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
             },

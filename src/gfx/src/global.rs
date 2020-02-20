@@ -5,7 +5,6 @@ use crate::*;
 #[derive(Debug)]
 crate struct Globals {
     crate shaders: GlobalShaders,
-    crate empty_vertex_layout: Arc<VertexLayout>,
     crate empty_uniform_buffer: Arc<BufferRange>,
     crate empty_storage_buffer: Arc<BufferRange>,
     crate empty_image_2d: Arc<ImageView>,
@@ -28,12 +27,6 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
-
-        let empty_vertex_layout = Arc::new(VertexLayout {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            bindings: Default::default(),
-            attrs: Default::default(),
-        });
 
         // TODO: Manually acquiring this lock is so dumb
         let mut buffers = state.buffers.lock();
@@ -80,7 +73,6 @@ impl Globals {
 
         Globals {
             shaders,
-            empty_vertex_layout,
             empty_uniform_buffer,
             empty_storage_buffer,
             empty_image_2d,
@@ -134,7 +126,6 @@ impl Globals {
     }
 }
 
-#[allow(unused_macros)]
 macro_rules! vertex_inputs {
     ($(location($loc:expr) $type:ident $Attr:ident;)*) => {
         [$(
@@ -182,7 +173,6 @@ mod shader_sources {
 
 impl GlobalShaders {
     unsafe fn new(device: &Arc<Device>) -> Self {
-        let consts = [];
         let trivial_vert = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::TRIVIAL_VERT.to_vec(),
@@ -190,7 +180,7 @@ impl GlobalShaders {
             Vec::new(),
             // Intermediates are ignored for now
             Vec::new(),
-            consts.to_vec(),
+            Vec::new(),
         ));
         let trivial_frag = Arc::new(Shader::new(
             Arc::clone(&device),
@@ -200,7 +190,7 @@ impl GlobalShaders {
             fragment_outputs! {
                 location(0) VEC4 Backbuffer;
             }.to_vec(),
-            consts.to_vec(),
+            Vec::new(),
         ));
 
         GlobalShaders {

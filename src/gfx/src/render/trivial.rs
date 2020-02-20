@@ -72,7 +72,6 @@ impl TrivialRenderer {
         let mut desc = GraphicsPipelineDesc::new(
             cmds.subpass().clone(),
             Arc::clone(&self.pipeline_layout()),
-            Arc::clone(&self.globals.empty_vertex_layout),
         );
 
         let shaders = &self.globals.shaders;
@@ -81,7 +80,7 @@ impl TrivialRenderer {
         desc.stages[ShaderStage::Fragment] =
             Some(Arc::new(Arc::clone(&shaders.trivial_frag).into()));
 
-        let pipe = state.gfx_pipes.get_or_create(&desc);
+        let pipe = unsafe { state.gfx_pipes.get_or_create(&desc) };
         cmds.bind_gfx_pipe(&pipe);
 
         cmds.bind_gfx_descs(0, &self.descs[0]);

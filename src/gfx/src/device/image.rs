@@ -431,10 +431,7 @@ fn validate_image_view_creation(
     assert!(format.aspects().contains(range.aspect_mask));
 
     fn range_check(base: u32, len: u32, max: u32) {
-        // The first two statements guard against overflow
-        assert!(base < max);
-        assert!(len > 0);
-        assert!(base + len <= max);
+        assert!(base.checked_add(len).unwrap() <= max);
     }
     range_check(range.base_mip_level, range.level_count, image.mip_levels);
     range_check(range.base_array_layer, range.layer_count, image.layers);
@@ -472,7 +469,7 @@ mod tests {
             &state,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::TwoDim,
-            Format::RGB16F,
+            Format::RGBA16F,
             SampleCount::Four,
             extent,
             1,
@@ -496,7 +493,7 @@ mod tests {
             &state,
             Default::default(),
             ImageType::Cube,
-            Format::RGB16F,
+            Format::RGBA16F,
             SampleCount::One,
             Extent3D::new(256, 256, 1),
             1,

@@ -38,7 +38,7 @@ crate struct SubpassCmds {
     inner: CmdBuffer,
     framebuffer: Arc<Framebuffer>,
     subpass: Subpass,
-    graphics_pipe: Option<Arc<GraphicsPipeline>>,
+    gfx_pipe: Option<Arc<GraphicsPipeline>>,
 }
 
 #[derive(Debug)]
@@ -68,7 +68,7 @@ wrap_vk_enum! {
     }
 }
 
-// TODO: recorded buffers need to increment a ref count on the command
+// TODO: recorded buffers ought to increment a ref count on the command
 // pool
 impl Drop for CmdPool {
     fn drop(&mut self) {
@@ -325,7 +325,7 @@ impl SubpassCmds {
             inner,
             framebuffer,
             subpass,
-            graphics_pipe: None,
+            gfx_pipe: None,
         };
         cmds.begin_secondary();
         cmds
@@ -381,7 +381,7 @@ impl SubpassCmds {
     ) {
         self.ensure_recording();
         let bind_point = vk::PipelineBindPoint::GRAPHICS;
-        let pipeline = self.graphics_pipe.as_ref().unwrap();
+        let pipeline = self.gfx_pipe.as_ref().unwrap();
         let layout = &pipeline.layout();
         assert!(Arc::ptr_eq(
             set.layout(),
@@ -402,11 +402,10 @@ impl SubpassCmds {
         }
     }
 
-    crate fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>)
-    {
+    crate fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>) {
         self.ensure_recording();
         try_opt! {
-            if Arc::ptr_eq(self.graphics_pipe.as_ref()?, pipeline) {
+            if Arc::ptr_eq(self.gfx_pipe.as_ref()?, pipeline) {
                 return;
             }
         };
@@ -418,12 +417,52 @@ impl SubpassCmds {
                 pipeline.inner(),
             );
         }
-        self.graphics_pipe = Some(Arc::clone(pipeline));
+        self.gfx_pipe = Some(Arc::clone(pipeline));
+    }
+
+    crate unsafe fn bind_index_buffer(
+        &mut self,
+        buffer: &impl AsRef<BufferRange>,
+        ty: IndexType,
+    ) {
+        let buffer = buffer.as_ref();
+        self.dt().cmd_bind_index_buffer(
+            self.raw(),
+            buffer.raw(),
+            buffer.offset(),
+            ty.into(),
+        );
+    }
+
+    crate fn bind_vertex_buffers(&mut self, data: &VertexData<'_>) {
+        let pipe = self.gfx_pipe.as_ref().unwrap();
+        let layout = pipe.vertex_layout();
+
+        let mut buffers = Vec::new();
+        let mut offsets = Vec::new();
+        for buffer in data.map_bindings(layout) {
+            buffers.push(buffer.raw());
+            offsets.push(buffer.offset());
+        }
+        assert!(!buffers.is_empty());
+
+        unsafe {
+            self.dt().cmd_bind_vertex_buffers(
+                self.raw(),
+                0,
+                buffers.len() as _,
+                buffers.as_ptr(),
+                offsets.as_ptr(),
+            );
+        }
     }
 
     // Unsafe because the vertex count could be out of bounds
     crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
         self.ensure_recording();
+        // TODO: Check bound vertex buffer bounds (including instances)
+        // TODO: Check bound descriptor sets
+        assert!(self.gfx_pipe.is_some());
         self.dt().cmd_draw(self.raw(), vertex_count, instance_count, 0, 0);
     }
 
@@ -558,7 +597,7 @@ impl RenderPassCmds {
             inner: self.inner,
             framebuffer: self.framebuffer,
             subpass,
-            graphics_pipe: None,
+            gfx_pipe: None,
         }
     }
 
@@ -620,7 +659,6 @@ mod tests {
         let mut desc = GraphicsPipelineDesc::new(
             cmds.subpass().clone(),
             Arc::clone(&trivial.pipeline_layout()),
-            Arc::clone(&globals.empty_vertex_layout),
         );
 
         let shaders = &globals.shaders;

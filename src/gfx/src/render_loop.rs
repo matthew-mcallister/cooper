@@ -15,6 +15,7 @@ crate struct SystemState {
     crate gfx_pipes: GraphicsPipelineCache,
     //compute_pipes: ...,
     crate samplers: SamplerCache,
+    //shader_specs: ...,
 }
 
 impl SystemState {

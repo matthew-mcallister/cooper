@@ -11,6 +11,7 @@ mod render_pass;
 mod sampler;
 mod swapchain;
 mod sync;
+mod vertex;
 
 crate use commands::*;
 crate use debug::*;
@@ -25,6 +26,7 @@ crate use render_pass::*;
 crate use sampler::*;
 crate use swapchain::*;
 crate use sync::*;
+crate use vertex::*;
 
 #[cfg(test)]
 mod tests {
@@ -60,4 +62,5 @@ unit::collect_tests![
     sampler,
     swapchain,
     tests,
+    vertex,
 ];

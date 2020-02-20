@@ -19,22 +19,19 @@ crate struct PipelineLayout {
 crate struct GraphicsPipeline {
     device: Arc<Device>,
     inner: vk::Pipeline,
-    layout: Arc<PipelineLayout>,
-    subpass: Subpass,
+    // TODO: Arc<Desc> so hashmap and pipeline share the same object
+    desc: GraphicsPipelineDesc,
 }
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct GraphicsPipelineDesc {
     crate subpass: Subpass,
-    // TODO: Shouldn't this just be Vec<Arc<SetLayout>> with the
-    // pipeline layout pulled from a cache?
+    // TODO: This should maybe just be Vec<Arc<SetLayout>>
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     crate layout: Arc<PipelineLayout>,
-    #[derivative(Hash(hash_with = "ptr_hash"))]
-    #[derivative(PartialEq(compare_with = "ptr_eq"))]
-    crate vertex_layout: Arc<VertexLayout>,
+    crate vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
     crate stages: EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>,
@@ -123,16 +120,28 @@ impl GraphicsPipeline {
         self.inner
     }
 
+    crate fn desc(&self) -> &GraphicsPipelineDesc {
+        &self.desc
+    }
+
     crate fn layout(&self) -> &Arc<PipelineLayout> {
-        &self.layout
+        &self.desc.layout
+    }
+
+    crate fn vertex_layout(&self) -> &VertexInputLayout {
+        &self.desc.vertex_layout
     }
 
     crate fn pass(&self) -> &Arc<RenderPass> {
-        &self.subpass.pass()
+        &self.desc.subpass.pass()
     }
 
     crate fn subpass(&self) -> &Subpass {
-        &self.subpass
+        &self.desc.subpass
+    }
+
+    crate fn vertex_stage(&self) -> &Arc<ShaderSpec> {
+        self.desc.vertex_stage().unwrap()
     }
 }
 
@@ -144,15 +153,11 @@ fn color_write_mask_all() -> vk::ColorComponentFlags {
 }
 
 impl GraphicsPipelineDesc {
-    crate fn new(
-        subpass: Subpass,
-        layout: Arc<PipelineLayout>,
-        vertex_layout: Arc<VertexLayout>,
-    ) -> Self {
+    crate fn new(subpass: Subpass, layout: Arc<PipelineLayout>) -> Self {
         Self {
             subpass,
             layout,
-            vertex_layout,
+            vertex_layout: Default::default(),
             stages: Default::default(),
             cull_mode: vk::CullModeFlags::BACK_BIT,
             wireframe: Default::default(),
@@ -167,15 +172,13 @@ impl GraphicsPipelineDesc {
             blend_consts: Default::default(),
         }
     }
+
+    crate fn vertex_stage(&self) -> Option<&Arc<ShaderSpec>> {
+        self.stages[ShaderStage::Vertex].as_ref()
+    }
 }
 
 type StageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
-
-// TODO: Could generalize this with a better `AsPtr` trait.
-#[inline(always)]
-fn to_ptr<T, P: std::ops::Deref<Target = T>>(x: &Option<P>) -> *const T {
-    x.as_ref().map(|p| &**p as *const T).unwrap_or(ptr::null())
-}
 
 unsafe fn create_graphics_pipeline(
     device: Arc<Device>,
@@ -202,9 +205,18 @@ unsafe fn create_graphics_pipeline(
         })
     }).collect();
 
-    let vertex_shader = desc.stages[ShaderStage::Vertex].as_ref().unwrap();
-    let bindings = desc.vertex_layout.bindings();
-    let attrs = desc.vertex_layout.input_attrs(vertex_shader.shader())?;
+    let vertex_shader = desc.vertex_stage().unwrap().shader();
+    let vertex_layout = desc.vertex_layout;
+
+    for input in vertex_shader.inputs().iter() {
+        let name = input.attr.unwrap();
+        // TODO: Check that format is compatible with input.ty
+        let _attr = vertex_layout.attrs[name].unwrap();
+    }
+
+    let bindings = vertex_layout.vk_bindings();
+    let attrs = &vertex_layout.vk_attrs();
+
     let vertex_input = vk::PipelineVertexInputStateCreateInfo {
         vertex_binding_description_count: bindings.len() as _,
         p_vertex_binding_descriptions: bindings.as_ptr(),
@@ -214,7 +226,7 @@ unsafe fn create_graphics_pipeline(
     };
 
     let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
-        topology: desc.vertex_layout.topology,
+        topology: vertex_layout.topology.into(),
         ..Default::default()
     };
 
@@ -306,8 +318,7 @@ unsafe fn create_graphics_pipeline(
     Ok(Arc::new(GraphicsPipeline {
         device,
         inner: pipeline,
-        layout,
-        subpass: desc.subpass.clone(),
+        desc,
     }))
 }
 
@@ -342,14 +353,11 @@ macro_rules! pipeline_cache {
                 self.inner.get_committed(desc)
             }
 
-            crate fn get_or_create(&self, desc: &$desc) ->
+            crate unsafe fn get_or_create(&self, desc: &$desc) ->
                 Cow<Arc<$pipeline>>
             {
-                self.inner.get_or_insert_with(desc, || unsafe {
-                    $factory(
-                        Arc::clone(&self.device),
-                        desc.clone(),
-                    ).unwrap()
+                self.inner.get_or_insert_with(desc, || {
+                    $factory(Arc::clone(&self.device), desc.clone()).unwrap()
                 })
             }
         }
@@ -377,7 +385,6 @@ mod tests {
         let mut desc = GraphicsPipelineDesc::new(
             pass.subpass.clone(),
             Arc::clone(&trivial.pipeline_layout()),
-            Arc::clone(&globals.empty_vertex_layout),
         );
 
         let shaders = &globals.shaders;

@@ -99,6 +99,10 @@ impl BufferRange {
         &self.buffer
     }
 
+    crate fn raw(&self) -> vk::Buffer {
+        self.buffer.inner
+    }
+
     crate fn descriptor_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.buffer.inner,
