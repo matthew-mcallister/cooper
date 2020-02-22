@@ -5,7 +5,9 @@ SHADER_OBJ_DIR := generated/shaders
 
 SHADER_SRC_FILES := \
     trivial_vert.glsl \
-    trivial_frag.glsl
+    trivial_frag.glsl \
+    static_vert.glsl \
+    debug_depth_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
 
 SHADER_OBJS := $(patsubst %.glsl,$(SHADER_OBJ_DIR)/%.spv,$(SHADER_SRC_FILES))

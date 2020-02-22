@@ -175,11 +175,14 @@ mod tests {
     use crate::*;
     use super::*;
 
-    unsafe fn smoke_test(_vars: testing::TestVars) {
+    unsafe fn smoke_test(vars: testing::TestVars) {
         use VertexAttrName as Attr;
         let attr = |format| Some(VertexAttr { format });
 
-        let _layout = VertexLayout {
+        let state = SystemState::new(Arc::clone(vars.device()));
+        let globals = Globals::new(&state);
+
+        let layout = VertexLayout {
             attrs: enum_map! {
                 Attr::Position =>   attr(Format::RGB32F),
                 Attr::QTangent =>   attr(Format::RGBA32F),
@@ -191,8 +194,7 @@ mod tests {
             },
             ..Default::default()
         };
-
-        // TODO: Test with a shader
+        let _input = layout.to_input_layout(&globals.shaders.static_vert);
     }
 
     unit::declare_tests![

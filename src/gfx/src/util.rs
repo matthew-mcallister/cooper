@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::ptr;
 
 use derive_more::*;
+use enum_map::{Enum, EnumMap};
 use prelude::*;
 
 #[macro_export]
@@ -111,6 +112,16 @@ crate fn as_uninit<T>(src: &T) -> &MaybeUninit<T> {
 #[inline]
 crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
     unsafe { std::mem::transmute(src) }
+}
+
+/// Implements FromIterator for EnumMap
+#[inline]
+crate fn enum_map<K: Enum<V>, V: Default>(
+    iter: impl IntoIterator<Item = (K, V)>,
+) -> EnumMap<K, V> {
+    let mut map = EnumMap::new();
+    map.extend(iter);
+    map
 }
 
 #[macro_export]

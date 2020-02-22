@@ -21,6 +21,7 @@ crate use util::*;
 mod device;
 mod format;
 mod global;
+mod mesh;
 mod render;
 mod scheduler;
 mod shader;
@@ -29,6 +30,7 @@ mod staged_cache;
 crate use device::*;
 crate use format::*;
 crate use global::*;
+crate use mesh::*;
 crate use render::*;
 crate use scheduler::*;
 crate use shader::*;
@@ -42,6 +44,7 @@ unit::collect_tests![
     device,
     format,
     global,
+    mesh,
     scheduler,
     staged_cache,
 ];

@@ -1,7 +1,9 @@
+use std::mem::ManuallyDrop;
 use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use enum_map::{Enum, EnumMap};
+use parking_lot::Mutex;
 use prelude::*;
 
 use crate::*;
@@ -35,10 +37,18 @@ crate struct BufferRange {
     size: vk::DeviceSize,
 }
 
+// TODO: Make this a COW
 #[derive(Debug)]
 crate struct BufferBox<T: ?Sized> {
     alloc: BufferRange,
     ptr: NonNull<T>,
+}
+
+// FIXME: This is a band-aid due to the inexplicable lack of RAII here
+#[derive(Debug)]
+crate struct BufferAlloc {
+    range: ManuallyDrop<BufferRange>,
+    heap: ManuallyDrop<Arc<Mutex<BufferHeap>>>,
 }
 
 impl Drop for DeviceBuffer {
@@ -196,6 +206,33 @@ impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.ptr.as_mut() }
+    }
+}
+
+impl Drop for BufferAlloc {
+    fn drop(&mut self) {
+        unsafe {
+            {
+                let mut heap = self.heap.lock();
+                heap.free(ManuallyDrop::take(&mut self.range));
+            }
+            ManuallyDrop::drop(&mut self.heap);
+        }
+    }
+}
+
+impl BufferAlloc {
+    crate fn new(range: BufferRange, heap: Arc<Mutex<BufferHeap>>) -> Self {
+        Self {
+            range: ManuallyDrop::new(range),
+            heap: ManuallyDrop::new(heap),
+        }
+    }
+}
+
+impl AsRef<BufferRange> for BufferAlloc {
+    fn as_ref(&self) -> &BufferRange {
+        &self.range
     }
 }
 

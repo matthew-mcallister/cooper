@@ -10,7 +10,7 @@ crate struct SystemState {
     crate device: Arc<Device>,
     // TODO: Internal locking
     crate heap: Arc<Mutex<DeviceHeap>>,
-    crate buffers: Mutex<BufferHeap>,
+    crate buffers: Arc<Mutex<BufferHeap>>,
     crate descriptors: Mutex<DescriptorPool>,
     crate gfx_pipes: GraphicsPipelineCache,
     //compute_pipes: ...,
@@ -20,12 +20,12 @@ crate struct SystemState {
 
 impl SystemState {
     crate fn new(device: Arc<Device>) -> Self {
-        let heap = Arc::new(Mutex::new(DeviceHeap::new(Arc::clone(&device))));
-        let buffers = Mutex::new(BufferHeap::new(Arc::clone(&device)));
-        let descriptors =
-            Mutex::new(create_global_descriptor_pool(Arc::clone(&device)));
-        let gfx_pipes = GraphicsPipelineCache::new(Arc::clone(&device));
-        let samplers = SamplerCache::new(Arc::clone(&device));
+        let dev = || Arc::clone(&device);
+        let heap = Arc::new(Mutex::new(DeviceHeap::new(dev())));
+        let buffers = Arc::new(Mutex::new(BufferHeap::new(dev())));
+        let descriptors = Mutex::new(create_global_descriptor_pool(dev()));
+        let gfx_pipes = GraphicsPipelineCache::new(dev());
+        let samplers = SamplerCache::new(dev());
         SystemState {
             device,
             heap,
