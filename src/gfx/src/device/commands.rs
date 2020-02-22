@@ -457,13 +457,32 @@ impl SubpassCmds {
         }
     }
 
-    // Unsafe because the vertex count could be out of bounds
-    crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
+    fn pre_draw(&mut self, _vertex_count: u32, _instance_count: u32) {
         self.ensure_recording();
         // TODO: Check bound vertex buffer bounds (including instances)
         // TODO: Check bound descriptor sets
         assert!(self.gfx_pipe.is_some());
+    }
+
+    crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
+        self.pre_draw(vertex_count, instance_count);
         self.dt().cmd_draw(self.raw(), vertex_count, instance_count, 0, 0);
+    }
+
+    crate unsafe fn draw_indexed(
+        &mut self,
+        vertex_count: u32,
+        instance_count: u32,
+    ) {
+        self.pre_draw(vertex_count, instance_count);
+        self.dt().cmd_draw_indexed(
+            self.raw(),
+            vertex_count,
+            instance_count,
+            0,
+            0,
+            0,
+        );
     }
 
     /// Stops recording commands within the current subpass. Does *not*

@@ -58,15 +58,26 @@ mod tests {
     unsafe fn create_mesh(state: &SystemState) -> RenderMesh {
         let positions = [
             [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [1.0, 1.0, 0.0],
         ];
+        let idxs = [
+            0u16, 3, 1,
+            0, 2, 3,
+        ];
         let buffers = &state.buffers;
-        let buf = buffers.lock().box_slice(BufferBinding::Vertex, &positions);
-        let pos = BufferAlloc::new(buf.into_inner(), Arc::clone(&buffers));
+        let mut alloc = buffers.lock();
+        let buf = alloc.box_slice(BufferBinding::Vertex, &positions);
+        let pos = BufferAlloc::new(buf.into_inner(), Arc::clone(buffers));
+        let buf = alloc.box_slice(BufferBinding::Index, &idxs);
+        let idxs = BufferAlloc::new(buf.into_inner(), Arc::clone(buffers));
         RenderMesh {
-            tri_count: 1,
-            index: None,
+            tri_count: 2,
+            index: Some(IndexBuffer {
+                alloc: idxs,
+                ty: IndexType::U16,
+            }),
             bindings: enum_map(std::iter::once((
                 VertexAttrName::Position,
                 Some(AttrBuffer {
@@ -116,9 +127,11 @@ mod tests {
         let pipe = state.gfx_pipes.get_or_create(&desc);
         cmds.bind_gfx_pipe(&pipe);
 
-        //cmds.bind_index_buffer();
+        let idx = mesh.index.as_ref().unwrap();
+        cmds.bind_index_buffer(&idx.alloc, idx.ty);
+
         cmds.bind_vertex_buffers(&mesh.data());
-        cmds.draw(3 * mesh.tri_count, 1);
+        cmds.draw_indexed(3 * mesh.tri_count, 1);
 
         let (_, _) = cmds.exit_subpass().end().end();
     }
