@@ -420,12 +420,11 @@ impl SubpassCmds {
         self.gfx_pipe = Some(Arc::clone(pipeline));
     }
 
-    crate unsafe fn bind_index_buffer(
+    crate unsafe fn bind_index_buffer<'a>(
         &mut self,
-        buffer: &impl AsRef<BufferRange>,
+        buffer: BufferRange<'a>,
         ty: IndexType,
     ) {
-        let buffer = buffer.as_ref();
         self.dt().cmd_bind_index_buffer(
             self.raw(),
             buffer.raw(),

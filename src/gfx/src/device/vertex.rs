@@ -82,7 +82,7 @@ crate enum VertexAttrName {
 
 #[derive(Clone, Copy, Debug)]
 crate enum VertexData<'a> {
-    Unpacked(EnumMap<VertexAttrName, Option<&'a BufferRange>>),
+    Unpacked(EnumMap<VertexAttrName, Option<BufferRange<'a>>>),
 }
 
 wrap_vk_enum! {
@@ -158,7 +158,7 @@ impl VertexInputLayout {
 
 impl<'a> VertexData<'a> {
     pub(super) fn map_bindings<'b>(&'b self, layout: &'b VertexInputLayout) ->
-        impl Iterator<Item = &'a BufferRange> + 'b
+        impl Iterator<Item = BufferRange<'a>> + 'b
     {
         match self {
             Self::Unpacked(data) => layout.attrs.values()

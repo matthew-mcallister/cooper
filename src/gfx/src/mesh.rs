@@ -44,7 +44,7 @@ impl RenderMesh {
 
     crate fn data(&self) -> VertexData<'_> {
         let bindings = |name| Some({
-            self.bindings[name].as_ref()?.alloc.as_ref()
+            self.bindings[name].as_ref()?.alloc.range()
         });
         VertexData::Unpacked(bindings.into())
     }
@@ -66,22 +66,18 @@ mod tests {
             0u16, 3, 1,
             0, 2, 3,
         ];
-        let buffers = &state.buffers;
-        let mut alloc = buffers.lock();
-        let buf = alloc.box_slice(BufferBinding::Vertex, &positions);
-        let pos = BufferAlloc::new(buf.into_inner(), Arc::clone(buffers));
-        let buf = alloc.box_slice(BufferBinding::Index, &idxs);
-        let idxs = BufferAlloc::new(buf.into_inner(), Arc::clone(buffers));
+        let pos = state.buffers.box_slice(BufferBinding::Vertex, &positions);
+        let idxs = state.buffers.box_slice(BufferBinding::Index, &idxs);
         RenderMesh {
             tri_count: 2,
             index: Some(IndexBuffer {
-                alloc: idxs,
+                alloc: idxs.into_inner(),
                 ty: IndexType::U16,
             }),
             bindings: enum_map(std::iter::once((
                 VertexAttrName::Position,
                 Some(AttrBuffer {
-                    alloc: pos,
+                    alloc: pos.into_inner(),
                     format: Format::RGB32F,
                 }),
             ))),
@@ -128,7 +124,7 @@ mod tests {
         cmds.bind_gfx_pipe(&pipe);
 
         let idx = mesh.index.as_ref().unwrap();
-        cmds.bind_index_buffer(&idx.alloc, idx.ty);
+        cmds.bind_index_buffer(idx.alloc.range(), idx.ty);
 
         cmds.bind_vertex_buffers(&mesh.data());
         cmds.draw_indexed(3 * mesh.tri_count, 1);

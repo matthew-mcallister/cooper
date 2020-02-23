@@ -177,9 +177,9 @@ impl DescriptorSet {
     crate fn write_buffer(
         &mut self,
         binding: u32,
-        buffer: impl AsRef<BufferRange>,
+        buffer: BufferRange<'_>,
     ) {
-        self.write_buffers(binding, 0, std::slice::from_ref(buffer.as_ref()));
+        self.write_buffers(binding, 0, std::slice::from_ref(&buffer));
     }
 
     /// Writes uniform or storage buffers. Doesn't work with texel
@@ -189,7 +189,7 @@ impl DescriptorSet {
         &mut self,
         binding: u32,
         first_element: u32,
-        buffers: &[impl AsRef<BufferRange>],
+        buffers: &[BufferRange<'_>],
     ) {
         let dt = &self.layout.device().table;
         assert_ne!(buffers.len(), 0);
@@ -202,8 +202,8 @@ impl DescriptorSet {
         {
             // N.B. Overrunning writes are actually allowed by the spec
             assert!(first_element + len <= layout_binding.descriptor_count);
-            for range in buffers.iter() {
-                match range.as_ref().buffer().binding() {
+            for buffer in buffers.iter() {
+                match buffer.buffer.binding() {
                     BufferBinding::Uniform => assert!(is_uniform_buffer(ty)),
                     BufferBinding::Storage => assert!(is_storage_buffer(ty)),
                     _ => panic!("incompatible descriptor type"),
@@ -212,7 +212,7 @@ impl DescriptorSet {
         }
 
         let info: Vec<_> = buffers.iter()
-            .map(|buffer| buffer.as_ref().descriptor_info())
+            .map(|buffer| buffer.descriptor_info())
             .collect();
         let writes = [vk::WriteDescriptorSet {
             dst_set: self.inner(),
@@ -692,7 +692,8 @@ mod tests {
 
         let mut descs = state.descriptors.lock();
         let mut desc = descs.alloc(&layout);
-        desc.write_buffers(0, 0, &vec![&globals.empty_uniform_buffer; 2]);
+        let buffers = vec![globals.empty_uniform_buffer.range(); 2];
+        desc.write_buffers(0, 0, &buffers);
         desc.write_image(1, &globals.empty_image_2d, None);
         desc.write_images(
             2,

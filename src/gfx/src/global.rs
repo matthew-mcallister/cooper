@@ -5,8 +5,8 @@ use crate::*;
 #[derive(Debug)]
 crate struct Globals {
     crate shaders: GlobalShaders,
-    crate empty_uniform_buffer: Arc<BufferRange>,
-    crate empty_storage_buffer: Arc<BufferRange>,
+    crate empty_uniform_buffer: Arc<BufferAlloc>,
+    crate empty_storage_buffer: Arc<BufferAlloc>,
     crate empty_image_2d: Arc<ImageView>,
     crate empty_storage_image_2d: Arc<ImageView>,
     crate empty_sampler: Arc<Sampler>,
@@ -30,19 +30,16 @@ impl Globals {
 
         let shaders = GlobalShaders::new(&device);
 
-        // TODO: Manually acquiring this lock is so dumb
-        let mut buffers = state.buffers.lock();
-        let empty_uniform_buffer = Arc::new(buffers.alloc(
+        let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
             MemoryMapping::Unmapped,
             256,
         ));
-        let empty_storage_buffer = Arc::new(buffers.alloc(
+        let empty_storage_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Storage,
             MemoryMapping::Unmapped,
             256,
         ));
-        std::mem::drop(buffers);
 
         let empty_image_2d = Arc::new(Image::new(
             &state,
@@ -115,11 +112,11 @@ impl Globals {
                 desc.write_images(binding, 0, &views, None);
             },
             Dt::UNIFORM_BUFFER => {
-                let bufs = vec![&self.empty_uniform_buffer; count];
+                let bufs = vec![self.empty_uniform_buffer.range(); count];
                 desc.write_buffers(binding, 0, &bufs);
             },
             Dt::STORAGE_BUFFER => {
-                let bufs = vec![&self.empty_storage_buffer; count];
+                let bufs = vec![self.empty_storage_buffer.range(); count];
                 desc.write_buffers(binding, 0, &bufs);
             },
             // TODO: Input attachment?

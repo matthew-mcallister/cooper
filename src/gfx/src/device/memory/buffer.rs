@@ -1,4 +1,3 @@
-use std::mem::ManuallyDrop;
 use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
@@ -28,27 +27,29 @@ crate enum BufferBinding {
     Index,
 }
 
-/// A suballocation of a VkBuffer object.
-#[derive(Clone, Debug)]
-crate struct BufferRange {
+#[derive(Debug)]
+crate struct BufferBox<T: ?Sized> {
+    alloc: BufferAlloc,
+    ptr: NonNull<T>,
+}
+
+// A slice of a VkBuffer.
+#[derive(Clone, Copy, Debug)]
+crate struct BufferRange<'buf> {
+    crate buffer: &'buf DeviceBuffer,
+    crate offset: vk::DeviceSize,
+    crate size: vk::DeviceSize,
+}
+
+/// An owned suballocation of a VkBuffer object.
+#[derive(Debug)]
+crate struct BufferAlloc {
     buffer: Arc<DeviceBuffer>,
     offset: vk::DeviceSize,
     // N.B. the allocator might return more memory than requested.
     size: vk::DeviceSize,
-}
-
-// TODO: Make this a COW
-#[derive(Debug)]
-crate struct BufferBox<T: ?Sized> {
-    alloc: BufferRange,
-    ptr: NonNull<T>,
-}
-
-// FIXME: This is a band-aid due to the inexplicable lack of RAII here
-#[derive(Debug)]
-crate struct BufferAlloc {
-    range: ManuallyDrop<BufferRange>,
-    heap: ManuallyDrop<Arc<Mutex<BufferHeap>>>,
+    // When `None`, the buffer has transient lifetime.
+    heap: Option<Arc<BufferHeap>>,
 }
 
 impl Drop for DeviceBuffer {
@@ -85,12 +86,7 @@ impl DeviceBuffer {
     }
 }
 
-// Odd that you have to implement this manually...
-impl AsRef<Self> for BufferRange {
-    fn as_ref(&self) -> &BufferRange { &self }
-}
-
-impl MemoryRegion for BufferRange {
+impl<'a> MemoryRegion for BufferRange<'a> {
     fn memory(&self) -> &Arc<DeviceMemory> {
         &self.buffer.memory
     }
@@ -104,11 +100,29 @@ impl MemoryRegion for BufferRange {
     }
 }
 
-impl BufferRange {
-    crate fn buffer(&self) -> &Arc<DeviceBuffer> {
-        &self.buffer
+impl Drop for BufferAlloc {
+    fn drop(&mut self) {
+        if let Some(heap) = self.heap.take() {
+            unsafe { heap.free(self); }
+        }
+    }
+}
+
+impl MemoryRegion for BufferAlloc {
+    fn memory(&self) -> &Arc<DeviceMemory> {
+        &self.buffer.memory
     }
 
+    fn offset(&self) -> vk::DeviceSize {
+        self.offset
+    }
+
+    fn size(&self) -> vk::DeviceSize {
+        self.size
+    }
+}
+
+impl<'a> BufferRange<'a> {
     crate fn raw(&self) -> vk::Buffer {
         self.buffer.inner
     }
@@ -120,9 +134,27 @@ impl BufferRange {
             range: self.size,
         }
     }
+}
 
-    crate fn chunk(&self) -> u32 {
+impl BufferAlloc {
+    crate fn buffer(&self) -> &Arc<DeviceBuffer> {
+        &self.buffer
+    }
+
+    crate fn raw(&self) -> vk::Buffer {
+        self.buffer.inner
+    }
+
+    fn chunk(&self) -> u32 {
         self.buffer.memory.chunk
+    }
+
+    crate fn range(&self) -> BufferRange<'_> {
+        BufferRange {
+            buffer: &self.buffer,
+            offset: self.offset,
+            size: self.size,
+        }
     }
 }
 
@@ -132,28 +164,28 @@ impl<T: ?Sized> Drop for BufferBox<T> {
     }
 }
 
-impl<T: ?Sized> AsRef<BufferRange> for BufferBox<T> {
-    fn as_ref(&self) -> &BufferRange {
+impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
+    fn as_ref(&self) -> &BufferAlloc {
         &self.alloc
     }
 }
 
-impl<T: ?Sized> From<BufferBox<T>> for BufferRange {
+impl<T: ?Sized> From<BufferBox<T>> for BufferAlloc {
     fn from(data: BufferBox<T>) -> Self {
         data.into_inner()
     }
 }
 
 impl<T: ?Sized> BufferBox<T> {
-    unsafe fn new(alloc: BufferRange, ptr: *mut T) -> Self {
+    unsafe fn new(alloc: BufferAlloc, ptr: *mut T) -> Self {
         BufferBox { alloc, ptr: NonNull::new_unchecked(ptr) }
     }
 
-    crate fn alloc(&self) -> &BufferRange {
+    crate fn alloc(&self) -> &BufferAlloc {
         &self.alloc
     }
 
-    crate fn into_inner(self) -> BufferRange {
+    crate fn into_inner(self) -> BufferAlloc {
         unsafe {
             std::ptr::drop_in_place(self.ptr.as_ptr());
             let alloc = ptr::read(&self.alloc);
@@ -164,7 +196,7 @@ impl<T: ?Sized> BufferBox<T> {
 }
 
 impl<T> BufferBox<T> {
-    crate fn from_val(mut alloc: BufferRange, val: T) -> Self {
+    crate fn from_val(mut alloc: BufferAlloc, val: T) -> Self {
         let ptr = alloc.as_mut::<T>().write(val) as _;
         unsafe { BufferBox::new(alloc, ptr) }
     }
@@ -172,7 +204,7 @@ impl<T> BufferBox<T> {
 
 impl<T> BufferBox<[T]> {
     fn from_iter(
-        mut alloc: BufferRange,
+        mut alloc: BufferAlloc,
         iter: impl Iterator<Item = T> + ExactSizeIterator,
     ) -> Self {
         let slice = alloc.as_mut_slice::<T>(iter.len());
@@ -185,7 +217,7 @@ impl<T> BufferBox<[T]> {
 }
 
 impl<T: Copy> BufferBox<[T]> {
-    crate fn copy_from_slice(mut alloc: BufferRange, src: &[T]) -> Self {
+    crate fn copy_from_slice(mut alloc: BufferAlloc, src: &[T]) -> Self {
         let slice = alloc.as_mut_slice::<T>(src.len());
         slice.copy_from_slice(as_uninit_slice(src));
         let slice = slice as *mut _ as _;
@@ -209,36 +241,14 @@ impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
     }
 }
 
-impl Drop for BufferAlloc {
-    fn drop(&mut self) {
-        unsafe {
-            {
-                let mut heap = self.heap.lock();
-                heap.free(ManuallyDrop::take(&mut self.range));
-            }
-            ManuallyDrop::drop(&mut self.heap);
-        }
-    }
-}
-
-impl BufferAlloc {
-    crate fn new(range: BufferRange, heap: Arc<Mutex<BufferHeap>>) -> Self {
-        Self {
-            range: ManuallyDrop::new(range),
-            heap: ManuallyDrop::new(heap),
-        }
-    }
-}
-
-impl AsRef<BufferRange> for BufferAlloc {
-    fn as_ref(&self) -> &BufferRange {
-        &self.range
-    }
+#[derive(Debug)]
+crate struct BufferHeap {
+    inner: Mutex<BufferHeapInner>,
 }
 
 // TODO: Frame-local allocations
 #[derive(Debug)]
-crate struct BufferHeap {
+crate struct BufferHeapInner {
     device: Arc<Device>,
     pools: EnumMap<BufferBinding, BufferHeapEntry>,
 }
@@ -264,27 +274,30 @@ struct BufferPool {
 impl BufferHeap {
     crate fn new(device: Arc<Device>) -> Self {
         let pools = (|binding| BufferHeapEntry::new(&device, binding)).into();
-        BufferHeap {
-            device,
-            pools,
+        Self {
+            inner: Mutex::new(BufferHeapInner {
+                device,
+                pools,
+            }),
         }
     }
 
     crate fn alloc(
-        &mut self,
+        self: &Arc<Self>,
         binding: BufferBinding,
         mapping: MemoryMapping,
         size: vk::DeviceSize,
-    ) -> BufferRange {
-        self.pools[binding].alloc(mapping, size)
+    ) -> BufferAlloc {
+        let mut alloc = self.inner.lock().pools[binding].alloc(mapping, size);
+        alloc.heap = Some(Arc::clone(self));
+        alloc
     }
 
-    crate fn free(&mut self, alloc: impl Into<BufferRange>) {
-        let alloc = alloc.into();
-        self.pools[alloc.buffer.binding].free(alloc);
+    unsafe fn free(&self, alloc: &BufferAlloc) {
+        self.inner.lock().pools[alloc.buffer.binding].free(alloc);
     }
 
-    crate fn boxed<T>(&mut self, binding: BufferBinding, val: T) ->
+    crate fn boxed<T>(self: &Arc<Self>, binding: BufferBinding, val: T) ->
         BufferBox<T>
     {
         let size = std::mem::size_of::<T>();
@@ -293,7 +306,7 @@ impl BufferHeap {
     }
 
     crate fn box_iter<T>(
-        &mut self,
+        self: &Arc<Self>,
         binding: BufferBinding,
         iter: impl Iterator<Item = T> + ExactSizeIterator,
     ) -> BufferBox<[T]> {
@@ -303,7 +316,7 @@ impl BufferHeap {
     }
 
     crate fn box_slice<T: Copy>(
-        &mut self,
+        self: &Arc<Self>,
         binding: BufferBinding,
         src: &[T],
     ) -> BufferBox<[T]> {
@@ -353,13 +366,12 @@ impl BufferHeapEntry {
     }
 
     fn alloc(&mut self, mapping: MemoryMapping, size: vk::DeviceSize) ->
-        BufferRange
+        BufferAlloc
     {
         self.pool_mut(mapping).alloc(size)
     }
 
-    fn free(&mut self, alloc: impl Into<BufferRange>) {
-        let alloc = alloc.into();
+    fn free(&mut self, alloc: &BufferAlloc) {
         let pool = self.pool_mut(alloc.buffer.mapping);
         pool.free(alloc);
     }
@@ -477,7 +489,7 @@ impl BufferPool {
         self.allocator.add_chunk(size);
     }
 
-    fn alloc(&mut self, size: vk::DeviceSize) -> BufferRange {
+    fn alloc(&mut self, size: vk::DeviceSize) -> BufferAlloc {
         let alignment = self.alignment();
         let size = align(alignment, size);
 
@@ -498,20 +510,21 @@ impl BufferPool {
             })
             .unwrap();
         let buffer = Arc::clone(&self.chunks[block.chunk as usize]);
-        BufferRange {
+        BufferAlloc {
             buffer,
             offset: block.offset(),
             size: block.size(),
+            heap: None,
         }
     }
 
-    fn free(&mut self, alloc: BufferRange) {
+    fn free(&mut self, alloc: &BufferAlloc) {
         // Make sure the allocation came from this pool
         assert!(Arc::ptr_eq(
             &alloc.buffer,
             &self.chunks[alloc.chunk() as usize],
         ));
-        self.allocator.free(to_block(&alloc));
+        self.allocator.free(to_block(alloc));
     }
 
     /// Invalidates existing allocations.
@@ -548,25 +561,23 @@ mod tests {
         use BufferBinding::*;
 
         let device = Arc::clone(&vars.swapchain.device);
-        let mut heap = BufferHeap::new(device);
+        let heap = Arc::new(BufferHeap::new(device));
 
         let x = heap.boxed(Uniform, [0.0f32, 0.5, 0.5, 1.0]);
         assert_eq!(x[1], 0.5);
-        heap.free(x);
     }
 
     unsafe fn oversize_test(vars: testing::TestVars) {
         use BufferBinding::*;
 
         let device = Arc::clone(&vars.swapchain.device);
-        let mut heap = BufferHeap::new(Arc::clone(&device));
+        let heap = Arc::new(BufferHeap::new(Arc::clone(&device)));
 
-        let x = heap.alloc(
+        let _ = heap.alloc(
             Uniform,
             MemoryMapping::Mapped,
             (2 * device.limits().max_uniform_buffer_range) as _
         );
-        heap.free(x);
     }
 
     unit::declare_tests![
