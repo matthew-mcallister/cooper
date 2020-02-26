@@ -45,12 +45,16 @@ fn find_memory_type(
         .map(|(idx, _)| idx as u32)
 }
 
-fn find_memory_type_reqs(
+fn find_memory_type_2(
     device: &Device,
-    flags: vk::MemoryPropertyFlags,
+    mapping: MemoryMapping,
     reqs: &vk::MemoryRequirements,
 ) -> Option<u32> {
-    find_memory_type(device, flags, reqs.memory_type_bits)
+    find_memory_type(
+        device,
+        mapping.memory_property_flags(),
+        reqs.memory_type_bits,
+    )
 }
 
 #[inline(always)]
@@ -61,19 +65,97 @@ crate fn visible_coherent_flags() -> vk::MemoryPropertyFlags {
 
 unsafe fn alloc_device_memory(
     device: &Device,
-    size: vk::DeviceSize,
-    type_index: u32,
+    alloc_info: &vk::MemoryAllocateInfo,
 ) -> vk::DeviceMemory {
     let dt = &*device.table;
+    let mut memory = vk::null();
+    dt.allocate_memory(alloc_info, ptr::null(), &mut memory).check()
+        .unwrap_or_else(|_|
+            panic!("failed to allocate device memory: {:?}", alloc_info));
+    memory
+}
+
+unsafe fn alloc_resource_memory(
+    device: Arc<Device>,
+    mapping: MemoryMapping,
+    reqs: &vk::MemoryRequirements,
+    content: Option<DedicatedAllocContent>,
+    tiling: Tiling,
+) -> DeviceAlloc {
+    use DedicatedAllocContent::*;
+
+    let mut p_next = ptr::null_mut();
+
+    let mut dedicated = vk::MemoryDedicatedAllocateInfo::default();
+    if let Some(content) = content {
+        add_to_pnext!(p_next, dedicated);
+        match content {
+            Buffer(buffer) => dedicated.buffer = buffer,
+            Image(image) => dedicated.image = image,
+        }
+    }
+
+    let type_index = find_memory_type_2(&device, mapping, reqs).unwrap();
     let alloc_info = vk::MemoryAllocateInfo {
-        allocation_size: size,
+        p_next,
+        allocation_size: reqs.size,
         memory_type_index: type_index,
         ..Default::default()
     };
-    let mut memory = vk::null();
-    dt.allocate_memory(&alloc_info, ptr::null(), &mut memory)
-        .check().expect("failed to allocate device memory");
-    memory
+    let inner = alloc_device_memory(&device, &alloc_info);
+
+    // Fill out boilerplate
+    let mut memory = DeviceMemory {
+        device,
+        inner,
+        size: reqs.size,
+        type_index,
+        ptr: ptr::null_mut(),
+        tiling,
+        dedicated_content: content,
+        // Caller should fill this out
+        chunk: !0,
+    };
+    memory.init();
+    DeviceAlloc {
+        memory: Arc::new(memory),
+        offset: 0,
+        size: reqs.size,
+    }
+}
+
+unsafe fn get_buffer_memory_reqs(device: &Device, buffer: vk::Buffer) ->
+    (vk::MemoryRequirements, vk::MemoryDedicatedRequirements)
+{
+    let dt = &*device.table;
+    let mut dedicated_reqs = vk::MemoryDedicatedRequirements::default();
+    let mut reqs = vk::MemoryRequirements2 {
+        p_next: &mut dedicated_reqs as *mut _ as _,
+        ..Default::default()
+    };
+    let buffer_info = vk::BufferMemoryRequirementsInfo2 {
+        buffer,
+        ..Default::default()
+    };
+    dt.get_buffer_memory_requirements_2(&buffer_info, &mut reqs);
+    (reqs.memory_requirements, dedicated_reqs)
+}
+
+unsafe fn get_image_memory_reqs(device: &Device, image: vk::Image) ->
+    (vk::MemoryRequirements, vk::MemoryDedicatedRequirements)
+{
+    let dt = &*device.table;
+    let mut dedicated_reqs = vk::MemoryDedicatedRequirements::default();
+    let mut reqs = vk::MemoryRequirements2 {
+        p_next: &mut dedicated_reqs as *mut _ as _,
+        ..Default::default()
+    };
+    let image_info = vk::ImageMemoryRequirementsInfo2 {
+        image,
+        ..Default::default()
+    };
+    dt.get_image_memory_requirements_2(&image_info, &mut reqs);
+    (reqs.memory_requirements, dedicated_reqs)
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -145,6 +227,7 @@ crate struct DeviceMemory {
     type_index: u32,
     ptr: *mut c_void,
     tiling: Tiling,
+    dedicated_content: Option<DedicatedAllocContent>,
     chunk: u32,
 }
 
@@ -155,10 +238,9 @@ unsafe impl Sync for DeviceMemory {}
 // TODO: This type probably should free the allocation in its destructor
 #[derive(Clone, Debug)]
 crate struct DeviceRange {
-    memory: Arc<DeviceMemory>,
-    offset: vk::DeviceSize,
-    // N.B. The allocator may return a larger allocation than requested
-    size: vk::DeviceSize,
+    crate memory: Arc<DeviceMemory>,
+    crate offset: vk::DeviceSize,
+    crate size: vk::DeviceSize,
 }
 
 crate type DeviceAlloc = DeviceRange;
@@ -176,6 +258,12 @@ repr_bool! {
         Unmapped = false,
         Mapped = true,
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+crate enum DedicatedAllocContent {
+    Image(vk::Image),
+    Buffer(vk::Buffer),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -285,6 +373,15 @@ impl MemoryMapping {
 
     crate fn mapped(self) -> bool {
         self.into()
+    }
+}
+
+impl DedicatedAllocContent {
+    fn tiling(self) -> Tiling {
+        match self {
+            Self::Buffer(_) => Tiling::Linear,
+            Self::Image(_) => Tiling::Nonlinear,
+        }
     }
 }
 

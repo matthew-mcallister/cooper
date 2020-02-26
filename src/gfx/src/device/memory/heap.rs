@@ -14,7 +14,6 @@ crate struct HeapPool {
     chunks: Vec<Arc<DeviceMemory>>,
 }
 
-// TODO maybe: Multithread this so all memory can be RAII
 #[derive(Debug)]
 crate struct DeviceHeap {
     device: Arc<Device>,
@@ -89,7 +88,11 @@ impl HeapPool {
         let chunk = self.chunks.len() as u32;
         // TODO: Possibly size should be a power-of-two of chunk size
         let size = align(self.chunk_size(), min_size);
-        let inner = alloc_device_memory(&self.device, size, self.type_index);
+        let inner = alloc_device_memory(&self.device, &vk::MemoryAllocateInfo {
+            allocation_size: size,
+            memory_type_index: self.type_index,
+            ..Default::default()
+        });
         let mut mem = DeviceMemory {
             device: Arc::clone(&self.device),
             inner,
@@ -97,6 +100,7 @@ impl HeapPool {
             type_index: self.type_index,
             ptr: 0 as _,
             tiling: self.tiling,
+            dedicated_content: None,
             chunk,
         };
         mem.init();
@@ -185,6 +189,7 @@ impl DeviceHeap {
         heaps
     }
 
+    /// Suballocates device memory.
     crate unsafe fn alloc(
         &mut self,
         reqs: vk::MemoryRequirements,
@@ -206,9 +211,19 @@ impl DeviceHeap {
         buffer: vk::Buffer,
         mapping: MemoryMapping,
     ) -> DeviceAlloc {
-        let mut reqs = Default::default();
-        self.dt().get_buffer_memory_requirements(buffer, &mut reqs);
-        let alloc = self.alloc(reqs, Tiling::Linear, mapping);
+        let (reqs, dedicated_reqs) =
+            get_buffer_memory_reqs(&self.device, buffer);
+
+        let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE
+        {
+            alloc_resource_memory(
+                Arc::clone(&self.device),
+                mapping,
+                &reqs,
+                Some(DedicatedAllocContent::Buffer(buffer)),
+                Tiling::Linear,
+            )
+        } else { self.alloc(reqs, Tiling::Linear, mapping) };
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
@@ -218,15 +233,24 @@ impl DeviceHeap {
     }
 
     /// Binds an image to newly allocated memory.
-    // TODO: Image tiling is assumed nonlinear
     crate unsafe fn alloc_image_memory(
         &mut self,
         image: vk::Image,
         mapping: MemoryMapping,
     ) -> DeviceAlloc {
-        let mut reqs = Default::default();
-        self.dt().get_image_memory_requirements(image, &mut reqs);
-        let alloc = self.alloc(reqs, Tiling::Nonlinear, mapping);
+        let (reqs, dedicated_reqs) =
+            get_image_memory_reqs(&self.device, image);
+
+        let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE
+        {
+            alloc_resource_memory(
+                Arc::clone(&self.device),
+                mapping,
+                &reqs,
+                Some(DedicatedAllocContent::Image(image)),
+                Tiling::Nonlinear,
+            )
+        } else { self.alloc(reqs, Tiling::Nonlinear, mapping) };
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
@@ -237,6 +261,7 @@ impl DeviceHeap {
 
     // TODO: Allocations might be freed via RAII
     crate fn free(&mut self, alloc: DeviceAlloc) {
+        if alloc.memory.dedicated_content.is_some() { return; }
         let type_index = alloc.memory().type_index();
         let tiling = alloc.memory().tiling();
         self.pool_mut(type_index, tiling).free(alloc);

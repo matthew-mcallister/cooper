@@ -82,6 +82,10 @@ impl DeviceBuffer {
 
     unsafe fn bind(&mut self) {
         let dt = &*self.device().table;
+        assert_ne!(self.inner, vk::null());
+        if let Some(content) = self.memory.dedicated_content {
+            assert_eq!(DedicatedAllocContent::Buffer(self.inner), content);
+        }
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
     }
 }
@@ -441,7 +445,6 @@ impl BufferPool {
         self.mapping().into()
     }
 
-    // TODO: Dedicated allocation
     unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
         let dt = &*self.device.table;
 
@@ -457,27 +460,21 @@ impl BufferPool {
         dt.create_buffer(&create_info, ptr::null(), &mut buffer)
             .check().unwrap();
 
-        let mut reqs = Default::default();
-        dt.get_buffer_memory_requirements(buffer, &mut reqs);
-
-        let flags = self.mapping.memory_property_flags();
-        let types = reqs.memory_type_bits;
-        let type_index = find_memory_type(&self.device, flags, types).unwrap();
-
-        let memory = alloc_device_memory(&self.device, size, type_index);
-        let mut mem = DeviceMemory {
-            device: Arc::clone(&self.device),
-            inner: memory,
-            size,
-            type_index,
-            ptr: 0 as _,
-            tiling: Tiling::Linear,
-            chunk,
-        };
-        mem.init();
+        let (reqs, dedicated_reqs) =
+            get_buffer_memory_reqs(&self.device, buffer);
+        let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
+            .then_some(DedicatedAllocContent::Buffer(buffer));
+        let mut memory = alloc_resource_memory(
+            Arc::clone(&self.device),
+            self.mapping,
+            &reqs,
+            content,
+            Tiling::Linear,
+        ).memory;
+        Arc::get_mut(&mut memory).unwrap().chunk = chunk;
 
         let mut buffer = DeviceBuffer {
-            memory: Arc::new(mem),
+            memory: memory,
             inner: buffer,
             usage: self.usage(),
             binding: self.binding,

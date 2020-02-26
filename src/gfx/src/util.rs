@@ -230,3 +230,10 @@ macro_rules! wrap_vk_enum {
         }
     }
 }
+
+macro_rules! add_to_pnext {
+    ($pnext:expr, $struct:expr) => {
+        $struct.p_next = $pnext;
+        $pnext = &$struct as *const _ as _;
+    }
+}

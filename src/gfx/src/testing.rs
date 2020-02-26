@@ -41,7 +41,7 @@ impl TestVars {
     }
 }
 
-const WINDOW_DIMS: (u32, u32) = (320, 200);
+const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
 impl VulkanTestContext {
     unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
