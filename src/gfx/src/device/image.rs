@@ -1,10 +1,8 @@
-use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 
 use bitflags::*;
 use derivative::*;
-use parking_lot::Mutex;
 
 use crate::*;
 
@@ -62,9 +60,7 @@ crate struct Image {
     mip_levels: u32,
     layers: u32,
     inner: vk::Image,
-    // TODO: Memory allocations really need to follow RAII
-    alloc: ManuallyDrop<DeviceRange>,
-    heap: Arc<Mutex<DeviceHeap>>,
+    alloc: DeviceAlloc,
 }
 
 #[derive(Debug)]
@@ -82,8 +78,6 @@ impl Drop for Image {
         let dt = &*self.device.table;
         unsafe {
             dt.destroy_image(self.inner, ptr::null());
-            let mut heap = self.heap.lock();
-            heap.free(ManuallyDrop::take(&mut self.alloc));
         }
     }
 }
@@ -121,12 +115,8 @@ impl Image {
         dt.create_image(&create_info, ptr::null(), &mut image)
             .check().unwrap();
 
-        let heap = Arc::clone(&state.heap);
-        let alloc = {
-            let mut heap = heap.lock();
-            heap.alloc_image_memory(image, MemoryMapping::Unmapped)
-        };
-
+        let alloc =
+            state.heap.alloc_image_memory(image, MemoryMapping::Unmapped);
         Image {
             device,
             flags,
@@ -137,8 +127,7 @@ impl Image {
             mip_levels,
             layers,
             inner: image,
-            alloc: ManuallyDrop::new(alloc),
-            heap,
+            alloc,
         }
     }
 

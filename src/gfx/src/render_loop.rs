@@ -8,10 +8,9 @@ use crate::*;
 #[derive(Debug)]
 crate struct SystemState {
     crate device: Arc<Device>,
-    // TODO: Internal locking
-    crate heap: Arc<Mutex<DeviceHeap>>,
+    crate heap: DeviceHeap,
     crate buffers: Arc<BufferHeap>,
-    crate descriptors: Mutex<DescriptorPool>,
+    crate descriptors: Mutex<DescriptorPool>, // TODO: Internal locking
     crate gfx_pipes: GraphicsPipelineCache,
     //compute_pipes: ...,
     crate samplers: SamplerCache,
@@ -21,7 +20,7 @@ crate struct SystemState {
 impl SystemState {
     crate fn new(device: Arc<Device>) -> Self {
         let dev = || Arc::clone(&device);
-        let heap = Arc::new(Mutex::new(DeviceHeap::new(dev())));
+        let heap = DeviceHeap::new(dev());
         let buffers = Arc::new(BufferHeap::new(dev()));
         let descriptors = Mutex::new(create_global_descriptor_pool(dev()));
         let gfx_pipes = GraphicsPipelineCache::new(dev());

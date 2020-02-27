@@ -81,7 +81,7 @@ unsafe fn alloc_resource_memory(
     reqs: &vk::MemoryRequirements,
     content: Option<DedicatedAllocContent>,
     tiling: Tiling,
-) -> DeviceAlloc {
+) -> DeviceMemory {
     use DedicatedAllocContent::*;
 
     let mut p_next = ptr::null_mut();
@@ -117,11 +117,7 @@ unsafe fn alloc_resource_memory(
         chunk: !0,
     };
     memory.init();
-    DeviceAlloc {
-        memory: Arc::new(memory),
-        offset: 0,
-        size: reqs.size,
-    }
+    memory
 }
 
 unsafe fn get_buffer_memory_reqs(device: &Device, buffer: vk::Buffer) ->
@@ -234,17 +230,6 @@ crate struct DeviceMemory {
 unsafe impl Send for DeviceMemory {}
 unsafe impl Sync for DeviceMemory {}
 
-/// A suballocation of a VkMemory object.
-// TODO: This type probably should free the allocation in its destructor
-#[derive(Clone, Debug)]
-crate struct DeviceRange {
-    crate memory: Arc<DeviceMemory>,
-    crate offset: vk::DeviceSize,
-    crate size: vk::DeviceSize,
-}
-
-crate type DeviceAlloc = DeviceRange;
-
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 crate enum Tiling {
     /// Denotes a linear image or a buffer.
@@ -322,20 +307,6 @@ impl DeviceMemory {
         let flags = Default::default();
         dt.map_memory(self.inner, 0, self.size, flags, &mut self.ptr)
             .check().expect("failed to map device memory");
-    }
-}
-
-impl MemoryRegion for DeviceRange {
-    fn memory(&self) -> &Arc<DeviceMemory> {
-        &self.memory
-    }
-
-    fn offset(&self) -> vk::DeviceSize {
-        self.offset
-    }
-
-    fn size(&self) -> vk::DeviceSize {
-        self.size
     }
 }
 

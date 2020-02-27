@@ -470,11 +470,11 @@ impl BufferPool {
             &reqs,
             content,
             Tiling::Linear,
-        ).memory;
-        Arc::get_mut(&mut memory).unwrap().chunk = chunk;
+        );
+        memory.chunk = chunk;
 
         let mut buffer = DeviceBuffer {
-            memory: memory,
+            memory: Arc::new(memory),
             inner: buffer,
             usage: self.usage(),
             binding: self.binding,
