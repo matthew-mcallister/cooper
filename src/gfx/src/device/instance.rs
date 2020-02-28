@@ -63,6 +63,10 @@ impl Instance {
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
+        info!("enabled layers: {:?}", debug_cstrs(&layers));
+        info!("enabled instance extensions: {:?}",
+            debug_cstrs(&extensions));
+
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &vk_app_info,
             enabled_layer_count: layers.len() as _,

@@ -462,7 +462,8 @@ impl BufferPool {
 
         let (reqs, dedicated_reqs) =
             get_buffer_memory_reqs(&self.device, buffer);
-        let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
+        let content = true
+        //let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
             .then_some(DedicatedAllocContent::Buffer(buffer));
         let mut memory = alloc_resource_memory(
             Arc::clone(&self.device),

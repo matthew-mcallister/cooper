@@ -4,6 +4,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use enum_map::Enum;
+use prelude::*;
 
 use crate::*;
 
@@ -102,6 +103,12 @@ unsafe fn alloc_resource_memory(
         memory_type_index: type_index,
         ..Default::default()
     };
+
+    if let Some(content) = content {
+        debug!("creating dedicated allocation: size: {:?}, type: {:?}, {:?}",
+            reqs.size, type_index, content);
+    }
+
     let inner = alloc_device_memory(&device, &alloc_info);
 
     // Fill out boilerplate

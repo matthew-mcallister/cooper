@@ -1,8 +1,11 @@
 #![allow(unused_macros)]
 
+use std::cell::Cell;
+use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
+use std::os::raw::c_char;
 use std::ptr;
 
 use derive_more::*;
@@ -122,6 +125,36 @@ crate fn enum_map<K: Enum<V>, V: Default>(
     let mut map = EnumMap::new();
     map.extend(iter);
     map
+}
+
+crate struct DebugIter<I: IntoIterator>
+    where I::Item: std::fmt::Debug
+{
+    inner: Cell<Option<I>>,
+}
+
+impl<I: IntoIterator> std::fmt::Debug for DebugIter<I>
+    where I::Item: std::fmt::Debug
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_list().entries(self.inner.take().unwrap()).finish()
+    }
+}
+
+impl<I: IntoIterator> DebugIter<I>
+    where I::Item: std::fmt::Debug
+{
+    fn new(iter: I) -> Self {
+        Self {
+            inner: Cell::new(Some(iter)),
+        }
+    }
+}
+
+crate unsafe fn debug_cstrs<'a>(ptrs: &'a [*const c_char]) ->
+    impl std::fmt::Debug + 'a
+{
+    DebugIter::new(ptrs.iter().map(|&p| CStr::from_ptr(p)))
 }
 
 #[macro_export]

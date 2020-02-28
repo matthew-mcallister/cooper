@@ -62,5 +62,6 @@ mod testing;
 
 #[cfg(test)]
 fn main() {
+    env_logger::init();
     testing::run_tests();
 }

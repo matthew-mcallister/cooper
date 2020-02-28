@@ -16,6 +16,7 @@ derive_more = "0.15"
 derivative = "^1.0.3"
 enum-map = "^0.6.1"
 fnv = "1.0"
+log = "^0.4.8"
 itertools = "^0.8.2"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }
@@ -32,3 +33,6 @@ package = "vulkan-headers"
 [dependencies.vkl]
 git = "https://gitlab.com/matthew-mcallister/vk-ffi"
 package = "vulkan-loader"
+
+[dev-dependencies]
+env_logger = "0.7.1"
