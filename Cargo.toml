@@ -4,6 +4,7 @@ members = [
     "src/gfx",
     "src/math",
     "src/prelude",
+    "src/spirv",
     "src/unit",
     "src/window",
 ]

@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Generates Rust sources from the Khronos SPIRV definition file.
+
+Takes input on stdin and writes output to stdout.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from dataclasses import dataclass
+from typing import Dict
+
+import jinja2
+
+
+def strip_prefix(prefix: str, str: str) -> str:
+    if str.startswith(prefix):
+        return str[len(prefix):]
+    else:
+        return str
+
+
+TEMPLATE = """\
+impl_enums! {
+  {%- for enum in enums %}
+    {{enum.type}} {{enum.name}} {
+      {%- for value, name in enum.values.items() %}
+        {{name}} = {{value}},
+      {%- endfor %}
+      {%- for name, value in enum.aliases.items() %}
+        +{{name}} = {{value}},
+      {%- endfor %}
+    }
+  {%- endfor %}
+}
+"""
+
+
+@dataclass
+class Enum:
+    name: str
+    type: str
+    values: Dict[int, str]
+    aliases: Dict[str, int]
+
+    def from_json(elem: dict) -> Enum:
+        enum = Enum(
+            name=elem['Name'],
+            type=elem['Type'],
+            values={},
+            aliases={},
+        )
+        enum._parse_members(elem)
+        return enum
+
+    def _member_name(self, raw_name: str) -> str:
+        """Strips the enum name from the beginning of the member name,
+        if it is present."""
+        stripped = strip_prefix(self.name, raw_name)
+        if stripped[0].isnumeric():
+            return raw_name
+        else:
+            return stripped
+
+    def _parse_members(self, elem):
+        for name, value in elem['Values'].items():
+            name = self._member_name(name)
+            try:
+                self.aliases[name] = self.values[value]
+            except KeyError:
+                self.values[value] = name
+
+
+def main():
+    data = json.load(sys.stdin)
+
+    # TODO: Duplicate enum values need to be associated consts
+    enums = [Enum.from_json(elem) for elem in data['spv']['enum']]
+
+    env = jinja2.Environment(
+        loader=jinja2.DictLoader({'generated.rs': TEMPLATE}),
+    )
+    template = env.get_template('generated.rs')
+
+    print(template.render(enums=enums))
+
+
+if __name__ == '__main__':
+    main()
