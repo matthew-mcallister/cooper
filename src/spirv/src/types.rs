@@ -7,13 +7,20 @@
 use std::convert::TryFrom;
 use std::ops::*;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+use derive_more::*;
+
+use crate::ShaderParseError;
+
+#[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
+#[display(fmt = "invalid enum value: {}", _0)]
 pub struct InvalidEnumValue(pub u32);
-impl std::fmt::Display for InvalidEnumValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "invalid enum value: {}", self.0)
-    }
-}
+
+// Marker trait to work around orphan impl limitations.
+crate trait SpirvEnum
+where
+    Self: TryFrom<u32>,
+    ShaderParseError: From<<Self as TryFrom<u32>>::Error>,
+{}
 
 macro_rules! impl_unary_op {
     ($OpName:ident, $opname:ident; $name:ident) => {
@@ -65,6 +72,8 @@ macro_rules! impl_enum {
         impl $name {
             $(pub const $alias: Self = Self::$alias_val;)*
         }
+
+        impl SpirvEnum for $name {}
 
         impl Default for $name {
             fn default() -> Self {
@@ -140,3 +149,12 @@ macro_rules! impl_enums {
 }
 
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/generated.rs"));
+
+// Used in parsing.
+impl_enum! {
+    Value ImageSampleState {
+        Unknown = 0,
+        Sampled = 1,
+        Storage = 2,
+    }
+}
