@@ -1,8 +1,9 @@
 use std::convert::TryFrom;
 
 use crate::*;
+use crate::parser::*;
 
-crate type Id = u32;
+pub type Id = u32;
 
 crate trait Parse: Sized {
     fn parse<'data>(parser: &mut InstructionParser<'data>) -> Result<Self>;
@@ -69,7 +70,14 @@ macro_rules! impl_parseable {
             $($member:ident: $type:ty),*$(,)?
         }
     ) => {
-        #[derive(Debug, Eq, PartialEq)]
+        impl_parseable! { $name[$name] { $($member: $type),* } }
+    };
+    (
+        $name:ident[$op_name:ident] {
+            $($member:ident: $type:ty),*$(,)?
+        }
+    ) => {
+        #[derive(Debug, Default, Eq, PartialEq)]
         crate struct $name {
             $(crate $member: $type,)*
         }
@@ -78,12 +86,28 @@ macro_rules! impl_parseable {
             fn parse<'data>(parser: &mut InstructionParser<'data>) ->
                 Result<Self>
             {
-                assert_eq!(parser.op(), Some(Op::$name));
+                assert_eq!(parser.op(), Some(Op::$op_name));
                 Ok($name {
                     $($member: parser.parse()?,)*
                 })
             }
         }
+    };
+}
+
+macro_rules! impl_parseables {
+    (
+        $(
+            $name:ident$([$op_name:ident])? {
+                $($member:ident: $type:ty),*$(,)?
+            }
+        )*
+    ) => {
+        $(
+            impl_parseable! {
+                $name$([$op_name])? { $($member: $type),* }
+            }
+        )*
     }
 }
 
@@ -93,8 +117,15 @@ macro_rules! impl_node {
             $($member:ident: $type:ty),*$(,)?
         }
     ) => {
+        impl_node! { $name[$name] { $($member: $type),* } }
+    };
+    (
+        $name:ident[$op_name:ident] {
+            $($member:ident: $type:ty),*$(,)?
+        }
+    ) => {
         impl_parseable! {
-            $name { $($member: $type,)* }
+            $name[$op_name] { $($member: $type,)* }
         }
 
         impl Node for $name {
@@ -102,26 +133,35 @@ macro_rules! impl_node {
                 self.result
             }
         }
-    }
+    };
 }
 
 macro_rules! impl_nodes {
-    ($($name:ident { $($member:ident: $type:ty,)* })*) => {
-        $(impl_node!($name { $($member: $type,)* });)*
+    ($($name:ident$([$op_name:ident])? { $($member:ident: $type:ty,)* })*) => {
+        $(impl_node!($name$([$op_name])? { $($member: $type,)* });)*
     }
 }
 
-// TODO: EntryPoint, Variable, etc. require public-facing versions.
-impl_parseable! {
+impl_parseables! {
     EntryPoint {
         execution_model: ExecutionModel,
         function: Id,
         name: String,
         interface: Vec<Id>,
     }
+    Source {
+        language: SourceLanguage,
+        version: u32,
+        file: Option<Id>,
+        source: Option<String>,
+    }
 }
 
 impl_nodes! {
+    SpvString[String] {
+        result: Id,
+        value: String,
+    }
     Variable {
         ty: Id,
         result: Id,
