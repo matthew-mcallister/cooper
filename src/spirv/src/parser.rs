@@ -66,6 +66,10 @@ impl_nodes! {
     TypeOpaque,
     TypePointer,
     TypeFunction,
+    SpecConstantTrue,
+    SpecConstantFalse,
+    SpecConstant,
+    SpecConstantComposite,
     @box TypeImage,
 }
 
@@ -108,6 +112,10 @@ fn parse_header(header: &[u32]) -> Result<Version> {
 impl<'data> InstructionParser<'data> {
     crate fn op(&self) -> Option<Op> {
         self.op
+    }
+
+    crate fn operands(&self) -> &'data [u32] {
+        &self.operands
     }
 
     crate fn bytes(&self) -> &'data [u8] {
@@ -256,6 +264,14 @@ mod tests {
                 result: 14,
                 storage_class: StorageClass::Input,
                 initializer: None,
+            }),
+        );
+        assert_eq!(
+            &parser.nodes[&20],
+            &AnyNode::SpecConstant(SpecConstant {
+                ty: 15,
+                result: 20,
+                value: AnyNumber(256),
             }),
         );
     }

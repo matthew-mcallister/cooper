@@ -7,3 +7,4 @@ publish = false
 
 [dependencies]
 derive_more = "^0.99.3"
+fnv = "^1.0.6"

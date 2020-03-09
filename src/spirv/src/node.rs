@@ -8,6 +8,11 @@ crate trait Parse: Sized {
     fn parse<'data>(parser: &mut InstructionParser<'data>) -> Result<Self>;
 }
 
+/// Variable-width, arbitrary numeric type used by OpSpecConstant. Only
+/// sizes up to 64 bits are supported.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+crate struct AnyNumber(crate u64);
+
 crate trait Node: Parse {
     fn id(&self) -> Id;
 }
@@ -47,6 +52,14 @@ impl<T: Parse> Parse for Vec<T> {
 impl<T: Parse> Parse for Option<T> {
     fn parse<'data>(parser: &mut InstructionParser<'data>) -> Result<Self> {
         parser.parse_option()
+    }
+}
+
+impl Parse for AnyNumber {
+    fn parse<'data>(parser: &mut InstructionParser<'data>) -> Result<Self> {
+        let lo = parser.consume()? as u64;
+        let hi = parser.consume().unwrap_or(0) as u64;
+        Ok(Self((hi << 32) | lo))
     }
 }
 
@@ -114,6 +127,24 @@ impl_nodes! {
         result: Id,
         storage_class: StorageClass,
         initializer: Option<Id>,
+    }
+    SpecConstantTrue {
+        ty: Id,
+        result: Id,
+    }
+    SpecConstantFalse {
+        ty: Id,
+        result: Id,
+    }
+    SpecConstant {
+        ty: Id,
+        result: Id,
+        value: AnyNumber,
+    }
+    SpecConstantComposite {
+        ty: Id,
+        result: Id,
+        constituents: Vec<Id>,
     }
     TypeVoid {
         result: Id,
