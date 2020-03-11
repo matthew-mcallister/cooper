@@ -23,15 +23,14 @@ bitflags! {
     }
 }
 
-// TODO: These variant names suck
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum ImageType {
     /// One-dimensional image or image array.
-    OneDim,
+    Dim1,
     /// Two-dimensional image or image array other than a cube map.
-    TwoDim,
+    Dim2,
     /// Three-dimensional image.
-    ThreeDim,
+    Dim3,
     /// A cube or cube array, which is a type of 2D array.
     Cube,
 }
@@ -145,11 +144,11 @@ impl Image {
         use ImageType::*;
         use vk::ImageViewType as T;
         let ty = match self.ty {
-            OneDim if self.layers == 0 => T::_1D,
-            OneDim => T::_1D_ARRAY,
-            TwoDim if self.layers == 0 => T::_2D,
-            TwoDim => T::_2D_ARRAY,
-            ThreeDim => T::_3D,
+            Dim1 if self.layers == 0 => T::_1D,
+            Dim1 => T::_1D_ARRAY,
+            Dim2 if self.layers == 0 => T::_2D,
+            Dim2 => T::_2D_ARRAY,
+            Dim3 => T::_3D,
             Cube if self.layers == 0 => T::CUBE,
             Cube => T::CUBE_ARRAY,
         };
@@ -314,10 +313,10 @@ impl ImageType {
     fn compat_view(self, view: vk::ImageViewType) -> bool {
         use vk::ImageViewType as T;
         let compat: &[vk::ImageViewType] = match self {
-            Self::OneDim => &[T::_1D, T::_1D_ARRAY],
-            Self::TwoDim => &[T::_2D, T::_2D_ARRAY],
+            Self::Dim1 => &[T::_1D, T::_1D_ARRAY],
+            Self::Dim2 => &[T::_2D, T::_2D_ARRAY],
             // 2D_ARRAY_COMPATIBLE_BIT not supported
-            Self::ThreeDim => &[T::_3D],
+            Self::Dim3 => &[T::_3D],
             Self::Cube => &[T::_2D, T::_2D_ARRAY, T::CUBE, T::CUBE_ARRAY],
         };
         compat.contains(&view)
@@ -328,9 +327,9 @@ impl From<ImageType> for vk::ImageType {
     fn from(ty: ImageType) -> Self {
         use ImageType::*;
         match ty {
-            OneDim => vk::ImageType::_1D,
-            TwoDim | Cube => vk::ImageType::_2D,
-            ThreeDim => vk::ImageType::_3D,
+            Dim1 => vk::ImageType::_1D,
+            Dim2 | Cube => vk::ImageType::_2D,
+            Dim3 => vk::ImageType::_3D,
         }
     }
 }
@@ -355,9 +354,9 @@ fn validate_image_creation(
 
     let limits = device.limits();
     let max_dim = match ty {
-        ImageType::OneDim => limits.max_image_dimension_1d,
-        ImageType::TwoDim => limits.max_image_dimension_2d,
-        ImageType::ThreeDim => limits.max_image_dimension_3d,
+        ImageType::Dim1 => limits.max_image_dimension_1d,
+        ImageType::Dim2 => limits.max_image_dimension_2d,
+        ImageType::Dim3 => limits.max_image_dimension_3d,
         ImageType::Cube => limits.max_image_dimension_cube,
     };
     assert!((extent.width <= max_dim) & (extent.height <= max_dim) &
@@ -457,7 +456,7 @@ mod tests {
         let hdr = Arc::new(Image::new(
             &state,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
-            ImageType::TwoDim,
+            ImageType::Dim2,
             Format::RGBA16F,
             SampleCount::Four,
             extent,
@@ -468,7 +467,7 @@ mod tests {
         let depth = Arc::new(Image::new(
             &state,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
-            ImageType::TwoDim,
+            ImageType::Dim2,
             Format::D32F_S8,
             SampleCount::Four,
             extent,

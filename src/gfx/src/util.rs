@@ -158,6 +158,68 @@ crate unsafe fn debug_cstrs<'a>(ptrs: &'a [*const c_char]) ->
 }
 
 #[macro_export]
+macro_rules! primitive_enum {
+    (
+        @[try_from: $($try_from:ty),*$(,)?]
+        @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
+        @[into: $($into:ty),*$(,)?]
+        $(#[$($meta:meta)*])*
+        $vis:vis enum $name:ident {
+            $($(#[$($mem_meta:meta)*])* $member:ident = $val:expr,)*
+        }
+    ) => {
+        $(#[$($meta)*])*
+        $vis enum $name {
+            $($(#[$($mem_meta)*])* $member = $val,)*
+        }
+
+        $(
+            impl From<$name> for $into {
+                fn from(val: $name) -> Self {
+                    val as _
+                }
+            }
+        )*
+
+        $crate::primitive_enum! {
+            @impl_try_from
+            @[try_from: $($try_from,)*]
+            @[try_from_error: $try_from_err_ty = $try_from_err_expr]
+            enum $name { $($member = $val,)* }
+        }
+    };
+    (
+        @impl_try_from
+        @[try_from: $try_from:ty $(, $try_from_rest:ty)*$(,)?]
+        @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
+        enum $name:ident { $($member:ident = $val:expr,)* }
+    ) => {
+        impl std::convert::TryFrom<$try_from> for $name {
+            type Error = $try_from_err_ty;
+            fn try_from(val: $try_from) -> Result<Self, Self::Error> {
+                match val {
+                    $($val => Ok(Self::$member),)*
+                    _ => Err($try_from_err_expr),
+                }
+            }
+        }
+
+        $crate::primitive_enum! {
+            @impl_try_from
+            @[try_from: $($try_from_rest),*]
+            @[try_from_error: $try_from_err_ty = $try_from_err_expr]
+            enum $name { $($member = $val,)* }
+        }
+    };
+    (
+        @impl_try_from
+        @[try_from:]
+        @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
+        enum $name:ident { $($member:ident = $val:expr,)* }
+    ) => {};
+}
+
+#[macro_export]
 macro_rules! set_layout_bindings {
     ($(($($binding:tt)*)),*$(,)?) => {
         [$(set_layout_bindings!(@binding ($($binding)*)),)*]

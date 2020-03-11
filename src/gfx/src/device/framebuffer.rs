@@ -193,7 +193,7 @@ crate fn create_render_target(
         Arc::new(Image::new(
             state,
             flags,
-            ImageType::TwoDim,
+            ImageType::Dim2,
             attch.format,
             attch.samples,
             extent.into(),

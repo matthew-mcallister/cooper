@@ -1,3 +1,4 @@
+
 macro_rules! impl_format {
     ($($name:ident($vk_format:ident, $size:expr, $($aspect:ident)|*),)*) => {
         /// A selection of the most useful data formats. Keep in mind
@@ -62,8 +63,18 @@ impl_format! {
     D32F_S8(D32_SFLOAT_S8_UINT, 5, DEPTH_BIT | STENCIL_BIT),
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum Dimension { One, Two, Three, Four }
+primitive_enum! {
+    @[try_from: u8, u16, u32, u64, usize]
+    @[try_from_error: &'static str = "not a valid dimension"]
+    @[into: u8, u16, u32, u64, usize]
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    crate enum Dimension {
+        One = 1,
+        Two = 2,
+        Three = 3,
+        Four = 4,
+    }
+}
 
 crate type ChannelCount = Dimension;
 
@@ -71,23 +82,6 @@ impl Format {
     crate fn is_depth_stencil(self) -> bool {
         use vk::ImageAspectFlags as Flags;
         self.aspects().intersects(Flags::DEPTH_BIT | Flags::STENCIL_BIT)
-    }
-}
-
-impl From<Dimension> for u32 {
-    fn from(dim: Dimension) -> Self {
-        match dim {
-            Dimension::One => 1,
-            Dimension::Two => 2,
-            Dimension::Three => 3,
-            Dimension::Four => 4,
-        }
-    }
-}
-
-impl From<Dimension> for usize {
-    fn from(dim: Dimension) -> Self {
-        u32::from(dim) as _
     }
 }
 

@@ -24,7 +24,6 @@ mod global;
 mod mesh;
 mod render;
 mod scheduler;
-mod shader;
 mod staged_cache;
 
 crate use device::*;
@@ -33,7 +32,6 @@ crate use global::*;
 crate use mesh::*;
 crate use render::*;
 crate use scheduler::*;
-crate use shader::*;
 crate use staged_cache::*;
 
 mod render_loop;

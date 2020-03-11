@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::ptr;
 use std::sync::Arc;
@@ -188,10 +189,15 @@ unsafe fn create_graphics_pipeline(
 
     let have = |stage| desc.stages[stage].is_some();
     assert!(have(ShaderStage::Vertex));
-    assert!(have(ShaderStage::TessControl) == have(ShaderStage::TessEval));
+    assert_eq!(have(ShaderStage::TessControl), have(ShaderStage::TessEval));
     // TODO: Tessellation
     assert!(!have(ShaderStage::TessControl));
-    // TODO: Use reflection to validate shader bindings against layout
+    let mut stages = desc.stages.values().filter_map(|stage| stage.as_ref());
+    let mut stage0 = stages.next().unwrap();
+    for stage1 in stages {
+        assert_eq!(stage0.shader().outputs(), stage1.shader().inputs());
+        stage0 = stage1;
+    }
     let stages: Vec<_> = desc.stages.iter().filter_map(|(stage, spec)| {
         let spec = spec.as_ref()?;
         let shader = spec.shader();
@@ -208,10 +214,9 @@ unsafe fn create_graphics_pipeline(
     let vertex_shader = desc.vertex_stage().unwrap().shader();
     let vertex_layout = desc.vertex_layout;
 
-    for input in vertex_shader.inputs().iter() {
-        let name = input.attr.unwrap();
+    for &input in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty
-        let _attr = vertex_layout.attrs[name].unwrap();
+        let _attr = vertex_layout.attrs[input.try_into().unwrap()].unwrap();
     }
 
     let bindings = vertex_layout.vk_bindings();

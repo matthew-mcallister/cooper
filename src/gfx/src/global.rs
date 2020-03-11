@@ -44,7 +44,7 @@ impl Globals {
         let empty_image_2d = Arc::new(Image::new(
             &state,
             Default::default(),
-            ImageType::TwoDim,
+            ImageType::Dim2,
             Format::RGBA8,
             SampleCount::One,
             (1, 1).into(),
@@ -54,7 +54,7 @@ impl Globals {
         let empty_storage_image_2d = Arc::new(Image::new(
             &state,
             ImageFlags::STORAGE,
-            ImageType::TwoDim,
+            ImageType::Dim2,
             Format::RGBA8,
             SampleCount::One,
             (1, 1).into(),
@@ -125,32 +125,6 @@ impl Globals {
     }
 }
 
-macro_rules! vertex_inputs {
-    ($(location($loc:expr) $type:ident $Attr:ident;)*) => {
-        [$(
-            ShaderVar {
-                location: $loc,
-                ty: ShaderVarType::$type,
-                attr: Some(VertexAttrName::$Attr),
-                attch: None,
-            },
-        )*]
-    }
-}
-
-macro_rules! fragment_outputs {
-    ($(location($loc:expr) $type:ident $Attch:ident;)*) => {
-        [$(
-            ShaderVar {
-                location: $loc,
-                ty: ShaderVarType::$type,
-                attr: None,
-                attch: Some(AttachmentName::$Attch),
-            },
-        )*]
-    }
-}
-
 mod shader_sources {
     // TODO: Hot reloading
     macro_rules! include_shaders {
@@ -177,43 +151,19 @@ impl GlobalShaders {
         let trivial_vert = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::TRIVIAL_VERT.to_vec(),
-            ShaderStage::Vertex,
-            Vec::new(),
-            // Intermediates are ignored for now
-            Vec::new(),
-            Vec::new(),
         ));
         let trivial_frag = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::TRIVIAL_FRAG.to_vec(),
-            ShaderStage::Fragment,
-            Vec::new(),
-            fragment_outputs! {
-                location(0) VEC4 Backbuffer;
-            }.to_vec(),
-            Vec::new(),
         ));
         let static_vert = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::STATIC_VERT.to_vec(),
-            ShaderStage::Vertex,
-            vertex_inputs![
-                location(0) VEC3 Position;
-            ].to_vec(),
-            Vec::new(),
-            Vec::new(),
         ));
         let debug_depth_frag = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::DEBUG_DEPTH_FRAG.to_vec(),
-            ShaderStage::Fragment,
-            Vec::new(),
-            fragment_outputs![
-                location(0) VEC4 Backbuffer;
-            ].to_vec(),
-            Vec::new(),
         ));
-
         GlobalShaders {
             trivial_vert,
             trivial_frag,

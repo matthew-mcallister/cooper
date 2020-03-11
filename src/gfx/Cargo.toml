@@ -23,6 +23,8 @@ math = { path = "../math", package = "cooper-math" }
 owning_ref = "0.4"
 parking_lot = { version = "0.9", features = ["owning_ref"] }
 prelude = { path = "../prelude", package = "cooper-prelude" }
+spirv_headers = "^1.4.2"
+spirv-reflect = "^0.2.3"
 unit = { path = "../unit", package = "cooper-unit" }
 window = { path = "../window", package = "cooper-window" }
 

@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use derivative::Derivative;
 use enum_map::{Enum, EnumMap};
 
@@ -63,21 +65,23 @@ pub(super) struct VertexInputAttr {
     pub(super) format: Format,
 }
 
-/// Semantic names for vertex attributes which may be mapped to shader
-/// inputs.
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-#[non_exhaustive]
-crate enum VertexAttrName {
-    Position,
-    Normal,
-    Tangent,
-    QTangent,
-    Texcoord0,
-    Texcoord1,
-    Color,
-    Joints,
-    Weights,
-    Velocity,
+primitive_enum! {
+    @[try_from: u8, u16, u32, u64, usize]
+    @[try_from_error: &'static str = "not a valid vertex attribute"]
+    @[into: u8, u16, u32, u64, usize]
+    #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+    crate enum VertexAttrName {
+        Position = 0,
+        Normal = 1,
+        Tangent = 2,
+        QTangent = 3,
+        Texcoord0 = 4,
+        Texcoord1 = 5,
+        Color = 6,
+        Joints = 7,
+        Weights = 8,
+        Velocity = 9,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,13 +108,12 @@ impl VertexLayout {
 impl VertexInputLayout {
     fn new(layout: &VertexLayout, shader: &Shader) -> Self {
         let mut attrs = EnumMap::<_, Option<VertexInputAttr>>::default();
-        for input in shader.inputs().iter() {
-            let name = input.attr.unwrap();
+        for &location in shader.inputs().iter() {
+            let name = location.try_into().unwrap();
             let attr = layout.attrs[name].unwrap();
-            // TODO: assert input.ty is compatible with attr.format
             assert!(attrs[name].is_none());
             attrs[name] = Some(VertexInputAttr {
-                location: input.location,
+                location,
                 format: attr.format,
             });
         }
