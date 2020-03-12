@@ -220,6 +220,20 @@ macro_rules! primitive_enum {
 }
 
 #[macro_export]
+macro_rules! enum_map {
+    (
+        $($key:expr => $value:expr,)*
+        _ => $default:tt,
+    ) => {
+        {
+            let mut map: enum_map::EnumMap<_, _> = (|_| $default).into();
+            $(map[$key] = $value;)*
+            map
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! set_layout_bindings {
     ($(($($binding:tt)*)),*$(,)?) => {
         [$(set_layout_bindings!(@binding ($($binding)*)),)*]

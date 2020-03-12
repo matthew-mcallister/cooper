@@ -9,7 +9,7 @@ crate struct WorldRenderer {
     scheduler: Scheduler,
     pass: Arc<TrivialPass>,
     framebuffers: Vec<Arc<Framebuffer>>,
-    trivial: Option<Box<TrivialRenderer>>,
+    debug: Option<Box<DebugRenderer>>,
 }
 
 impl WorldRenderer {
@@ -20,15 +20,14 @@ impl WorldRenderer {
         scheduler: Scheduler,
     ) -> Self {
         let pass = Arc::new(TrivialPass::new(Arc::clone(&state.device)));
-        let trivial =
-            Box::new(TrivialRenderer::new(state, Arc::clone(&globals)));
         let framebuffers = pass.create_framebuffers(&swapchain);
+        let debug = DebugRenderer::new(state, Arc::clone(&globals));
         Self {
             globals,
             scheduler,
             pass,
             framebuffers,
-            trivial: Some(trivial),
+            debug: Some(Box::new(debug)),
         }
     }
 
@@ -39,6 +38,7 @@ impl WorldRenderer {
     crate fn run(
         &mut self,
         state: Arc<SystemState>,
+        world: RenderWorld,
         _frame_num: u64,
         swapchain_image: u32,
         present_sem: &mut Semaphore,
@@ -49,10 +49,10 @@ impl WorldRenderer {
             Arc::clone(&self.framebuffers[swapchain_image as usize]);
         let mut pass = RenderPassNode::new(framebuffer);
 
-        let mut trivial = self.trivial.take().unwrap();
-        let (trivial_return, task) = subpass_task(move |cmds| {
-            trivial.render(&state, cmds);
-            trivial
+        let mut debug = self.debug.take().unwrap();
+        let (debug_return, task) = subpass_task(move |cmds| {
+            debug.render(&state, world.debug, cmds);
+            debug
         });
         pass.add_task(0, task);
 
@@ -64,54 +64,6 @@ impl WorldRenderer {
             Some(render_fence),
         );
 
-        self.trivial = Some(trivial_return.take().unwrap());
+        self.debug = Some(debug_return.take().unwrap());
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    unsafe fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let gfx_queue = Arc::clone(&vars.gfx_queue);
-        let mut swapchain = vars.swapchain;
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let globals = Arc::new(Globals::new(&state));
-        let scheduler = Scheduler::new(Arc::clone(&gfx_queue));
-
-        let mut renderer = WorldRenderer::new(
-            &state,
-            globals,
-            &swapchain,
-            scheduler,
-        );
-
-        let mut swapchain_sem = Semaphore::new(Arc::clone(&device));
-        let image_idx = swapchain.acquire_next_image(&mut swapchain_sem)
-            .unwrap();
-
-        let mut render_fence = Fence::new(Arc::clone(&device), false);
-        let mut render_sem = Semaphore::new(Arc::clone(&device));
-        renderer.run(
-            Arc::clone(&state),
-            1,
-            image_idx,
-            &mut swapchain_sem,
-            &mut render_fence,
-            &mut render_sem,
-        );
-
-        gfx_queue.present(
-            &[&render_sem],
-            &mut swapchain,
-            image_idx,
-        ).check().unwrap();
-        render_fence.wait();
-        render_fence.reset();
-    }
-
-    unit::declare_tests![smoke_test];
-}
-
-unit::collect_tests![tests];

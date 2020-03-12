@@ -4,6 +4,8 @@ pub(crate) unsafe fn with_event_loop<F>(f: F)
 where
     F: FnOnce(window::EventLoopProxy) + Send + 'static
 {
+    env_logger::init();
+
     let (mut ev_loop, ev_proxy) = window::init().unwrap();
 
     let thread = thread::spawn(move || f(ev_proxy));

@@ -35,19 +35,23 @@ crate use scheduler::*;
 crate use staged_cache::*;
 
 mod render_loop;
+mod world;
 
 pub use render_loop::*;
+pub use world::*;
 
 unit::collect_tests![
     device,
     format,
     global,
     mesh,
+    render,
     scheduler,
     staged_cache,
+    world,
 ];
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct AppInfo {
     pub name: String,
     pub version: [u32; 3],

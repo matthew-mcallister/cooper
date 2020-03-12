@@ -17,6 +17,7 @@ crate struct Shader {
     module: vk::ShaderModule,
     code: Vec<u8>,
     stage: ShaderStage,
+    source_file: String,
     inputs: Vec<ShaderLocation>,
     outputs: Vec<ShaderLocation>,
 }
@@ -71,6 +72,7 @@ impl Shader {
         let reflected = spirv_reflect::ShaderModule::load_u8_data(&code)
             .unwrap();
         let stage = reflected.get_spirv_execution_model().try_into().unwrap();
+        let source_file = reflected.get_source_file();
         let (inputs, outputs) = get_shader_interface(&reflected);
 
         Shader {
@@ -78,6 +80,7 @@ impl Shader {
             module,
             code,
             stage,
+            source_file,
             inputs,
             outputs,
         }

@@ -10,7 +10,7 @@ fn main() {
     unsafe { unsafe_main(); }
 }
 
-const NAME: &'static str = "trivial example";
+const NAME: &'static str = "debug example";
 
 unsafe fn unsafe_main() {
     with_event_loop(|proxy| {
@@ -31,7 +31,8 @@ unsafe fn unsafe_main() {
         let mut rl = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
 
         while !window.should_close() {
-            rl.do_frame();
+            let world = RenderWorld::new(&mut rl);
+            rl.render(world);
         }
     });
 }

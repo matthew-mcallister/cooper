@@ -1,0 +1,4 @@
+const uint CONST_ID_DEBUG_DISPLAY = 0;
+
+const uint DEBUG_DISPLAY_DEPTH = 0;
+const uint DEBUG_DISPLAY_NORMAL = 1;

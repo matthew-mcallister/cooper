@@ -48,8 +48,6 @@ wrap_vk_enum! {
 }
 
 /// Opaque object used in pipeline creation and vertex buffer binding.
-/// Internally, it is basically a `VertexLayout` with redundant buffers
-/// removed.
 // TODO: maybe it would have been fine to use fixed vertex buffer
 // positions and bind dummy buffers for attributes not present
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -84,6 +82,7 @@ primitive_enum! {
     }
 }
 
+// TODO: Index buffer!
 #[derive(Clone, Copy, Debug)]
 crate enum VertexData<'a> {
     Unpacked(EnumMap<VertexAttrName, Option<BufferRange<'a>>>),
@@ -106,7 +105,7 @@ impl VertexLayout {
 }
 
 impl VertexInputLayout {
-    fn new(layout: &VertexLayout, shader: &Shader) -> Self {
+    crate fn new(layout: &VertexLayout, shader: &Shader) -> Self {
         let mut attrs = EnumMap::<_, Option<VertexInputAttr>>::default();
         for &location in shader.inputs().iter() {
             let name = location.try_into().unwrap();
@@ -174,7 +173,6 @@ impl<'a> VertexData<'a> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use enum_map::enum_map;
     use crate::*;
     use super::*;
 

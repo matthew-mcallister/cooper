@@ -9,6 +9,8 @@ crate struct TrivialRenderer {
     globals: Arc<Globals>,
     set_layouts: [Arc<SetLayout>; 2],
     pipe_layout: Arc<PipelineLayout>,
+    vert_shader: Arc<ShaderSpec>,
+    frag_shader: Arc<ShaderSpec>,
     descs: [DescriptorSet; 2],
 }
 
@@ -42,6 +44,10 @@ impl TrivialRenderer {
             Arc::clone(&layout1),
         ]));
 
+        let shaders = &globals.shaders;
+        let vert_shader = Arc::new(Arc::clone(&shaders.trivial_vert).into());
+        let frag_shader = Arc::new(Arc::clone(&shaders.trivial_frag).into());
+
         let mut descs = state.descriptors.lock();
         let mut descs = [descs.alloc(&layout0), descs.alloc(&layout1)];
         for desc in descs.iter_mut() {
@@ -52,6 +58,8 @@ impl TrivialRenderer {
             globals,
             set_layouts: [layout0, layout1],
             pipe_layout,
+            vert_shader,
+            frag_shader,
             descs,
         }
     }
@@ -74,12 +82,9 @@ impl TrivialRenderer {
             Arc::clone(&self.pipeline_layout()),
         );
 
-        let shaders = &self.globals.shaders;
-        desc.stages[ShaderStage::Vertex] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_vert).into()));
+        desc.stages[ShaderStage::Vertex] = Some(Arc::clone(&self.vert_shader));
         desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_frag).into()));
-
+            Some(Arc::clone(&self.frag_shader));
         let pipe = unsafe { state.gfx_pipes.get_or_create(&desc) };
         cmds.bind_gfx_pipe(&pipe);
 

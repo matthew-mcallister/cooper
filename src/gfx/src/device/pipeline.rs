@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use enum_map::EnumMap;
+use log::trace;
 
 use crate::*;
 
@@ -32,6 +33,7 @@ crate struct GraphicsPipelineDesc {
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     crate layout: Arc<PipelineLayout>,
+    // TODO: This needs encapsulation so it can be auto-computed
     crate vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
@@ -185,6 +187,8 @@ unsafe fn create_graphics_pipeline(
     device: Arc<Device>,
     desc: GraphicsPipelineDesc,
 ) -> Result<Arc<GraphicsPipeline>, ()> {
+    trace!("creating graphics pipeline: {:?}", desc);
+
     let layout = Arc::clone(&desc.layout);
 
     let have = |stage| desc.stages[stage].is_some();
@@ -195,7 +199,11 @@ unsafe fn create_graphics_pipeline(
     let mut stages = desc.stages.values().filter_map(|stage| stage.as_ref());
     let mut stage0 = stages.next().unwrap();
     for stage1 in stages {
-        assert_eq!(stage0.shader().outputs(), stage1.shader().inputs());
+        assert_eq!(
+            stage0.shader().outputs(),
+            stage1.shader().inputs(),
+            "{:?}, {:?}", stage0, stage1,
+        );
         stage0 = stage1;
     }
     let stages: Vec<_> = desc.stages.iter().filter_map(|(stage, spec)| {

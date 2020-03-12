@@ -17,7 +17,12 @@ crate struct GlobalShaders {
     crate trivial_vert: Arc<Shader>,
     crate trivial_frag: Arc<Shader>,
     crate static_vert: Arc<Shader>,
-    crate debug_depth_frag: Arc<Shader>,
+    crate debug_frag: Arc<Shader>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+crate enum ShaderConst {
+    DebugDisplay = 0,
 }
 
 impl Globals {
@@ -142,7 +147,7 @@ mod shader_sources {
         TRIVIAL_VERT = "trivial_vert";
         TRIVIAL_FRAG = "trivial_frag";
         STATIC_VERT = "static_vert";
-        DEBUG_DEPTH_FRAG = "debug_depth_frag";
+        DEBUG_DEPTH_FRAG = "debug_frag";
     }
 }
 
@@ -160,7 +165,7 @@ impl GlobalShaders {
             Arc::clone(&device),
             shader_sources::STATIC_VERT.to_vec(),
         ));
-        let debug_depth_frag = Arc::new(Shader::new(
+        let debug_frag = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::DEBUG_DEPTH_FRAG.to_vec(),
         ));
@@ -168,7 +173,7 @@ impl GlobalShaders {
             trivial_vert,
             trivial_frag,
             static_vert,
-            debug_depth_frag,
+            debug_frag,
         }
     }
 }

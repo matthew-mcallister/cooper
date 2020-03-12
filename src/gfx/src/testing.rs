@@ -44,6 +44,7 @@ impl TestVars {
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
 impl VulkanTestContext {
+    // TODO: Only helpful in the device module
     unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
         const NAME: &'static str = "cooper unit test";
         let info = window::CreateInfo {

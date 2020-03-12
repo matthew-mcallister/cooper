@@ -14,7 +14,21 @@ crate struct SystemState {
     crate gfx_pipes: GraphicsPipelineCache,
     //compute_pipes: ...,
     crate samplers: SamplerCache,
-    //shader_specs: ...,
+    //shader_specs: ..., (maybe)
+}
+
+#[derive(Debug)]
+pub struct RenderLoop {
+    device: Arc<Device>,
+    gfx_queue: Arc<Queue>,
+    swapchain: Swapchain,
+    renderer: WorldRenderer,
+    frame_num: u64,
+    swapchain_sem: Semaphore,
+    render_sem: Semaphore,
+    render_fence: Fence,
+    // This is declared last so that it will be dropped last
+    state: Arc<SystemState>,
 }
 
 impl SystemState {
@@ -38,20 +52,6 @@ impl SystemState {
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
-}
-
-#[derive(Debug)]
-pub struct RenderLoop {
-    device: Arc<Device>,
-    gfx_queue: Arc<Queue>,
-    swapchain: Swapchain,
-    renderer: WorldRenderer,
-    frame_num: u64,
-    swapchain_sem: Semaphore,
-    render_sem: Semaphore,
-    render_fence: Fence,
-    // This is declared last so that it will be dropped last
-    state: Arc<SystemState>,
 }
 
 impl Drop for RenderLoop {
@@ -98,7 +98,11 @@ impl RenderLoop {
         })
     }
 
-    pub fn do_frame(&mut self) {
+    crate fn state(&self) -> &Arc<SystemState> {
+        &self.state
+    }
+
+    pub fn render(&mut self, world: RenderWorld) {
         self.render_fence.wait();
         self.render_fence.reset();
 
@@ -110,6 +114,7 @@ impl RenderLoop {
 
         self.renderer.run(
             Arc::clone(&self.state),
+            world,
             self.frame_num,
             image_idx,
             &mut self.swapchain_sem,

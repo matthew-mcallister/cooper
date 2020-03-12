@@ -70,7 +70,6 @@ mod tests {
 
     // TODO: Doesn't require device
     unsafe fn smoke_test(_: crate::testing::TestVars) {
-
         let new = || Arc::new(AtomicUsize::new(0));
 
         let mut cache = StagedCache::new();

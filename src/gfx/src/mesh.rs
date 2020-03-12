@@ -115,7 +115,7 @@ mod tests {
         desc.stages[ShaderStage::Vertex] =
             Some(Arc::new(Arc::clone(&shaders.static_vert).into()));
         desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.debug_depth_frag).into()));
+            Some(Arc::new(Arc::clone(&shaders.debug_frag).into()));
 
         desc.vertex_layout = mesh.vertex_layout()
             .to_input_layout(desc.vertex_stage().unwrap().shader());

@@ -1,9 +1,12 @@
-mod trivial;
+mod debug;
 mod world_render;
 
-crate use trivial::*;
+crate use debug::*;
 crate use world_render::*;
 
-unit::collect_tests![
-    world_render,
-];
+#[cfg(test)]
+mod trivial;
+#[cfg(test)]
+crate use trivial::*;
+
+unit::collect_tests![trivial];
