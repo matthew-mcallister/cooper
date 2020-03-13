@@ -292,12 +292,16 @@ impl BufferHeap {
         mapping: MemoryMapping,
         size: vk::DeviceSize,
     ) -> BufferAlloc {
+        trace!("allocating buffer memory: size: {}, {:?}, {:?}",
+            size, mapping, binding);
         let mut alloc = self.inner.lock().pools[binding].alloc(mapping, size);
         alloc.heap = Some(Arc::clone(self));
         alloc
     }
 
     unsafe fn free(&self, alloc: &BufferAlloc) {
+        trace!("freeing buffer memory: size: {}, {:?}, {:?}",
+            alloc.size, alloc.buffer.mapping, alloc.buffer.binding);
         self.inner.lock().pools[alloc.buffer.binding].free(alloc);
     }
 

@@ -35,6 +35,10 @@ impl WorldRenderer {
         todo!();
     }
 
+    unsafe fn pre_frame(&mut self) {
+        self.scheduler.clear();
+    }
+
     crate fn run(
         &mut self,
         state: Arc<SystemState>,
@@ -45,6 +49,8 @@ impl WorldRenderer {
         render_fence: &mut Fence,
         render_sem: &mut Semaphore,
     ) {
+        unsafe { self.pre_frame(); }
+
         let framebuffer =
             Arc::clone(&self.framebuffers[swapchain_image as usize]);
         let mut pass = RenderPassNode::new(framebuffer);

@@ -130,6 +130,8 @@ impl CmdPool {
     }
 
     crate fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
+        trace!("allocating command buffer: queue_family: {}, {:?}, {:?}",
+            self.queue_family, self.flags, level);
         let dt = &*self.device.table;
         let mut buffer = vk::null();
         let buffers = std::slice::from_mut(&mut buffer);
@@ -147,6 +149,8 @@ impl CmdPool {
     }
 
     crate unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
+        trace!("freeing command buffers: queue_family: {}, {:?}, count: {}",
+            self.queue_family, self.flags, cmds.len());
         let dt = &*self.device.table;
         dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
     }

@@ -85,6 +85,7 @@ impl Scheduler {
         }
 
         let (cmds, pool) = pass_cmds.unwrap().end().end();
+        self.buffers.push(cmds);
         unsafe {
             self.gfx_queue.submit(&[SubmitInfo {
                 wait_sems,

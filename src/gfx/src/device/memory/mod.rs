@@ -68,6 +68,8 @@ unsafe fn alloc_device_memory(
     device: &Device,
     alloc_info: &vk::MemoryAllocateInfo,
 ) -> vk::DeviceMemory {
+    trace!("allocating device memory: size: {}, type: {}",
+        alloc_info.allocation_size, alloc_info.memory_type_index);
     let dt = &*device.table;
     let mut memory = vk::null();
     dt.allocate_memory(alloc_info, ptr::null(), &mut memory).check()
