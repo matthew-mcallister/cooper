@@ -35,7 +35,7 @@ impl SystemState {
     crate fn new(device: Arc<Device>) -> Self {
         let dev = || Arc::clone(&device);
         let heap = DeviceHeap::new(dev());
-        let buffers = Arc::new(BufferHeap::new(dev()));
+        let buffers = BufferHeap::new(dev());
         let descriptors = Mutex::new(create_global_descriptor_pool(dev()));
         let gfx_pipes = GraphicsPipelineCache::new(dev());
         let samplers = SamplerCache::new(dev());

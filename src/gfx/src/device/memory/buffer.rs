@@ -1,5 +1,5 @@
 use std::ptr::{self, NonNull};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use enum_map::{Enum, EnumMap};
 use parking_lot::Mutex;
@@ -15,6 +15,9 @@ crate struct DeviceBuffer {
     usage: vk::BufferUsageFlags,
     binding: BufferBinding,
     mapping: MemoryMapping,
+    // Lifetime of the contents.
+    lifetime: Lifetime,
+    heap: Weak<BufferHeap>,
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
@@ -48,8 +51,6 @@ crate struct BufferAlloc {
     offset: vk::DeviceSize,
     // N.B. the allocator might return more memory than requested.
     size: vk::DeviceSize,
-    // When `None`, the buffer has transient lifetime.
-    heap: Option<Arc<BufferHeap>>,
 }
 
 impl Drop for DeviceBuffer {
@@ -106,9 +107,7 @@ impl<'a> MemoryRegion for BufferRange<'a> {
 
 impl Drop for BufferAlloc {
     fn drop(&mut self) {
-        if let Some(heap) = self.heap.take() {
-            unsafe { heap.free(self); }
-        }
+        unsafe { try_opt! { Weak::upgrade(&self.buffer.heap)?.free(self) }; }
     }
 }
 
@@ -247,105 +246,152 @@ impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
 
 #[derive(Debug)]
 crate struct BufferHeap {
+    // TODO: Mutex individual pools instead of the whole heap.
     inner: Mutex<BufferHeapInner>,
 }
 
-// TODO: Frame-local allocations
 #[derive(Debug)]
 crate struct BufferHeapInner {
     device: Arc<Device>,
-    pools: EnumMap<BufferBinding, BufferHeapEntry>,
+    static_pools: EnumMap<BufferBinding, BufferHeapEntry<FreeListAllocator>>,
+    frame_pools: EnumMap<BufferBinding, BufferHeapEntry<LinearAllocator>>,
 }
 
 #[derive(Debug)]
-struct BufferHeapEntry {
+struct BufferHeapEntry<A: Allocator> {
     binding: BufferBinding,
     // Memory mapped pool and the only pool on UMA.
-    mapped_pool: BufferPool,
+    mapped_pool: BufferPool<A>,
     // Unmapped, non-host-visible pool on discrete systems.
-    unmapped_pool: Option<BufferPool>,
+    unmapped_pool: Option<BufferPool<A>>,
 }
 
 #[derive(Debug)]
-struct BufferPool {
+struct BufferPool<A: Allocator> {
     device: Arc<Device>,
+    heap: Weak<BufferHeap>,
     binding: BufferBinding,
+    lifetime: Lifetime,
     mapping: MemoryMapping,
-    allocator: FreeListAllocator,
+    allocator: A,
     chunks: Vec<Arc<DeviceBuffer>>,
 }
 
 impl BufferHeap {
-    crate fn new(device: Arc<Device>) -> Self {
-        let pools = (|binding| BufferHeapEntry::new(&device, binding)).into();
-        Self {
+    crate fn new(device: Arc<Device>) -> Arc<Self> {
+        macro_rules! entry {
+            ($dev:expr, $lt:expr) => {
+                (|binding| BufferHeapEntry::new($dev, binding, $lt)).into()
+            }
+        }
+        let heap = Arc::new(Self {
             inner: Mutex::new(BufferHeapInner {
+                static_pools: entry!(&device, Lifetime::Static),
+                frame_pools: entry!(&device, Lifetime::Frame),
                 device,
-                pools,
             }),
+        });
+        heap.assign_backpointers();
+        heap
+    }
+
+    fn assign_backpointers(self: &Arc<Self>) {
+        // Assign weak back-pointer
+        let mut inner = self.inner.lock();
+        for entry in inner.static_pools.values_mut() {
+            entry.mapped_pool.heap = Arc::downgrade(self);
+            if let Some(ref mut pool) = entry.unmapped_pool {
+                pool.heap = Arc::downgrade(self);
+            }
         }
     }
 
     crate fn alloc(
         self: &Arc<Self>,
         binding: BufferBinding,
+        lifetime: Lifetime,
         mapping: MemoryMapping,
         size: vk::DeviceSize,
     ) -> BufferAlloc {
-        trace!("allocating buffer memory: size: {}, {:?}, {:?}",
-            size, mapping, binding);
-        let mut alloc = self.inner.lock().pools[binding].alloc(mapping, size);
-        alloc.heap = Some(Arc::clone(self));
-        alloc
+        trace!("allocating buffer memory: size: {}, {:?}, {:?}, {:?}",
+            size, mapping, lifetime, binding);
+        match lifetime {
+            Lifetime::Static => self.inner.lock()
+                .static_pools[binding]
+                .alloc(mapping, size),
+            Lifetime::Frame => self.inner.lock()
+                .frame_pools[binding]
+                .alloc(mapping, size),
+        }
     }
 
     unsafe fn free(&self, alloc: &BufferAlloc) {
-        trace!("freeing buffer memory: size: {}, {:?}, {:?}",
-            alloc.size, alloc.buffer.mapping, alloc.buffer.binding);
-        self.inner.lock().pools[alloc.buffer.binding].free(alloc);
+        let buffer = &alloc.buffer;
+        if buffer.lifetime != Lifetime::Static { return; }
+        trace!("freeing buffer memory: size: {}, {:?}, {:?}, {:?}",
+            alloc.size, buffer.mapping, buffer.lifetime, buffer.binding);
+        self.inner.lock().static_pools[alloc.buffer.binding].free(alloc);
     }
 
-    crate fn boxed<T>(self: &Arc<Self>, binding: BufferBinding, val: T) ->
-        BufferBox<T>
-    {
+    crate fn boxed<T>(
+        self: &Arc<Self>,
+        binding: BufferBinding,
+        lifetime: Lifetime,
+        val: T,
+    ) -> BufferBox<T> {
         let size = std::mem::size_of::<T>();
-        let alloc = self.alloc(binding, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(
+            binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::from_val(alloc, val)
     }
 
     crate fn box_iter<T>(
         self: &Arc<Self>,
         binding: BufferBinding,
+        lifetime: Lifetime,
         iter: impl Iterator<Item = T> + ExactSizeIterator,
     ) -> BufferBox<[T]> {
         let size = std::mem::size_of::<T>() * iter.len();
-        let alloc = self.alloc(binding, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(
+            binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::from_iter(alloc, iter)
     }
 
     crate fn box_slice<T: Copy>(
         self: &Arc<Self>,
         binding: BufferBinding,
+        lifetime: Lifetime,
         src: &[T],
     ) -> BufferBox<[T]> {
         let size = std::mem::size_of::<T>() * src.len();
-        let alloc = self.alloc(binding, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(
+            binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::copy_from_slice(alloc, src)
+    }
+
+    /// Invalidates frame-scope allocations.
+    crate unsafe fn clear_frame(&self) {
+        for pool in self.inner.lock().frame_pools.values_mut() {
+            pool.clear();
+        }
     }
 }
 
-impl BufferHeapEntry {
+impl<A: Allocator> BufferHeapEntry<A> {
     fn new(
         device: &Arc<Device>,
         binding: BufferBinding,
+        lifetime: Lifetime,
     ) -> Self {
         let mut mapped_pool = BufferPool::new(
             Arc::clone(&device),
             binding,
+            lifetime,
             MemoryMapping::Mapped,
         );
 
         // Pre-allocate a chunk of memory to infer if we're on UMA.
+        // TODO: Free memory afterward?
         unsafe { mapped_pool.add_chunk(1) };
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
         let device_local = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
@@ -353,6 +399,7 @@ impl BufferHeapEntry {
             .then(|| BufferPool::new(
                 Arc::clone(&device),
                 binding,
+                lifetime,
                 MemoryMapping::Unmapped,
             ));
 
@@ -363,7 +410,7 @@ impl BufferHeapEntry {
         }
     }
 
-    fn pool_mut(&mut self, mapping: MemoryMapping) -> &mut BufferPool {
+    fn pool_mut(&mut self, mapping: MemoryMapping) -> &mut BufferPool<A> {
         // FTR the outer branch should always be predicted correctly
         if let Some(ref mut pool) = self.unmapped_pool {
             if mapping == MemoryMapping::Unmapped {
@@ -383,9 +430,16 @@ impl BufferHeapEntry {
         let pool = self.pool_mut(alloc.buffer.mapping);
         pool.free(alloc);
     }
+
+    unsafe fn clear(&mut self) {
+        self.mapped_pool.clear();
+        if let Some(pool) = self.unmapped_pool.as_mut() {
+            pool.clear();
+        }
+    }
 }
 
-impl Drop for BufferPool {
+impl<A: Allocator> Drop for BufferPool<A> {
     fn drop(&mut self) {
         for chunk in self.chunks.iter() {
             assert_eq!(Arc::strong_count(chunk), 1,
@@ -394,15 +448,18 @@ impl Drop for BufferPool {
     }
 }
 
-impl BufferPool {
+impl<A: Allocator> BufferPool<A> {
     fn new(
         device: Arc<Device>,
         binding: BufferBinding,
+        lifetime: Lifetime,
         mapping: MemoryMapping,
     ) -> Self {
         Self {
             device,
+            heap: Weak::new(),
             binding,
+            lifetime,
             mapping,
             allocator: Default::default(),
             chunks: Vec::new(),
@@ -481,8 +538,10 @@ impl BufferPool {
             memory: Arc::new(memory),
             inner: buffer,
             usage: self.usage(),
+            lifetime: self.lifetime,
             binding: self.binding,
             mapping: self.mapping,
+            heap: Weak::clone(&self.heap),
         };
         buffer.bind();
 
@@ -515,7 +574,6 @@ impl BufferPool {
             buffer,
             offset: block.offset(),
             size: block.size(),
-            heap: None,
         }
     }
 
@@ -528,7 +586,6 @@ impl BufferPool {
         self.allocator.free(to_block(alloc));
     }
 
-    /// Invalidates existing allocations.
     unsafe fn clear(&mut self) {
         for chunk in self.chunks.iter() {
             assert_eq!(Arc::strong_count(chunk), 1,
@@ -560,22 +617,30 @@ mod tests {
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         use BufferBinding::*;
+        use Lifetime::*;
+        use MemoryMapping::*;
 
         let device = Arc::clone(&vars.swapchain.device);
         let heap = Arc::new(BufferHeap::new(device));
 
-        let x = heap.boxed(Uniform, [0.0f32, 0.5, 0.5, 1.0]);
+        let x = heap.boxed(Uniform, Static, [0.0f32, 0.5, 0.5, 1.0]);
         assert_eq!(x[1], 0.5);
+
+        heap.alloc(Uniform, Frame, Unmapped, 256);
+        heap.clear_frame();
+        // TODO: Query used memory
     }
 
     unsafe fn oversize_test(vars: testing::TestVars) {
         use BufferBinding::*;
+        use Lifetime::*;
 
         let device = Arc::clone(&vars.swapchain.device);
         let heap = Arc::new(BufferHeap::new(Arc::clone(&device)));
 
         let _ = heap.alloc(
             Uniform,
+            Static,
             MemoryMapping::Mapped,
             (2 * device.limits().max_uniform_buffer_range) as _
         );

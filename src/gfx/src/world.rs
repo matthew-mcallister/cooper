@@ -11,7 +11,8 @@ pub struct RenderWorld {
 impl RenderWorld {
     pub fn new(rloop: &mut RenderLoop) -> Self {
         let binding = BufferBinding::Vertex;
-        let pos = rloop.state().buffers.box_slice(binding, &[
+        let lifetime = Lifetime::Frame;
+        let pos = rloop.state().buffers.box_slice(binding, lifetime, &[
             -1.0f32, -1.0, 1.0,
             -1.0, 1.0, 0.5,
             1.0, 1.0, 0.0,

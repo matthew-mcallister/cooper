@@ -37,11 +37,13 @@ impl Globals {
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
+            Lifetime::Static,
             MemoryMapping::Unmapped,
             256,
         ));
         let empty_storage_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Storage,
+            Lifetime::Static,
             MemoryMapping::Unmapped,
             256,
         ));

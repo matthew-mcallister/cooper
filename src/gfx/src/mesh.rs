@@ -66,8 +66,10 @@ mod tests {
             0u16, 3, 1,
             0, 2, 3,
         ];
-        let pos = state.buffers.box_slice(BufferBinding::Vertex, &positions);
-        let idxs = state.buffers.box_slice(BufferBinding::Index, &idxs);
+        let pos = state.buffers.box_slice(
+            BufferBinding::Vertex, Lifetime::Frame, &positions);
+        let idxs = state.buffers.box_slice(
+            BufferBinding::Index, Lifetime::Frame, &idxs);
         RenderMesh {
             tri_count: 2,
             index: Some(IndexBuffer {

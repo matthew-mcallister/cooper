@@ -16,6 +16,61 @@ pub(self) use alloc::*;
 crate use heap::*;
 crate use buffer::*;
 
+#[derive(Clone, Copy, Debug, Default)]
+struct Block {
+    chunk: u32,
+    start: vk::DeviceSize,
+    end: vk::DeviceSize,
+}
+
+#[derive(Debug)]
+crate struct DeviceMemory {
+    device: Arc<Device>,
+    inner: vk::DeviceMemory,
+    size: vk::DeviceSize,
+    type_index: u32,
+    ptr: *mut c_void,
+    tiling: Tiling,
+    dedicated_content: Option<DedicatedAllocContent>,
+    chunk: u32,
+}
+
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+crate enum Tiling {
+    /// Denotes a linear image or a buffer.
+    Linear,
+    /// Denotes a nonlinear (a.k.a. optimal) image.
+    Nonlinear,
+}
+
+repr_bool! {
+    crate enum MemoryMapping {
+        Unmapped = false,
+        Mapped = true,
+    }
+}
+
+/// Tells how long memory or other resources live for.
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+crate enum Lifetime {
+    // Lives until freed or destroyed.
+    Static,
+    /// Lives at least the duration of a frame.
+    Frame,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+crate enum DedicatedAllocContent {
+    Image(vk::Image),
+    Buffer(vk::Buffer),
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+crate struct HeapInfo {
+    reserved: vk::DeviceSize,
+    used: vk::DeviceSize,
+}
+
 #[inline]
 fn compatible_type(type_bits: u32, type_index: u32) -> bool {
     type_bits & (1 << type_index) > 0
@@ -163,13 +218,6 @@ unsafe fn get_image_memory_reqs(device: &Device, image: vk::Image) ->
     (reqs.memory_requirements, dedicated_reqs)
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-struct Block {
-    chunk: u32,
-    start: vk::DeviceSize,
-    end: vk::DeviceSize,
-}
-
 impl Block {
     fn offset(&self) -> vk::DeviceSize {
         self.start
@@ -224,47 +272,8 @@ fn to_block<T: MemoryRegion>(region: &T) -> Block {
     }
 }
 
-#[derive(Debug)]
-crate struct DeviceMemory {
-    device: Arc<Device>,
-    inner: vk::DeviceMemory,
-    size: vk::DeviceSize,
-    type_index: u32,
-    ptr: *mut c_void,
-    tiling: Tiling,
-    dedicated_content: Option<DedicatedAllocContent>,
-    chunk: u32,
-}
-
 unsafe impl Send for DeviceMemory {}
 unsafe impl Sync for DeviceMemory {}
-
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum Tiling {
-    /// Denotes a linear image or a buffer.
-    Linear,
-    /// Denotes a nonlinear (a.k.a. optimal) image.
-    Nonlinear,
-}
-
-repr_bool! {
-    crate enum MemoryMapping {
-        Unmapped = false,
-        Mapped = true,
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum DedicatedAllocContent {
-    Image(vk::Image),
-    Buffer(vk::Buffer),
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-crate struct HeapInfo {
-    reserved: vk::DeviceSize,
-    used: vk::DeviceSize,
-}
 
 impl Drop for DeviceMemory {
     fn drop(&mut self) {
@@ -346,9 +355,10 @@ impl MemoryMapping {
     }
 
     crate fn usage(self) -> vk::BufferUsageFlags {
-        if self == Self::Unmapped {
-            vk::BufferUsageFlags::TRANSFER_DST_BIT
-        } else { Default::default() }
+        match self {
+            Self::Unmapped => vk::BufferUsageFlags::TRANSFER_DST_BIT,
+            Self::Mapped => Default::default(),
+        }
     }
 
     crate fn mapped(self) -> bool {

@@ -4,6 +4,16 @@ use prelude::*;
 
 use super::*;
 
+pub(super) trait Allocator: Default {
+    fn used(&self) -> vk::DeviceSize;
+    fn capacity(&self) -> vk::DeviceSize;
+    fn add_chunk(&mut self, size: vk::DeviceSize);
+    fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) ->
+        Option<Block>;
+    fn free(&mut self, block: Block);
+    fn clear(&mut self);
+}
+
 /// Address-ordered FIFO allocation algorithm.
 #[derive(Debug, Default)]
 pub(super) struct FreeListAllocator {
@@ -17,24 +27,6 @@ pub(super) struct FreeListAllocator {
 impl FreeListAllocator {
     pub(super) fn new() -> Self {
         Default::default()
-    }
-
-    pub(super) fn used(&self) -> vk::DeviceSize {
-        self.used
-    }
-
-    pub(super) fn capacity(&self) -> vk::DeviceSize {
-        self.capacity
-    }
-
-    pub(super) fn add_chunk(&mut self, size: vk::DeviceSize) {
-        self.capacity += size;
-        self.chunks.push(size);
-        self.free.push(Block {
-            chunk: (self.chunks.len() - 1) as _,
-            start: 0,
-            end: size,
-        });
     }
 
     pub(super) fn carve_block(
@@ -67,7 +59,7 @@ impl FreeListAllocator {
         }
     }
 
-    pub(super) fn alloc_in(
+    fn alloc_in(
         &mut self,
         block_idx: usize,
         size: vk::DeviceSize,
@@ -85,18 +77,7 @@ impl FreeListAllocator {
         })
     }
 
-    pub(super) fn alloc(
-        &mut self,
-        size: vk::DeviceSize,
-        alignment: vk::DeviceSize,
-    ) -> Option<Block> {
-        let aligned_size = align(alignment, size);
-        let block = (0..self.free.len())
-            .find_map(|block| self.alloc_in(block, aligned_size, alignment))?;
-        Some(block)
-    }
-
-    pub(super) fn free(&mut self, block: Block) {
+    pub(super) fn do_free(&mut self, block: Block) {
         let chunk = block.chunk;
         let start = block.start;
         let end = block.end;
@@ -142,8 +123,43 @@ impl FreeListAllocator {
             },
         }
     }
+}
 
-    pub(super) fn clear(&mut self) {
+impl Allocator for FreeListAllocator {
+    fn used(&self) -> vk::DeviceSize {
+        self.used
+    }
+
+    fn capacity(&self) -> vk::DeviceSize {
+        self.capacity
+    }
+
+    fn add_chunk(&mut self, size: vk::DeviceSize) {
+        self.capacity += size;
+        self.chunks.push(size);
+        self.free.push(Block {
+            chunk: (self.chunks.len() - 1) as _,
+            start: 0,
+            end: size,
+        });
+    }
+
+    fn alloc(
+        &mut self,
+        size: vk::DeviceSize,
+        alignment: vk::DeviceSize,
+    ) -> Option<Block> {
+        let aligned_size = align(alignment, size);
+        let block = (0..self.free.len())
+            .find_map(|block| self.alloc_in(block, aligned_size, alignment))?;
+        Some(block)
+    }
+
+    fn free(&mut self, block: Block) {
+        self.do_free(block);
+    }
+
+    fn clear(&mut self) {
         self.free.clear();
         self.used = 0;
         for (i, &size) in self.chunks.iter().enumerate() {
@@ -153,5 +169,79 @@ impl FreeListAllocator {
                 end: size,
             });
         }
+    }
+}
+
+/// Allocator that works by bumping a pointer. It can only free all used
+/// memory at one time.
+#[derive(Debug, Default)]
+pub(super) struct LinearAllocator {
+    capacity: vk::DeviceSize,
+    used: vk::DeviceSize,
+    // List of chunk sizes
+    chunks: Vec<vk::DeviceSize>,
+    // Current chunk
+    chunk: usize,
+    // Offset into current chunk
+    offset: vk::DeviceSize,
+}
+
+impl LinearAllocator {
+    pub(super) fn new() -> Self {
+        Default::default()
+    }
+
+    fn alloc_in(
+        &mut self,
+        size: vk::DeviceSize,
+        alignment: vk::DeviceSize,
+    ) -> Option<Block> {
+        let start = align(alignment, self.offset);
+        let end = self.offset + size;
+        (end <= *self.chunks.get(self.chunk)?).then_some(Block {
+            chunk: self.chunk as _,
+            start,
+            end,
+        })
+    }
+
+    fn next_chunk(&mut self) -> Option<()> {
+        (self.chunk + 1 < self.chunks.len()).then(|| {
+            self.chunk += 1;
+            self.offset = 0;
+        })
+    }
+}
+
+impl Allocator for LinearAllocator {
+    fn used(&self) -> vk::DeviceSize {
+        self.used
+    }
+
+    fn capacity(&self) -> vk::DeviceSize {
+        self.capacity
+    }
+
+    fn add_chunk(&mut self, size: vk::DeviceSize) {
+        self.capacity += size;
+        self.chunks.push(size);
+    }
+
+    fn alloc(
+        &mut self,
+        size: vk::DeviceSize,
+        alignment: vk::DeviceSize,
+    ) -> Option<Block> {
+        self.alloc_in(size, alignment).or_else(|| {
+            self.next_chunk()?;
+            self.alloc_in(size, alignment)
+        })
+    }
+
+    fn free(&mut self, _: Block) {}
+
+    fn clear(&mut self) {
+        self.chunk = 0;
+        self.offset = 0;
     }
 }
