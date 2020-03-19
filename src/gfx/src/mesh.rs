@@ -109,7 +109,11 @@ mod tests {
             SubpassContents::Inline,
         ).enter_subpass();
 
-        let pipe_layout = Arc::new(PipelineLayout::new(dev(), vec![]));
+        let layout = DebugRenderer::create_set_layout(dev());
+        let mut desc_set = state.descriptors.lock().alloc(&layout);
+        globals.write_empty_descriptors(&mut desc_set);
+
+        let pipe_layout = Arc::new(PipelineLayout::new(dev(), vec![layout]));
         let mut desc =
             GraphicsPipelineDesc::new(cmds.subpass().clone(), pipe_layout);
 
@@ -124,6 +128,8 @@ mod tests {
 
         let pipe = state.gfx_pipes.get_or_create(&desc);
         cmds.bind_gfx_pipe(&pipe);
+
+        cmds.bind_gfx_descs(0, &desc_set);
 
         let idx = mesh.index.as_ref().unwrap();
         cmds.bind_index_buffer(idx.alloc.range(), idx.ty);

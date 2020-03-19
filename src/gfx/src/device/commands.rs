@@ -460,7 +460,7 @@ impl SubpassCmds {
         }
     }
 
-    fn pre_draw(&mut self, _vertex_count: u32, _instance_count: u32) {
+    fn pre_draw(&mut self) {
         self.ensure_recording();
         // TODO: Check bound vertex buffer bounds (including instances)
         // TODO: Check bound descriptor sets
@@ -468,8 +468,22 @@ impl SubpassCmds {
     }
 
     crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
-        self.pre_draw(vertex_count, instance_count);
-        self.dt().cmd_draw(self.raw(), vertex_count, instance_count, 0, 0);
+        self.draw_offset(vertex_count, instance_count, 0, 0);
+    }
+
+    crate unsafe fn draw_offset(
+        &mut self,
+        vertex_count: u32,
+        instance_count: u32,
+        first_vertex: u32,
+        first_instance: u32,
+    ) {
+        self.pre_draw();
+        self.dt().cmd_draw(
+            self.raw(),
+            vertex_count, instance_count,
+            first_vertex, first_instance,
+        );
     }
 
     crate unsafe fn draw_indexed(
@@ -477,14 +491,25 @@ impl SubpassCmds {
         vertex_count: u32,
         instance_count: u32,
     ) {
-        self.pre_draw(vertex_count, instance_count);
+        self.draw_indexed_offset(vertex_count, instance_count, 0, 0, 0);
+    }
+
+    crate unsafe fn draw_indexed_offset(
+        &mut self,
+        vertex_count: u32,
+        instance_count: u32,
+        first_index: u32,
+        vertex_offset: i32,
+        first_instance: u32,
+    ) {
+        self.pre_draw();
         self.dt().cmd_draw_indexed(
             self.raw(),
             vertex_count,
             instance_count,
-            0,
-            0,
-            0,
+            first_index,
+            vertex_offset,
+            first_instance,
         );
     }
 
@@ -592,6 +617,7 @@ impl RenderPassCmds {
 
         assert!(self.framebuffer.is_swapchain_valid());
 
+        // TODO: Clear color
         let begin_info = vk::RenderPassBeginInfo {
             render_pass: self.framebuffer.pass().inner(),
             framebuffer: self.framebuffer.inner(),

@@ -35,6 +35,8 @@ crate struct BufferBox<T: ?Sized> {
     alloc: BufferAlloc,
     ptr: NonNull<T>,
 }
+unsafe impl<T: ?Sized> Send for BufferBox<T> {}
+unsafe impl<T: ?Sized> Sync for BufferBox<T> {}
 
 // A slice of a VkBuffer.
 #[derive(Clone, Copy, Debug)]
@@ -161,12 +163,6 @@ impl BufferAlloc {
     }
 }
 
-impl<T: ?Sized> Drop for BufferBox<T> {
-    fn drop(&mut self) {
-        unsafe { std::ptr::drop_in_place(self.ptr.as_ptr()); }
-    }
-}
-
 impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
     fn as_ref(&self) -> &BufferAlloc {
         &self.alloc
@@ -195,6 +191,10 @@ impl<T: ?Sized> BufferBox<T> {
             std::mem::forget(self);
             alloc
         }
+    }
+
+    crate fn range(&self) -> BufferRange<'_> {
+        self.alloc.range()
     }
 }
 

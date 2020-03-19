@@ -35,10 +35,6 @@ impl WorldRenderer {
         todo!();
     }
 
-    unsafe fn pre_frame(&mut self) {
-        self.scheduler.clear();
-    }
-
     crate fn run(
         &mut self,
         state: Arc<SystemState>,
@@ -49,7 +45,9 @@ impl WorldRenderer {
         render_fence: &mut Fence,
         render_sem: &mut Semaphore,
     ) {
-        unsafe { self.pre_frame(); }
+        unsafe { self.scheduler.clear(); }
+
+        let view = SceneView::new(state, &world);
 
         let framebuffer =
             Arc::clone(&self.framebuffers[swapchain_image as usize]);
@@ -57,7 +55,7 @@ impl WorldRenderer {
 
         let mut debug = self.debug.take().unwrap();
         let (debug_return, task) = subpass_task(move |cmds| {
-            debug.render(&state, world.debug, cmds);
+            debug.render(&view, world.debug, cmds);
             debug
         });
         pass.add_task(0, task);

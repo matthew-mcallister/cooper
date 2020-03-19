@@ -1,5 +1,6 @@
 #![feature(arbitrary_self_types)]
 #![feature(bool_to_option)]
+#![feature(const_generics)]
 #![feature(cow_is_borrowed)]
 #![feature(crate_visibility_modifier)]
 #![feature(manually_drop_take)]

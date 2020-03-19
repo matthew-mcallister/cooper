@@ -108,6 +108,8 @@ impl RenderLoop {
 
         self.frame_num += 1;
 
+        self.pre_render();
+
         let image_idx = self.swapchain
             .acquire_next_image(&mut self.swapchain_sem)
             .unwrap();
@@ -129,12 +131,9 @@ impl RenderLoop {
                 image_idx,
             ).check().unwrap();
         }
-
-        self.update_state();
     }
 
-    // Performs frame-end maintenance/bookkeeping.
-    fn update_state(&mut self) {
+    fn pre_render(&mut self) {
         let state = Arc::get_mut(&mut self.state).unwrap();
         state.gfx_pipes.commit();
         state.samplers.commit();

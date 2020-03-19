@@ -274,8 +274,7 @@ unsafe fn create_graphics_pipeline(
         depth_test_enable: bool32(desc.depth_test),
         depth_write_enable: bool32(desc.depth_write),
         depth_compare_op: desc.depth_cmp_op,
-        min_depth_bounds: 1.0,
-        max_depth_bounds: 0.0,
+        depth_bounds_test_enable: vk::TRUE,
         ..Default::default()
     };
 

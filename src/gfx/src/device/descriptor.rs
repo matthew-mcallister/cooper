@@ -18,6 +18,7 @@ crate struct DescriptorCounts(na::VectorN<u32, na::U11>);
 
 // TODO: Buffers need an overhaul, as choosing between
 // uniform/storage and dynamic/static is an implementation detail
+// TODO: Try to hash and cache set layouts
 #[derive(Clone, Debug)]
 crate struct DescriptorSetLayout {
     device: Arc<Device>,
@@ -30,6 +31,8 @@ crate struct DescriptorSetLayout {
 // This alias is appropriate to use anywhere.
 crate type SetLayout = DescriptorSetLayout;
 
+// TODO: These should probably be RAII, i.e. you have to initialize them
+// at creation time (with dummy values if necessary).
 #[derive(Debug)]
 crate struct DescriptorSet {
     layout: Arc<DescriptorSetLayout>,
@@ -555,8 +558,7 @@ impl Pool {
         }).collect()
     }
 
-    crate fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set
-    {
+    crate fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set {
         self.alloc_many(layout, 1).pop().unwrap()
     }
 

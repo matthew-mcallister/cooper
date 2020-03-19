@@ -68,9 +68,8 @@ impl Framebuffer {
             y: 0.0,
             width: extent.width as _,
             height: extent.height as _,
-            // Note how the depth is reversed
-            min_depth: 1.0,
-            max_depth: 0.0,
+            min_depth: 0.0,
+            max_depth: 1.0,
         }
     }
 

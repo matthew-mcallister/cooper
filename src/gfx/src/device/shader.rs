@@ -134,7 +134,7 @@ impl ShaderSpec {
     }
 
     crate fn set<T>(&mut self, id: u32, val: &T) -> &mut ShaderSpec {
-        let bytes = std::slice::from_ref(&val).as_bytes();
+        let bytes = std::slice::from_ref(val).as_bytes();
         self.spec_map.push(vk::SpecializationMapEntry {
             constant_id: id,
             offset: self.data.len() as u32,

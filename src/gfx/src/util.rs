@@ -117,6 +117,16 @@ crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
     unsafe { std::mem::transmute(src) }
 }
 
+#[inline]
+crate fn flatten_arrays<T, const N: usize>(arrays: &[[T; N]]) -> &[T] {
+    unsafe {
+        std::slice::from_raw_parts(
+            arrays.as_ptr() as *const T,
+            arrays.len() * N,
+        )
+    }
+}
+
 /// Implements FromIterator for EnumMap
 #[inline]
 crate fn enum_map<K: Enum<V>, V: Default>(
@@ -231,6 +241,19 @@ macro_rules! enum_map {
             map
         }
     }
+}
+
+crate fn transpose<S: Copy, const M: usize, const N: usize>(mat: [[S; M]; N])
+    -> [[S; N]; M]
+{
+    #[allow(deprecated)]
+    let mut res: [[S; N]; M] = unsafe { std::mem::uninitialized() };
+    for i in 0..M {
+        for j in 0..N {
+            res[i][j] = mat[j][i];
+        }
+    }
+    res
 }
 
 #[macro_export]
