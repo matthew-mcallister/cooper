@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use prelude::*;
 
 use crate::*;
@@ -10,7 +9,7 @@ crate struct SystemState {
     crate device: Arc<Device>,
     crate heap: DeviceHeap,
     crate buffers: Arc<BufferHeap>,
-    crate descriptors: Mutex<DescriptorPool>, // TODO: Internal locking
+    crate descriptors: Arc<DescriptorHeap>,
     crate gfx_pipes: GraphicsPipelineCache,
     //compute_pipes: ...,
     crate samplers: SamplerCache,
@@ -36,7 +35,7 @@ impl SystemState {
         let dev = || Arc::clone(&device);
         let heap = DeviceHeap::new(dev());
         let buffers = BufferHeap::new(dev());
-        let descriptors = Mutex::new(create_global_descriptor_pool(dev()));
+        let descriptors = Arc::new(DescriptorHeap::new(dev()));
         let gfx_pipes = GraphicsPipelineCache::new(dev());
         let samplers = SamplerCache::new(dev());
         SystemState {

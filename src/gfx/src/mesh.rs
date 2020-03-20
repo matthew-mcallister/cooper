@@ -110,7 +110,7 @@ mod tests {
         ).enter_subpass();
 
         let layout = DebugRenderer::create_set_layout(dev());
-        let mut desc_set = state.descriptors.lock().alloc(&layout);
+        let mut desc_set = state.descriptors.alloc(&layout);
         globals.write_empty_descriptors(&mut desc_set);
 
         let pipe_layout = Arc::new(PipelineLayout::new(dev(), vec![layout]));

@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
+use log::trace;
+
 use crate::*;
 
 #[derive(Debug)]
 crate struct Globals {
+    crate device: Arc<Device>,
     crate shaders: GlobalShaders,
     crate empty_uniform_buffer: Arc<BufferAlloc>,
     crate empty_storage_buffer: Arc<BufferAlloc>,
@@ -78,6 +81,7 @@ impl Globals {
         let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
 
         Globals {
+            device,
             shaders,
             empty_uniform_buffer,
             empty_storage_buffer,
@@ -126,8 +130,8 @@ impl Globals {
                 let bufs = vec![self.empty_storage_buffer.range(); count];
                 desc.write_buffers(binding, 0, &bufs);
             },
-            // TODO: Input attachment?
-            _ => unreachable!(),
+            _ => trace!("uninitialized descriptor: binding: {}, layout: {:?}",
+                binding, layout),
         }
     }
 }
@@ -209,8 +213,7 @@ mod tests {
         ];
         let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
 
-        let mut descs = state.descriptors.lock();
-        let mut desc = descs.alloc(&layout);
+        let mut desc = state.descriptors.alloc(&layout);
         globals.write_empty_descriptors(&mut desc);
     }
 

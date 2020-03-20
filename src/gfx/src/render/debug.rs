@@ -48,7 +48,7 @@ impl DebugRenderer {
         }).into();
 
         let set_layout = Self::create_set_layout(Arc::clone(&device));
-        let desc_set = state.descriptors.lock().alloc(&set_layout);
+        let desc_set = state.descriptors.alloc(&set_layout);
         let pipe_layout = Arc::new(PipelineLayout::new(
             Arc::clone(&device),
             vec![set_layout],
