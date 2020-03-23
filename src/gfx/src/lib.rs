@@ -24,21 +24,19 @@ mod format;
 mod global;
 mod mesh;
 mod render;
+mod render_loop;
 mod scheduler;
 mod staged_cache;
-
-crate use device::*;
-crate use format::*;
-crate use global::*;
-crate use mesh::*;
-crate use render::*;
-crate use scheduler::*;
-crate use staged_cache::*;
-
-mod render_loop;
 mod world;
 
+pub use device::*;
+pub use format::*;
+crate use global::*;
+pub use mesh::*;
+pub use render::*;
 pub use render_loop::*;
+crate use scheduler::*;
+crate use staged_cache::*;
 pub use world::*;
 
 unit::collect_tests![

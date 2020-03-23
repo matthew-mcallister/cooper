@@ -1,9 +1,9 @@
 mod debug;
-mod scene;
+mod view;
 mod world_render;
 
-crate use debug::*;
-crate use scene::*;
+pub use debug::*;
+pub use view::*;
 crate use world_render::*;
 
 #[cfg(test)]

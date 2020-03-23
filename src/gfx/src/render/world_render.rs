@@ -37,7 +37,7 @@ impl WorldRenderer {
 
     crate fn run(
         &mut self,
-        state: Arc<SystemState>,
+        state: Arc<Box<SystemState>>,
         world: RenderWorld,
         _frame_num: u64,
         swapchain_image: u32,
@@ -47,12 +47,11 @@ impl WorldRenderer {
     ) {
         unsafe { self.scheduler.clear(); }
 
-        let view = SceneView::new(state, &world);
-
         let framebuffer =
             Arc::clone(&self.framebuffers[swapchain_image as usize]);
         let mut pass = RenderPassNode::new(framebuffer);
 
+        let view = SceneViewState::new(state, &world);
         let mut debug = self.debug.take().unwrap();
         let (debug_return, task) = subpass_task(move |cmds| {
             debug.render(&view, world.debug, cmds);

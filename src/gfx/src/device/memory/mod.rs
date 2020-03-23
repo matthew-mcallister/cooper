@@ -4,7 +4,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use enum_map::Enum;
-use prelude::*;
+use log::{debug, trace};
 
 use crate::*;
 
@@ -52,7 +52,7 @@ repr_bool! {
 
 /// Tells how long memory or other resources live for.
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum Lifetime {
+pub enum Lifetime {
     // Lives until freed or destroyed.
     Static,
     /// Lives at least the duration of a frame.

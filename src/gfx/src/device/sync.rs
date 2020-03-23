@@ -63,6 +63,7 @@ impl Fence {
         }
     }
 
+    // TODO: This function hangs randomly---driver bug?
     crate fn reset(&mut self) {
         let dt = &*self.device.table;
         unsafe {

@@ -2,8 +2,8 @@ use enum_map::EnumMap;
 
 use crate::*;
 
-#[derive(Debug)]
-crate struct RenderMesh {
+#[derive(Debug, Default)]
+pub struct RenderMesh {
     crate tri_count: u32,
     crate index: Option<IndexBuffer>,
     crate bindings: EnumMap<VertexAttrName, Option<AttrBuffer>>,
@@ -21,13 +21,12 @@ crate struct IndexBuffer {
     crate ty: IndexType,
 }
 
-impl IndexType {
-    pub fn size(self) -> usize {
-        match self {
-            Self::U16 => 2,
-            Self::U32 => 4,
-        }
-    }
+/// Allows building a mesh without directly using the device interface.
+#[derive(Debug)]
+pub struct RenderMeshBuilder<'wld> {
+    state: &'wld SystemState,
+    lifetime: Lifetime,
+    mesh: RenderMesh,
 }
 
 impl RenderMesh {
@@ -50,40 +49,83 @@ impl RenderMesh {
     }
 }
 
+impl<'wld> RenderMeshBuilder<'wld> {
+    pub fn new(world: &'wld RenderWorld) -> Self {
+        Self {
+            state: world.state(),
+            lifetime: Lifetime::Static,
+            mesh: Default::default(),
+        }
+    }
+
+    pub fn lifetime(&mut self, lifetime: Lifetime) -> &mut Self {
+        self.lifetime = lifetime;
+        self
+    }
+
+    pub fn tri_count(&mut self, tri_count: u32) -> &mut Self {
+        self.mesh.tri_count = tri_count;
+        self
+    }
+
+    pub fn index<T: Copy>(&mut self, ty: IndexType, data: &[T]) -> &mut Self {
+        assert_eq!(std::mem::size_of::<T>(), ty.size());
+        assert_eq!(data.len(), 3 * self.mesh.tri_count as usize);
+        let binding = BufferBinding::Index;
+        let lifetime = self.lifetime;
+        assert_eq!(lifetime, Lifetime::Frame);
+        let alloc = self.state.buffers.box_slice(binding, lifetime, data)
+            .into_inner();
+        self.mesh.index = Some(IndexBuffer { alloc, ty });
+        self
+    }
+
+    pub fn vertex<T: Copy>(
+        &mut self,
+        attr: VertexAttrName,
+        format: Format,
+        data: &[T],
+    ) -> &mut Self {
+        assert_eq!(std::mem::size_of::<T>(), format.size());
+        let binding = BufferBinding::Vertex;
+        let lifetime = self.lifetime;
+        assert_eq!(lifetime, Lifetime::Frame);
+        let alloc = self.state.buffers.box_slice(binding, lifetime, data)
+            .into_inner();
+        self.mesh.bindings[attr] = Some(AttrBuffer { alloc, format });
+        self
+    }
+
+    pub unsafe fn build(self) -> RenderMesh {
+        self.mesh
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
     use super::*;
 
     unsafe fn create_mesh(state: &SystemState) -> RenderMesh {
-        let positions = [
+        let positions: &[[f32; 3]] = &[
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [1.0, 1.0, 0.0],
         ];
-        let idxs = [
-            0u16, 3, 1,
+        let idxs: &[u16] = &[
+            0, 3, 1,
             0, 2, 3,
         ];
-        let pos = state.buffers.box_slice(
-            BufferBinding::Vertex, Lifetime::Frame, &positions);
-        let idxs = state.buffers.box_slice(
-            BufferBinding::Index, Lifetime::Frame, &idxs);
-        RenderMesh {
-            tri_count: 2,
-            index: Some(IndexBuffer {
-                alloc: idxs.into_inner(),
-                ty: IndexType::U16,
-            }),
-            bindings: enum_map(std::iter::once((
-                VertexAttrName::Position,
-                Some(AttrBuffer {
-                    alloc: pos.into_inner(),
-                    format: Format::RGB32F,
-                }),
-            ))),
-        }
+        let mut builder = RenderMeshBuilder {
+            state,
+            lifetime: Lifetime::Frame,
+            mesh: Default::default(),
+        };
+        builder.tri_count(2)
+            .index(IndexType::U16, idxs)
+            .vertex(VertexAttrName::Position, Format::RGB32F, positions);
+        builder.build()
     }
 
     unsafe fn bind_test(vars: testing::TestVars) {

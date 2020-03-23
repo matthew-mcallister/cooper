@@ -21,14 +21,14 @@ crate use device::*;
 crate use framebuffer::*;
 crate use image::*;
 crate use instance::*;
-crate use memory::*;
+pub use memory::*;
 crate use pipeline::*;
 crate use render_pass::*;
 crate use sampler::*;
 crate use shader::*;
 crate use swapchain::*;
 crate use sync::*;
-crate use vertex::*;
+pub use vertex::*;
 
 #[cfg(test)]
 mod tests {

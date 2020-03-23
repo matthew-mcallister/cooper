@@ -1,6 +1,6 @@
 include ../../common.mk
 
-GLSL_FLAGS ?=
+SHADERC_FLAGS ?=
 
 SHADER_SRC_DIR := shaders
 SHADER_OBJ_DIR := generated/shaders
@@ -20,7 +20,7 @@ shaders: $(SHADER_OBJS)
 $(SHADER_OBJ_DIR)/%.spv: \
     $(SHADER_SRC_DIR)/%.glsl \
     $(SHADER_OBJ_DIR)
-> glslc $(GLSL_FLAGS) $< -o $@
+> $(SHADERC) $(SHADERC_FLAGS) $< -o $@
 
 $(SHADER_OBJ_DIR):
 > mkdir -p $(SHADER_OBJ_DIR)

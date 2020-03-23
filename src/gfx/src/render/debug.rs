@@ -5,22 +5,25 @@ use enum_map::{Enum, EnumMap};
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum DebugDisplay {
+pub enum DebugDisplay {
     Depth = 0,
     Normal = 1,
 }
 
 #[derive(Debug)]
-crate struct DebugMesh {
-    crate mesh: Arc<RenderMesh>,
-    crate display: DebugDisplay,
-    crate mv: [[f32; 4]; 4],
+pub struct DebugMesh {
+    pub mesh: Arc<RenderMesh>,
+    pub display: DebugDisplay,
+    pub rot: [[f32; 3]; 3],
+    pub pos: [f32; 3],
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(16))]
 crate struct DebugInstance {
     crate mv: [[f32; 4]; 4],
+    // TODO:
+    //crate mvp: [[f32; 4]; 4],
 }
 
 // Minimal mesh rendering for visualization and debugging.
@@ -89,21 +92,23 @@ impl DebugRenderer {
 
     unsafe fn update_descriptors(
         &mut self,
-        view: &SceneView,
+        view: &SceneViewState,
         meshes: &[DebugMesh],
     ) {
-        self.desc_set.write_buffer(0, view.view_uniforms());
-        let instances = view.state.buffers.box_iter(
-            BufferBinding::Storage,
-            Lifetime::Frame,
-            meshes.iter().map(|mesh| DebugInstance { mv: mesh.mv }),
-        );
+        self.desc_set.write_buffer(0, view.uniform_buffer.range());
+        let mesh_iter = meshes.iter().map(|mesh| {
+            let m = affine_xform(mesh.rot, mesh.pos);
+            let mv = mat_x_mat(view.uniforms.view_inv, m);
+            DebugInstance { mv }
+        });
+        let instances = view.state().buffers.box_iter(
+            BufferBinding::Storage, Lifetime::Frame, mesh_iter);
         self.desc_set.write_buffer(1, instances.range());
     }
 
     crate fn render(
         &mut self,
-        view: &SceneView,
+        view: &SceneViewState,
         meshes: Vec<DebugMesh>,
         cmds: &mut SubpassCmds,
     ) {
@@ -113,7 +118,7 @@ impl DebugRenderer {
     // TODO: Sort meshes by pipeline, or at least display type
     crate unsafe fn render_unsafe(
         &mut self,
-        view: &SceneView,
+        view: &SceneViewState,
         meshes: Vec<DebugMesh>,
         cmds: &mut SubpassCmds,
     ) {

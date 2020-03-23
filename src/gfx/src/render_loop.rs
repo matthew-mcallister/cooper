@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use log::debug;
 use prelude::*;
 
 use crate::*;
 
+// TODO: Some things may not benefit from multithreading in the long run
 #[derive(Debug)]
 crate struct SystemState {
     crate device: Arc<Device>,
@@ -27,7 +29,7 @@ pub struct RenderLoop {
     render_sem: Semaphore,
     render_fence: Fence,
     // This is declared last so that it will be dropped last
-    state: Arc<SystemState>,
+    crate state: Option<Box<SystemState>>,
 }
 
 impl SystemState {
@@ -69,7 +71,7 @@ impl RenderLoop {
         let device = Arc::clone(&swapchain.device);
         let gfx_queue = Arc::clone(&queues[0][0]);
 
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
+        let state = Box::new(SystemState::new(Arc::clone(&device)));
         let globals = Arc::new(Globals::new(&state));
 
         let scheduler = Scheduler::new(Arc::clone(&gfx_queue));
@@ -93,28 +95,29 @@ impl RenderLoop {
             swapchain_sem,
             render_sem,
             render_fence,
-            state,
+            state: Some(state),
         })
     }
 
-    crate fn state(&self) -> &Arc<SystemState> {
-        &self.state
-    }
+    pub fn render(&mut self, mut world: RenderWorld) {
+        self.state = world.state.take();
 
-    pub fn render(&mut self, world: RenderWorld) {
+        debug!("waiting for frame {}", self.frame_num);
         self.render_fence.wait();
         self.render_fence.reset();
 
         self.frame_num += 1;
 
+        debug!("beginning frame {}", self.frame_num);
         self.pre_render();
 
         let image_idx = self.swapchain
             .acquire_next_image(&mut self.swapchain_sem)
             .unwrap();
 
+        let state = Arc::new(self.state.take().unwrap());
         self.renderer.run(
-            Arc::clone(&self.state),
+            Arc::clone(&state),
             world,
             self.frame_num,
             image_idx,
@@ -122,6 +125,7 @@ impl RenderLoop {
             &mut self.render_fence,
             &mut self.render_sem,
         );
+        self.state = Some(Arc::try_unwrap(state).unwrap());
 
         unsafe {
             self.gfx_queue.present(
@@ -133,7 +137,7 @@ impl RenderLoop {
     }
 
     fn pre_render(&mut self) {
-        let state = Arc::get_mut(&mut self.state).unwrap();
+        let state = self.state.as_mut().unwrap();
         state.gfx_pipes.commit();
         state.samplers.commit();
     }

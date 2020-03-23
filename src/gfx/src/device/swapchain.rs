@@ -2,6 +2,7 @@ use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use log::trace;
 use prelude::*;
 
 use crate::*;
@@ -209,6 +210,7 @@ impl Swapchain {
         sem: &mut Semaphore,
         timeout: u64,
     ) -> Result<u32, vk::Result> {
+        trace!("acquiring swapchain image");
         let dt = &*self.device.table;
         let mut idx = 0;
         unsafe {
@@ -220,6 +222,7 @@ impl Swapchain {
                 &mut idx,
             ).check()?;
         };
+        trace!("acquired image {}", idx);
         Ok(idx)
     }
 }

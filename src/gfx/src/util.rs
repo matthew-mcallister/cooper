@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![allow(unused_macros)]
 
 use std::cell::Cell;
@@ -243,10 +244,12 @@ macro_rules! enum_map {
     }
 }
 
+// TODO: Math
+
+// These generic functions seem to generate good enough code for now
 crate fn transpose<S: Copy, const M: usize, const N: usize>(mat: [[S; M]; N])
     -> [[S; N]; M]
 {
-    #[allow(deprecated)]
     let mut res: [[S; N]; M] = unsafe { std::mem::uninitialized() };
     for i in 0..M {
         for j in 0..N {
@@ -254,6 +257,65 @@ crate fn transpose<S: Copy, const M: usize, const N: usize>(mat: [[S; M]; N])
         }
     }
     res
+}
+
+crate fn scalar_x_vec<const M: usize>(scalar: f32, vec: [f32; M]) -> [f32; M] {
+    let mut vec = vec;
+    for i in 0..M {
+        vec[i] *= scalar;
+    }
+    vec
+}
+
+crate fn vec_neg<const M: usize>(vec: [f32; M]) -> [f32; M] {
+    scalar_x_vec(-1.0, vec)
+}
+
+crate fn vec_p_vec<const M: usize>(lhs: [f32; M], rhs: [f32; M]) -> [f32; M] {
+    let mut lhs = lhs;
+    for i in 0..M {
+        lhs[i] += rhs[i];
+    }
+    lhs
+}
+
+crate fn mat_x_vec<const M: usize, const N: usize>(
+    mat: [[f32; M]; N],
+    vec: [f32; N],
+) -> [f32; M] {
+    let mut res: [f32; M] = unsafe { std::mem::zeroed() };
+    for i in 0..N {
+        for j in 0..M {
+            res[j] += mat[i][j] * vec[i];
+        }
+    }
+    res
+}
+
+crate fn mat_x_mat<const M: usize, const N: usize, const K: usize>(
+    mat_l: [[f32; M]; N],
+    mat_r: [[f32; N]; K],
+) -> [[f32; M]; K] {
+    let mut res: [[f32; M]; K] = unsafe { std::mem::uninitialized() };
+    for k in 0..K {
+        res[k] = mat_x_vec(mat_l, mat_r[k]);
+    }
+    res
+}
+
+crate fn affine_xform(mat: [[f32; 3]; 3], vec: [f32; 3]) -> [[f32; 4]; 4] {
+    [
+        [mat[0][0], mat[0][1], mat[0][2], 0.0],
+        [mat[1][0], mat[1][1], mat[1][2], 0.0],
+        [mat[2][0], mat[2][1], mat[2][2], 0.0],
+        [vec[0], vec[1], vec[2], 1.0],
+    ]
+}
+
+crate fn rigid_xform_inv(rot: [[f32; 3]; 3], offs: [f32; 3]) -> [[f32; 4]; 4] {
+    let rot = transpose(rot);
+    let offs = mat_x_vec(rot, vec_neg(offs));
+    affine_xform(rot, offs)
 }
 
 #[macro_export]

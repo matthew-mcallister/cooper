@@ -2,8 +2,6 @@
 
 pub mod num;
 
-pub use log::{debug, error, info, log, log_enabled, trace, warn};
-
 #[macro_export]
 macro_rules! c_str {
     ($($str:expr),*$(,)*) => {

@@ -68,7 +68,7 @@ primitive_enum! {
     @[try_from_error: &'static str = "not a valid vertex attribute"]
     @[into: u8, u16, u32, u64, usize]
     #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-    crate enum VertexAttrName {
+    pub enum VertexAttrName {
         Position = 0,
         Normal = 1,
         Tangent = 2,
@@ -95,6 +95,15 @@ wrap_vk_enum! {
         #[derivative(Default)]
         U16 = UINT16,
         U32 = UINT32,
+    }
+}
+
+impl IndexType {
+    pub fn size(self) -> usize {
+        match self {
+            Self::U16 => 2,
+            Self::U32 => 4,
+        }
     }
 }
 

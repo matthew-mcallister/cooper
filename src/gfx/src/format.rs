@@ -1,4 +1,3 @@
-
 macro_rules! impl_format {
     ($($name:ident($vk_format:ident, $size:expr, $($aspect:ident)|*),)*) => {
         /// A selection of the most useful data formats. Keep in mind
@@ -11,7 +10,7 @@ macro_rules! impl_format {
         /// size.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         #[allow(non_camel_case_types)]
-        crate enum Format {
+        pub enum Format {
             $($name,)*
         }
 
@@ -23,7 +22,7 @@ macro_rules! impl_format {
                 )*}
             }
 
-            crate fn size(self) -> usize {
+            pub fn size(self) -> usize {
                 match self {$(
                     Format::$name => $size,
                 )*}
@@ -68,7 +67,7 @@ primitive_enum! {
     @[try_from_error: &'static str = "not a valid dimension"]
     @[into: u8, u16, u32, u64, usize]
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    crate enum Dimension {
+    pub enum Dimension {
         One = 1,
         Two = 2,
         Three = 3,
@@ -76,10 +75,10 @@ primitive_enum! {
     }
 }
 
-crate type ChannelCount = Dimension;
+pub type ChannelCount = Dimension;
 
 impl Format {
-    crate fn is_depth_stencil(self) -> bool {
+    pub fn is_depth_stencil(self) -> bool {
         use vk::ImageAspectFlags as Flags;
         self.aspects().intersects(Flags::DEPTH_BIT | Flags::STENCIL_BIT)
     }

@@ -20,8 +20,9 @@ void main() {
         // TODO: configurable saturation point for interior scenes
         float z = 1 / gl_FragCoord.w;
         float z_far = g_scene_view.perspective.z_far;
+        float z_near = g_scene_view.perspective.z_near;
         // Invert to mimic the real Z buffer
-        float value = 1.0 - z / z_far;
+        float value = 1.0 - z / (z_far - z_near);
         // Seems to improve the black curve; might depend on your screen
         for (uint i = 0; i < 5; i++) {
             value = value * value;

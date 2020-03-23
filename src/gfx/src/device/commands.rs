@@ -2,6 +2,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use derivative::Derivative;
+use log::trace;
 use prelude::*;
 
 use crate::*;
