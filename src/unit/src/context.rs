@@ -69,6 +69,7 @@ struct Sink {
 }
 
 /// Diverts the `print` and `panic` macros to a buffer.
+// TODO: Also divert log::debug, trace, etc.
 #[derive(Derivative)]
 #[derivative(Debug)]
 struct PrintCapture {

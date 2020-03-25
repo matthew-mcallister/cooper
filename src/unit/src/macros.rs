@@ -26,12 +26,12 @@ macro_rules! declare_tests {
 
 #[macro_export]
 macro_rules! collect_tests {
-    ($($mod:ident),*$(,)*) => {
+    ($($($seg:ident)::+),*$(,)*) => {
         #[cfg(test)]
         pub(crate) fn __collect_tests
             (builder: &mut $crate::TestDriverBuilder<test_type!()>)
         {
-            $($mod::__collect_tests(builder);)*
+            $($($seg::)*__collect_tests(builder);)*
         }
     }
 }

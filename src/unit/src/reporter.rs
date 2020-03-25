@@ -112,7 +112,8 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
         self.summary.begin();
     }
 
-    fn before_each(&mut self, test: &Test<D>) {
+    fn before_each(&mut self, test: &Test<D>, filter_matches: bool) {
+        if !filter_matches { return; }
         write!(
             self.out,
             "test {:width$} ... ",
@@ -123,13 +124,16 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
     }
 
     fn after_each(&mut self, test: &Test<D>, result: &TestResult) {
+        self.summary.add_test(test, result);
+
         let s = match result.outcome {
             Outcome::Passed => "ok",
             Outcome::Failed => "FAILED",
             Outcome::Xpassed => "XPASSED",
             Outcome::Xfailed => "xfailed",
             Outcome::Ignored => "ignored",
-            Outcome::Filtered => "filtered",
+            // TODO: Option to show filtered tests
+            Outcome::Filtered => return,
         };
         if self.config.disable_capture {
             // Make it easier to see the outcome through all the output
@@ -138,8 +142,6 @@ impl<D, W: io::Write + std::fmt::Debug> TestReporter<Test<D>>
             writeln!(self.out, "{}", s);
         }
         io::stdout().flush().unwrap();
-
-        self.summary.add_test(test, result);
     }
 
     fn after_all(&mut self, tests: &[Test<D>], results: &[TestResult]) {

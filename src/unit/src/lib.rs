@@ -1,14 +1,19 @@
 #![feature(bool_to_option)]
 #![feature(set_stdio)]
+#![feature(try_blocks)]
 
+use derivative::Derivative;
 use enum_map::Enum;
+use regex::RegexSet;
 
 mod context;
+mod filter;
 #[macro_use]
 mod macros;
 mod reporter;
 
 pub use context::*;
+pub use filter::*;
 pub use macros::*;
 pub use reporter::*;
 
@@ -54,7 +59,7 @@ pub trait TestReporter<T>: std::fmt::Debug {
     fn before_all(&mut self, tests: &[T]);
 
     /// Called in real time after each test is started.
-    fn before_each(&mut self, test: &T);
+    fn before_each(&mut self, test: &T, filter_matches: bool);
 
     /// Called in real time after each test is completed.
     fn after_each(&mut self, test: &T, result: &TestResult);
@@ -138,11 +143,12 @@ impl<D> Test<D> {
 
 /// Collects tests for execution and allows configuring how tests are
 /// processed.
-// TODO: Filters
-#[derive(Debug, Default)]
+#[derive(Debug, Derivative)]
+#[derivative(Default(bound = ""))]
 pub struct TestDriverBuilder<T> {
     tests: Vec<T>,
     reporter: Option<Box<dyn TestReporter<T>>>,
+    filter: Option<Box<dyn TestFilter<T>>>,
     config: RunnerConfig,
 }
 
@@ -158,15 +164,12 @@ pub struct TestDriver<D> {
     results: Vec<TestResult>,
     reporter: Box<dyn TestReporter<Test<D>>>,
     context: Box<dyn TestContext<Test<D>>>,
+    filter: Option<Box<dyn TestFilter<Test<D>>>>,
 }
 
 impl<T> TestDriverBuilder<T> {
     pub fn new() -> Self {
-        TestDriverBuilder {
-            tests: Vec::new(),
-            reporter: None,
-            config: Default::default(),
-        }
+        Default::default()
     }
 
     pub fn add_test(&mut self, test: T) -> &mut Self {
@@ -188,6 +191,11 @@ impl<T> TestDriverBuilder<T> {
         self
     }
 
+    pub fn set_filter(&mut self, filter: Box<dyn TestFilter<T>>) -> &mut Self {
+        self.filter = Some(filter);
+        self
+    }
+
     pub fn set_config(&mut self, config: RunnerConfig) -> &mut Self {
         self.config = config;
         self
@@ -195,6 +203,38 @@ impl<T> TestDriverBuilder<T> {
 }
 
 impl<D> TestDriverBuilder<Test<D>> {
+    /// Initializes a test builder by parsing command line args.
+    pub fn parse_args() -> Self {
+        let args = clap::App::new("test")
+            .arg(clap::Arg::with_name("nocapture")
+                .long("nocapture")
+                .help(concat!(
+                    "Inhibits capture of test output. Print statements ",
+                    "will show on stdout/stderr.",
+                )))
+            .arg(clap::Arg::with_name("filter")
+                .short("f")
+                .long("filter")
+                .takes_value(true)
+                .multiple(true)
+                .help(concat!(
+                    "Filters tests by regex matching. Multiple patterns may ",
+                    "be provided to match additional tests.",
+                )))
+            .get_matches();
+
+        let mut builder = Self::new();
+        builder.set_config(RunnerConfig {
+            disable_capture: args.is_present("nocapture"),
+        });
+        let _: Option<_> = try {
+            let regex = RegexSet::new(args.values_of("filter")?)
+                .expect("invalid regex");
+            builder.set_filter(Box::new(regex));
+        };
+        builder
+    }
+
     pub fn build(self, context: Box<dyn TestContext<Test<D>>>) -> TestDriver<D>
     {
         let reporter = self.reporter
@@ -204,6 +244,7 @@ impl<D> TestDriverBuilder<Test<D>> {
             results: Vec::new(),
             reporter,
             context,
+            filter: self.filter,
         };
         driver.reporter.set_config(self.config.clone());
         driver.context.set_config(self.config.clone());
@@ -221,10 +262,15 @@ impl<D> TestDriver<D> {
     pub fn run(&mut self) {
         self.reporter.before_all(&self.tests);
         for test in self.tests.iter() {
-            self.reporter.before_each(test);
+            let matches = self.filter.is_match(test);
+
+            self.reporter.before_each(test, matches);
 
             let (outcome, output);
-            if test.ignore() {
+            if !matches {
+                outcome = Outcome::Filtered;
+                output = None;
+            } else if test.ignore() {
                 outcome = Outcome::Ignored;
                 output = None;
             } else {
@@ -249,19 +295,6 @@ impl<D> TestDriver<D> {
     // TODO: fn run_parallel()
 }
 
-impl RunnerConfig {
-    /// Produces a config object by parsing command line args.
-    pub fn parse_args() -> Self {
-        let args = clap::App::new("test")
-            .arg(clap::Arg::with_name("nocapture")
-                .long("nocapture")
-                .help(concat!(
-                    "Inhibits capture of test output. Print statements ",
-                    "will show on stdout/stderr.",
-                )))
-            .get_matches();
-        Self {
-            disable_capture: args.is_present("nocapture"),
-        }
-    }
+#[cfg(test)]
+fn main() {
 }
