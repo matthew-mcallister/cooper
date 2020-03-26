@@ -25,6 +25,7 @@ pub struct RenderLoop {
     swapchain: Swapchain,
     renderer: WorldRenderer,
     frame_num: u64,
+    frame_in_flight: u64,
     swapchain_sem: Semaphore,
     render_sem: Semaphore,
     render_fence: Fence,
@@ -57,7 +58,7 @@ impl SystemState {
 
 impl Drop for RenderLoop {
     fn drop(&mut self) {
-        self.render_fence.wait();
+        self.finish_frame();
         // For good measure
         self.device.wait_idle();
     }
@@ -83,7 +84,7 @@ impl RenderLoop {
         );
 
         let swapchain_sem = Semaphore::new(Arc::clone(&device));
-        let render_fence = Fence::new(Arc::clone(&device), true);
+        let render_fence = Fence::new(Arc::clone(&device), false);
         let render_sem = Semaphore::new(Arc::clone(&device));
 
         Ok(Self {
@@ -91,7 +92,8 @@ impl RenderLoop {
             gfx_queue,
             swapchain,
             renderer,
-            frame_num: 0,
+            frame_num: 1,
+            frame_in_flight: 0,
             swapchain_sem,
             render_sem,
             render_fence,
@@ -99,14 +101,23 @@ impl RenderLoop {
         })
     }
 
-    pub fn render(&mut self, mut world: RenderWorld) {
-        self.state = world.state.take();
+    fn is_frame_in_flight(&self) -> bool {
+        self.frame_in_flight == self.frame_num
+    }
 
+    fn finish_frame(&mut self) {
+        // This method should prevent deadlocking in the destructor.
+        if !self.is_frame_in_flight() { return; }
         debug!("waiting for frame {}", self.frame_num);
         self.render_fence.wait();
         self.render_fence.reset();
-
         self.frame_num += 1;
+    }
+
+    pub fn render(&mut self, mut world: RenderWorld) {
+        self.state = world.state.take();
+
+        self.finish_frame();
 
         debug!("beginning frame {}", self.frame_num);
         self.pre_render();
@@ -116,6 +127,7 @@ impl RenderLoop {
             .unwrap();
 
         let state = Arc::new(self.state.take().unwrap());
+        self.frame_in_flight += 1;
         self.renderer.run(
             Arc::clone(&state),
             world,

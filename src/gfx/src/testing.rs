@@ -99,12 +99,12 @@ crate fn run_tests() {
     let thread = thread::spawn(move || {
         let context = VulkanTestContext::new(proxy);
         let context = unit::PanicTestContext::new(context);
-        let mut builder = unit::TestDriverBuilder::<VulkanTest>::new();
+        let mut builder = unit::TestDriverBuilder::<VulkanTest>::parse_args();
         crate::__collect_tests(&mut builder);
-        builder.set_config(unit::RunnerConfig::parse_args());
         let mut driver = builder.build(Box::new(context));
         driver.run();
     });
+    // FIXME: This is deadlocking when the test thread crashes
     evt.pump();
     thread.join().unwrap();
 }

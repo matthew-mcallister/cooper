@@ -122,6 +122,8 @@ impl DebugRenderer {
         meshes: Vec<DebugMesh>,
         cmds: &mut SubpassCmds,
     ) {
+        if meshes.is_empty() { return; }
+
         let state = view.state();
         self.update_descriptors(view, &meshes);
 

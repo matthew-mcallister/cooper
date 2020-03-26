@@ -3,6 +3,7 @@ use std::ptr;
 use std::sync::{Arc, Mutex};
 
 use derivative::Derivative;
+use log::trace;
 use prelude::*;
 
 use crate::*;
@@ -127,6 +128,11 @@ impl Queue {
         submissions: &[SubmitInfo],
         fence: Option<&mut Fence>,
     ) {
+        trace!(
+            "submitting commands: queue: {:?}, submissions: {:?}, fence: {:?}",
+            self, submissions, fence,
+        );
+
         let _lock = self.mutex.lock();
 
         let mut sems = Vec::with_capacity(submissions.len());
@@ -163,6 +169,14 @@ impl Queue {
         swapchain: &mut Swapchain,
         image: u32,
     ) -> vk::Result {
+        trace!(
+            concat!(
+                "presenting to queue: queue: {:?}, wait_sems: {:?}, ",
+                "swapchain: {:?}, image: {}",
+            ),
+            self, wait_sems, swapchain, image,
+        );
+
         let _lock = self.mutex.lock();
         let wait_sems: Vec<_> = wait_sems.iter().map(|sem| sem.inner())
             .collect();
