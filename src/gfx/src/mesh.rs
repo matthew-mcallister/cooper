@@ -4,7 +4,7 @@ use crate::*;
 
 #[derive(Debug, Default)]
 pub struct RenderMesh {
-    crate tri_count: u32,
+    crate vertex_count: u32,
     crate index: Option<IndexBuffer>,
     crate bindings: EnumMap<VertexAttrName, Option<AttrBuffer>>,
 }
@@ -23,8 +23,8 @@ crate struct IndexBuffer {
 
 /// Allows building a mesh without directly using the device interface.
 #[derive(Debug)]
-pub struct RenderMeshBuilder<'wld> {
-    state: &'wld SystemState,
+pub struct RenderMeshBuilder<'a> {
+    state: &'a SystemState,
     lifetime: Lifetime,
     mesh: RenderMesh,
 }
@@ -49,10 +49,18 @@ impl RenderMesh {
     }
 }
 
-impl<'wld> RenderMeshBuilder<'wld> {
-    pub fn new(world: &'wld RenderWorld) -> Self {
+impl<'a> RenderMeshBuilder<'a> {
+    pub fn from_world(world: &'a RenderWorld) -> Self {
         Self {
             state: world.state(),
+            lifetime: Lifetime::Static,
+            mesh: Default::default(),
+        }
+    }
+
+    pub fn from_loop(rloop: &'a RenderLoop) -> Self {
+        Self {
+            state: rloop.state.as_ref().unwrap(),
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -63,33 +71,28 @@ impl<'wld> RenderMeshBuilder<'wld> {
         self
     }
 
-    pub fn tri_count(&mut self, tri_count: u32) -> &mut Self {
-        self.mesh.tri_count = tri_count;
+    pub fn vertex_count(&mut self, vertex_count: u32) -> &mut Self {
+        self.mesh.vertex_count = vertex_count;
         self
     }
 
-    pub fn index<T: Copy>(&mut self, ty: IndexType, data: &[T]) -> &mut Self {
-        assert_eq!(std::mem::size_of::<T>(), ty.size());
-        assert_eq!(data.len(), 3 * self.mesh.tri_count as usize);
+    pub fn index(&mut self, ty: IndexType, data: &[u8]) -> &mut Self {
+        assert_eq!(data.len() % ty.size(), 0);
         let binding = BufferBinding::Index;
         let lifetime = self.lifetime;
-        assert_eq!(lifetime, Lifetime::Frame);
         let alloc = self.state.buffers.box_slice(binding, lifetime, data)
             .into_inner();
         self.mesh.index = Some(IndexBuffer { alloc, ty });
         self
     }
 
-    pub fn vertex<T: Copy>(
-        &mut self,
-        attr: VertexAttrName,
-        format: Format,
-        data: &[T],
-    ) -> &mut Self {
-        assert_eq!(std::mem::size_of::<T>(), format.size());
+    pub fn attr(&mut self, attr: VertexAttrName, format: Format, data: &[u8])
+        -> &mut Self
+    {
+        assert_eq!(data.len() % format.size(), 0);
+        assert_eq!(data.len() / format.size(), self.mesh.vertex_count as usize);
         let binding = BufferBinding::Vertex;
         let lifetime = self.lifetime;
-        assert_eq!(lifetime, Lifetime::Frame);
         let alloc = self.state.buffers.box_slice(binding, lifetime, data)
             .into_inner();
         self.mesh.bindings[attr] = Some(AttrBuffer { alloc, format });

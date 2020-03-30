@@ -441,6 +441,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
 
 impl<A: Allocator> Drop for BufferPool<A> {
     fn drop(&mut self) {
+        // TODO: Why not just log and continue running?
         if std::thread::panicking() { return; }
         for chunk in self.chunks.iter() {
             assert_eq!(Arc::strong_count(chunk), 1,

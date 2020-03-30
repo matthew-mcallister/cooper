@@ -1,7 +1,11 @@
 const uint CONST_ID_DEBUG_DISPLAY = 0;
 
-const uint DEBUG_DISPLAY_DEPTH = 0;
-const uint DEBUG_DISPLAY_NORMAL = 1;
+const uint DEBUG_DISPLAY_CHECKER = 0;
+const uint DEBUG_DISPLAY_DEPTH = 1;
+const uint DEBUG_DISPLAY_NORMAL = 2;
+
+const uint VERTEX_ATTR_POSITION = 0;
+const uint VERTEX_ATTR_NORMAL = 1;
 
 struct Perspective {
     mat4 proj;
@@ -18,6 +22,13 @@ struct SceneView {
     Perspective perspective;
     mat4 view;
     mat4 view_inv;
+};
+
+struct DebugInstance {
+    mat4 mv;
+    vec4 colors[2];
+    // TODO:
+    //mat4 mvp;
 };
 
 // Good for debugging

@@ -12,6 +12,9 @@ SHADER_SRC_FILES := \
     debug_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
 
+#SHADER_HDR_FILES := \
+#	common_inc.glsl
+
 SHADER_OBJS := $(patsubst %.glsl,$(SHADER_OBJ_DIR)/%.spv,$(SHADER_SRC_FILES))
 
 .PHONY: shaders

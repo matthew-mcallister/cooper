@@ -101,6 +101,10 @@ impl RenderLoop {
         })
     }
 
+    crate fn frame_num(&self) -> u64 {
+        self.frame_num
+    }
+
     fn is_frame_in_flight(&self) -> bool {
         self.frame_in_flight == self.frame_num
     }

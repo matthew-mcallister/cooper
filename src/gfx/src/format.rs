@@ -39,13 +39,14 @@ macro_rules! impl_format {
     }
 }
 
+// TODO: What are good HDR render target formats?
+//       Cf. Unreal r.SceneColorFormat, light accumulation buffer
 impl_format! {
     R8(R8_UNORM, 1, COLOR_BIT),
-    R16F(R16_SFLOAT, 2, COLOR_BIT),
     R32F(R32_SFLOAT, 4, COLOR_BIT),
     RG8(R8G8_UNORM, 2, COLOR_BIT),
+    // TODO: Why is this the only 16 bit UNORM type? Vertex UVs?
     RG16(R16G16_UNORM, 2, COLOR_BIT),
-    RG16F(R16G16_SFLOAT, 4, COLOR_BIT),
     RG32F(R32G32_SFLOAT, 8, COLOR_BIT),
     RGB8(R8G8B8_UNORM, 3, COLOR_BIT),
     RGB16F(R16G16B16_SFLOAT, 6, COLOR_BIT),

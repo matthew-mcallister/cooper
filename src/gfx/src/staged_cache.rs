@@ -16,6 +16,7 @@ use parking_lot::Mutex;
 #[derivative(Debug(bound = "FnvHashMap<K, V>: Debug"))]
 crate struct StagedCache<K, V> {
     committed: FnvHashMap<K, V>,
+    // TODO: *Maybe* should be a true concurrent hashmap
     staged: Mutex<FnvHashMap<K, V>>,
 }
 

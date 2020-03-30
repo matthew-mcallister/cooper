@@ -154,9 +154,13 @@ impl ShaderSpec {
 fn get_shader_interface(reflected: &spirv_reflect::ShaderModule) ->
     (Vec<ShaderLocation>, Vec<ShaderLocation>)
 {
-    let vars = |vars: Vec<ReflectInterfaceVariable>| vars.into_iter()
-        .filter_map(|var| (var.location != !0).then_some(var.location))
-        .collect();
+    let vars = |vars: Vec<ReflectInterfaceVariable>| {
+        let mut vars: Vec<_> = vars.into_iter()
+            .filter_map(|var| (var.location != !0).then_some(var.location))
+            .collect();
+        vars.sort_unstable();
+        vars
+    };
     let inputs = vars(reflected.enumerate_input_variables(None).unwrap());
     let outputs = vars(reflected.enumerate_output_variables(None).unwrap());
     (inputs, outputs)

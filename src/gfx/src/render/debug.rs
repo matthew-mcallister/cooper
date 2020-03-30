@@ -6,8 +6,9 @@ use crate::*;
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 pub enum DebugDisplay {
-    Depth = 0,
-    Normal = 1,
+    Checker = 0,
+    Depth = 1,
+    Normal = 2,
 }
 
 #[derive(Debug)]
@@ -16,6 +17,7 @@ pub struct DebugMesh {
     pub display: DebugDisplay,
     pub rot: [[f32; 3]; 3],
     pub pos: [f32; 3],
+    pub colors: [[f32; 4]; 2],
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -24,6 +26,7 @@ crate struct DebugInstance {
     crate mv: [[f32; 4]; 4],
     // TODO:
     //crate mvp: [[f32; 4]; 4],
+    crate colors: [[f32; 4]; 2],
 }
 
 // Minimal mesh rendering for visualization and debugging.
@@ -34,6 +37,12 @@ crate struct DebugRenderer {
     vert_shader: Arc<ShaderSpec>,
     frag_shaders: EnumMap<DebugDisplay, Arc<ShaderSpec>>,
     desc_set: DescriptorSet,
+}
+
+impl DebugDisplay {
+    fn values() -> impl Iterator<Item = Self> {
+        (0..<Self as Enum<()>>::POSSIBLE_VALUES).map(Enum::<()>::from_usize)
+    }
 }
 
 impl DebugRenderer {
@@ -69,6 +78,7 @@ impl DebugRenderer {
     crate fn create_set_layout(device: Arc<Device>) -> Arc<DescriptorSetLayout>
     {
         let bindings = [
+            // Globals
             vk::DescriptorSetLayoutBinding {
                 binding: 0,
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
@@ -77,11 +87,13 @@ impl DebugRenderer {
                     | vk::ShaderStageFlags::FRAGMENT_BIT,
                 ..Default::default()
             },
+            // Per-instance
             vk::DescriptorSetLayoutBinding {
                 binding: 1,
                 descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
                 descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
+                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+                    | vk::ShaderStageFlags::FRAGMENT_BIT,
                 ..Default::default()
             },
         ];
@@ -98,8 +110,8 @@ impl DebugRenderer {
         self.desc_set.write_buffer(0, view.uniform_buffer.range());
         let mesh_iter = meshes.iter().map(|mesh| {
             let m = affine_xform(mesh.rot, mesh.pos);
-            let mv = mat_x_mat(view.uniforms.view_inv, m);
-            DebugInstance { mv }
+            let mv = mat_x_mat(view.uniforms.view, m);
+            DebugInstance { mv, colors: mesh.colors }
         });
         let instances = view.state().buffers.box_iter(
             BufferBinding::Storage, Lifetime::Frame, mesh_iter);
@@ -133,11 +145,7 @@ impl DebugRenderer {
         );
         desc.stages[ShaderStage::Vertex] = Some(Arc::clone(&self.vert_shader));
 
-        let displays = [
-            DebugDisplay::Depth,
-            DebugDisplay::Normal,
-        ];
-        for &display in displays.iter() {
+        for display in DebugDisplay::values() {
             desc.stages[ShaderStage::Fragment] =
                 Some(Arc::clone(&self.frag_shaders[display]));
             for (i, mesh) in meshes.iter()
@@ -156,7 +164,7 @@ impl DebugRenderer {
 
                 cmds.bind_gfx_descs(0, &self.desc_set);
 
-                let vert_count = 3 * mesh.tri_count;
+                let vert_count = mesh.vertex_count;
                 cmds.bind_vertex_buffers(&mesh.data());
                 if let Some(ref index) = &mesh.index {
                     cmds.bind_index_buffer(index.alloc.range(), index.ty);

@@ -8,7 +8,7 @@ crate struct SceneViewState {
     crate uniforms: SceneViewUniforms,
     crate uniform_buffer: BufferBox<SceneViewUniforms>,
     // TODO:
-    //crate culling_enabled: bool,
+    //crate culling_disabled: bool,
     crate cull_mode: vk::CullModeFlags,
 }
 
@@ -58,8 +58,8 @@ impl SceneViewState {
     crate fn new(state: Arc<Box<SystemState>>, world: &RenderWorld) -> Self {
         let view = world.view;
 
-        let view_mat = affine_xform(view.rot, view.pos);
-        let view_inv = rigid_xform_inv(view.rot, view.pos);
+        let view_inv = affine_xform(view.rot, view.pos);
+        let view_mat = rigid_xform_inv(view.rot, view.pos);
 
         let uniforms = SceneViewUniforms {
             perspective: view.perspective.into(),
@@ -76,6 +76,7 @@ impl SceneViewState {
             state,
             uniforms,
             uniform_buffer,
+            // TODO: may encounter double-sided geometry
             cull_mode: vk::CullModeFlags::BACK_BIT,
         }
     }
