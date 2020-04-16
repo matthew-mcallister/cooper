@@ -9,11 +9,11 @@ use crate::*;
 crate struct VertexLayout {
     crate topology: PrimitiveTopology,
     crate packing: VertexPacking,
-    crate attrs: EnumMap<VertexAttrName, Option<VertexAttr>>,
+    crate attrs: EnumMap<VertexAttr, Option<VertexLayoutAttr>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate struct VertexAttr {
+crate struct VertexLayoutAttr {
     crate format: Format,
 }
 
@@ -54,7 +54,7 @@ wrap_vk_enum! {
 crate struct VertexInputLayout {
     pub(super) topology: PrimitiveTopology,
     pub(super) packing: VertexPacking,
-    pub(super) attrs: EnumMap<VertexAttrName, Option<VertexInputAttr>>,
+    pub(super) attrs: EnumMap<VertexAttr, Option<VertexInputAttr>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -68,7 +68,7 @@ primitive_enum! {
     @[try_from_error: &'static str = "not a valid vertex attribute"]
     @[into: u8, u16, u32, u64, usize]
     #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-    pub enum VertexAttrName {
+    pub enum VertexAttr {
         Position = 0,
         Normal = 1,
         Tangent = 2,
@@ -85,7 +85,7 @@ primitive_enum! {
 // TODO: Index buffer!
 #[derive(Clone, Copy, Debug)]
 crate enum VertexData<'a> {
-    Unpacked(EnumMap<VertexAttrName, Option<BufferRange<'a>>>),
+    Unpacked(EnumMap<VertexAttr, Option<BufferRange<'a>>>),
 }
 
 wrap_vk_enum! {
@@ -186,8 +186,8 @@ mod tests {
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        use VertexAttrName as Attr;
-        let attr = |format| Some(VertexAttr { format });
+        use VertexAttr as Attr;
+        let attr = |format| Some(VertexLayoutAttr { format });
 
         let state = SystemState::new(Arc::clone(vars.device()));
         let globals = Globals::new(&state);

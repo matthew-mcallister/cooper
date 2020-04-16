@@ -113,17 +113,17 @@ impl Mesh {
 }
 
 #[throws]
-fn map_semantic(sem: &gltf::Semantic) -> VertexAttrName {
+fn map_semantic(sem: &gltf::Semantic) -> VertexAttr {
     use gltf::Semantic;
     match sem {
-        Semantic::Positions => VertexAttrName::Position,
-        Semantic::Normals => VertexAttrName::Normal,
-        Semantic::Tangents => VertexAttrName::Tangent,
-        Semantic::Colors(0) => VertexAttrName::Color,
-        Semantic::TexCoords(0) => VertexAttrName::Texcoord0,
-        Semantic::TexCoords(1) => VertexAttrName::Texcoord1,
-        Semantic::Joints(0) => VertexAttrName::Joints,
-        Semantic::Weights(0) => VertexAttrName::Weights,
+        Semantic::Positions => VertexAttr::Position,
+        Semantic::Normals => VertexAttr::Normal,
+        Semantic::Tangents => VertexAttr::Tangent,
+        Semantic::Colors(0) => VertexAttr::Color,
+        Semantic::TexCoords(0) => VertexAttr::Texcoord0,
+        Semantic::TexCoords(1) => VertexAttr::Texcoord1,
+        Semantic::Joints(0) => VertexAttr::Joints,
+        Semantic::Weights(0) => VertexAttr::Weights,
         _ => throw!(anyhow!("unsupported semantic")),
     }
 }

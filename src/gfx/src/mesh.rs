@@ -6,7 +6,7 @@ use crate::*;
 pub struct RenderMesh {
     crate vertex_count: u32,
     crate index: Option<IndexBuffer>,
-    crate bindings: EnumMap<VertexAttrName, Option<AttrBuffer>>,
+    crate bindings: EnumMap<VertexAttr, Option<AttrBuffer>>,
 }
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ pub struct RenderMeshBuilder<'a> {
 
 impl RenderMesh {
     crate fn vertex_layout(&self) -> VertexLayout {
-        let attrs = |name| Some(VertexAttr {
+        let attrs = |name| Some(VertexLayoutAttr {
             format: self.bindings[name].as_ref()?.format,
         });
         VertexLayout {
@@ -86,7 +86,7 @@ impl<'a> RenderMeshBuilder<'a> {
         self
     }
 
-    pub fn attr(&mut self, attr: VertexAttrName, format: Format, data: &[u8])
+    pub fn attr(&mut self, attr: VertexAttr, format: Format, data: &[u8])
         -> &mut Self
     {
         assert_eq!(data.len() % format.size(), 0);
@@ -127,7 +127,7 @@ mod tests {
         };
         builder.tri_count(2)
             .index(IndexType::U16, idxs)
-            .vertex(VertexAttrName::Position, Format::RGB32F, positions);
+            .vertex(VertexAttr::Position, Format::RGB32F, positions);
         builder.build()
     }
 
