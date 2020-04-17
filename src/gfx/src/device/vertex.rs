@@ -115,6 +115,7 @@ impl VertexLayout {
 
 impl VertexInputLayout {
     crate fn new(layout: &VertexLayout, shader: &Shader) -> Self {
+        assert_eq!(shader.stage(), ShaderStage::Vertex);
         let mut attrs = EnumMap::<_, Option<VertexInputAttr>>::default();
         for &location in shader.inputs().iter() {
             let name = location.try_into().unwrap();
@@ -195,7 +196,7 @@ mod tests {
         let layout = VertexLayout {
             attrs: enum_map! {
                 Attr::Position =>   attr(Format::RGB32F),
-                Attr::QTangent =>   attr(Format::RGBA32F),
+                Attr::Normal =>     attr(Format::RGB32F),
                 Attr::Texcoord0 =>  attr(Format::RG16),
                 Attr::Color =>      attr(Format::RGB8),
                 Attr::Joints =>     attr(Format::RGBA8U),

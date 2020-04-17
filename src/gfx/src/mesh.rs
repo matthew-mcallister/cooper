@@ -1,12 +1,13 @@
 use enum_map::EnumMap;
+use itertools::Itertools;
 
 use crate::*;
 
 #[derive(Debug, Default)]
 pub struct RenderMesh {
-    crate vertex_count: u32,
-    crate index: Option<IndexBuffer>,
-    crate bindings: EnumMap<VertexAttr, Option<AttrBuffer>>,
+    vertex_count: u32,
+    index: Option<IndexBuffer>,
+    bindings: EnumMap<VertexAttr, Option<AttrBuffer>>,
 }
 
 #[derive(Debug)]
@@ -30,6 +31,19 @@ pub struct RenderMeshBuilder<'a> {
 }
 
 impl RenderMesh {
+    /// The number of vertices in the mesh.
+    crate fn vertex_count(&self) -> u32 {
+        self.vertex_count
+    }
+
+    crate fn index(&self) -> Option<&IndexBuffer> {
+        self.index.as_ref()
+    }
+
+    crate fn bindings(&self) -> &EnumMap<VertexAttr, Option<AttrBuffer>> {
+        &self.bindings
+    }
+
     crate fn vertex_layout(&self) -> VertexLayout {
         let attrs = |name| Some(VertexLayoutAttr {
             format: self.bindings[name].as_ref()?.format,
@@ -71,11 +85,6 @@ impl<'a> RenderMeshBuilder<'a> {
         self
     }
 
-    pub fn vertex_count(&mut self, vertex_count: u32) -> &mut Self {
-        self.mesh.vertex_count = vertex_count;
-        self
-    }
-
     pub fn index(&mut self, ty: IndexType, data: &[u8]) -> &mut Self {
         assert_eq!(data.len() % ty.size(), 0);
         let binding = BufferBinding::Index;
@@ -90,7 +99,6 @@ impl<'a> RenderMeshBuilder<'a> {
         -> &mut Self
     {
         assert_eq!(data.len() % format.size(), 0);
-        assert_eq!(data.len() / format.size(), self.mesh.vertex_count as usize);
         let binding = BufferBinding::Vertex;
         let lifetime = self.lifetime;
         let alloc = self.state.buffers.box_slice(binding, lifetime, data)
@@ -99,23 +107,50 @@ impl<'a> RenderMeshBuilder<'a> {
         self
     }
 
-    pub unsafe fn build(self) -> RenderMesh {
+    fn set_vertex_count(&mut self) {
+        // TODO: Why doesn't enum_map::Values implement Clone!
+        let (min, max) = self.mesh.bindings.values()
+            .filter_map(|attr| Some(attr.as_ref()?.count()))
+            .minmax().into_option()
+            .unwrap();
+        assert_eq!(min, max);
+        self.mesh.vertex_count = min;
+    }
+
+    pub unsafe fn build(mut self) -> RenderMesh {
+        self.set_vertex_count();
         self.mesh
+    }
+}
+
+impl AttrBuffer {
+    /// The number of elements in the buffer.
+    crate fn count(&self) -> u32 {
+        (self.alloc.size() / self.format.size() as vk::DeviceSize) as _
+    }
+}
+
+impl IndexBuffer {
+    /// The number of elements in the buffer.
+    crate fn count(&self) -> u32 {
+        (self.alloc.size() / self.ty.size() as vk::DeviceSize) as _
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use prelude::*;
     use super::*;
 
     unsafe fn create_mesh(state: &SystemState) -> RenderMesh {
-        let positions: &[[f32; 3]] = &[
+        let pos: &[[f32; 3]] = &[
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [1.0, 1.0, 0.0],
         ];
+        let normal: &[[f32; 3]] = &[[0.0, 0.0, -1.0]; 4];
         let idxs: &[u16] = &[
             0, 3, 1,
             0, 2, 3,
@@ -125,9 +160,9 @@ mod tests {
             lifetime: Lifetime::Frame,
             mesh: Default::default(),
         };
-        builder.tri_count(2)
-            .index(IndexType::U16, idxs)
-            .vertex(VertexAttr::Position, Format::RGB32F, positions);
+        builder.index(IndexType::U16, idxs.as_bytes())
+            .attr(VertexAttr::Position, Format::RGB32F, pos.as_bytes())
+            .attr(VertexAttr::Normal, Format::RGB32F, normal.as_bytes());
         builder.build()
     }
 
@@ -180,7 +215,7 @@ mod tests {
         cmds.bind_index_buffer(idx.alloc.range(), idx.ty);
 
         cmds.bind_vertex_buffers(&mesh.data());
-        cmds.draw_indexed(3 * mesh.tri_count, 1);
+        cmds.draw_indexed(mesh.vertex_count, 1);
 
         let (_, _) = cmds.exit_subpass().end().end();
     }

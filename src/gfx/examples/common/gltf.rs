@@ -99,7 +99,7 @@ impl Mesh {
             anyhow!("attribute counts not equal"));
 
         let mut builder = RenderMeshBuilder::from_loop(rl);
-        builder.lifetime(Lifetime::Static).vertex_count(vertex_count as _);
+        builder.lifetime(Lifetime::Static);
         for &(attr, fmt, data) in attrs.iter() {
             builder.attr(attr, fmt, data);
         }

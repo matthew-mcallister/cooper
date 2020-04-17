@@ -164,12 +164,13 @@ impl DebugRenderer {
 
                 cmds.bind_gfx_descs(0, &self.desc_set);
 
-                let vert_count = mesh.vertex_count;
                 cmds.bind_vertex_buffers(&mesh.data());
-                if let Some(ref index) = &mesh.index {
+                if let Some(ref index) = mesh.index() {
+                    let vert_count = index.count();
                     cmds.bind_index_buffer(index.alloc.range(), index.ty);
                     cmds.draw_indexed_offset(vert_count, 1, 0, 0, inst);
                 } else {
+                    let vert_count = mesh.vertex_count();
                     cmds.draw_offset(vert_count, 1, 0, inst);
                 }
             }
