@@ -1,4 +1,5 @@
 #![feature(crate_visibility_modifier)]
+#![feature(exclusive_range_pattern)]
 #![feature(exact_size_is_empty)]
 #![feature(try_blocks)]
 
@@ -25,34 +26,54 @@ fn identity() -> [[f32; 3]; 3] {
     ]
 }
 
-unsafe fn render_world(world: &mut RenderWorld, mesh: Arc<RenderMesh>) {
-    world.add_debug(DebugMesh {
-        mesh,
-        display: DebugDisplay::Checker,
-        // TODO: rot is a misnomer
-        // TODO: Vary with time/input
-        rot: [
-            [-10.0, 0.0, 0.0],
-            [0.0, -10.0, 0.0],
-            [0.0, 0.0, -10.0],
-        ],
-        pos: [0.0, 0.25, -0.4],
-        colors: [[1.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]],
-    });
-
+unsafe fn render_world(world: &mut RenderWorld, mesh: &Mesh) {
     let mut view = SceneView::default();
 
-    let (z_near, z_far) = (0.1, 3.0);
-    let tan_fovy2 = 45.0f32.to_radians().tan();
+    let fovy2 = 45.0f32.to_radians();
+    let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
+
+    // Calculate camera position and near/far planes, chosen so that
+    // the mesh is always fully visible.
+    let std::ops::Range { start, end } = mesh.bbox;
+    let diam = (0..3).map(|i| { let x = end[i] - start[i]; x * x })
+        .sum::<f32>().sqrt();
+    let radius = diam / 2.0;
+    let mut mid = [0.0; 3];
+    (0..3).for_each(|i| mid[i] = (end[i] + start[i]) / 2.0);
+
+    // Increase distance to center a bit in case mesh is spherical
+    let dist = 1.1 * radius / fovy2.sin();
+    let (z_near, z_far) = (dist - radius, dist + radius);
+
     let (min_depth, max_depth) = (1.0, 0.0);
     view.perspective = PerspectiveParams {
         z_near, z_far, tan_fovx2, tan_fovy2, min_depth, max_depth,
     };
 
     view.rot = identity();
-    view.pos = [0.0, 0.0, -1.0];
+    view.pos = [mid[0], mid[1], mid[2] - dist];
     world.set_view(view);
+
+    // Framerate is not bounded yet, so the frequency is kind of
+    // arbitrary. Also no screen clearing, so it looks awful.
+    let t = world.frame_num() as f32 / 60.0;
+    let f = 0.2;
+    let phi = 2.0 * std::f32::consts::PI * f * t;
+    let (c, s) = (phi.cos(), phi.sin());
+    let rot = [
+        [c, 0.0, s],
+        [0.0, 1.0, 0.0],
+        [-s, 0.0, c],
+    ];
+
+    world.add_debug(DebugMesh {
+        mesh: Arc::clone(&mesh.render_mesh),
+        display: DebugDisplay::Normal,
+        rot,
+        pos: Default::default(),
+        colors: [[1.0, 0.0, 1.0, 1.0], [0.5, 0.5, 0.5, 1.0]],
+    });
 }
 
 unsafe fn unsafe_main() {
@@ -75,11 +96,11 @@ unsafe fn unsafe_main() {
 
         let path = std::env::var("GLTF_PATH")?;
         let bundle = GltfBundle::import(&path)?;
-        let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?.render_mesh);
+        let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
 
         while !window.should_close() {
             let mut world = RenderWorld::new(&mut rl);
-            render_world(&mut world, Arc::clone(&mesh));
+            render_world(&mut world, &mesh);
             rl.render(world);
         }
 

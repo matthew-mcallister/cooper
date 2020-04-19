@@ -3,6 +3,7 @@ use itertools::Itertools;
 
 use crate::*;
 
+// TODO: Might need bbox property
 #[derive(Debug, Default)]
 pub struct RenderMesh {
     vertex_count: u32,

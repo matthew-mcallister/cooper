@@ -5,15 +5,18 @@ pub struct RenderWorld {
     crate state: Option<Box<SystemState>>,
     crate debug: Vec<DebugMesh>,
     crate view: SceneView,
+    crate frame_num: u64,
 }
 
 impl RenderWorld {
     pub fn new(rloop: &mut RenderLoop) -> Self {
+        let frame_num = rloop.frame_num();
         let state = rloop.state.take().unwrap();
         Self {
             state: Some(state),
             debug: Vec::new(),
             view: Default::default(),
+            frame_num,
         }
     }
 
@@ -31,6 +34,10 @@ impl RenderWorld {
 
     pub fn set_view(&mut self, view: SceneView) {
         self.view = view
+    }
+
+    pub fn frame_num(&self) -> u64 {
+        self.frame_num
     }
 }
 

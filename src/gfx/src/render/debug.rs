@@ -15,6 +15,7 @@ pub enum DebugDisplay {
 pub struct DebugMesh {
     pub mesh: Arc<RenderMesh>,
     pub display: DebugDisplay,
+    // TODO: rot is a misnomer as the matrix is arbitrary
     pub rot: [[f32; 3]; 3],
     pub pos: [f32; 3],
     pub colors: [[f32; 4]; 2],

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{self as any, anyhow, Context, Error};
 use cooper_gfx::*;
 use fehler::{throw, throws};
@@ -13,7 +15,8 @@ crate struct GltfBundle {
 
 #[derive(Debug)]
 crate struct Mesh {
-    crate render_mesh: RenderMesh,
+    crate bbox: std::ops::Range<[f32; 3]>,
+    crate render_mesh: Arc<RenderMesh>,
 }
 
 impl GltfBundle {
@@ -62,6 +65,9 @@ impl Mesh {
         tassert!(prim.mode() == mesh::Mode::Triangles,
             anyhow!("unsupported primitive topology: {:?}", prim.mode()));
 
+        let bbox = prim.bounding_box();
+        let bbox = bbox.min..bbox.max;
+
         let mut attrs = Vec::new();
         for (sem, accessor) in prim.attributes() {
             // TODO: try block results in bad indentation
@@ -106,9 +112,12 @@ impl Mesh {
         if let Some((ty, buf)) = index {
             builder.index(ty, buf);
         }
-        let render_mesh = unsafe { builder.build() };
+        let render_mesh = unsafe { Arc::new(builder.build()) };
 
-        Self { render_mesh }
+        Self {
+            bbox,
+            render_mesh,
+        }
     }
 }
 
