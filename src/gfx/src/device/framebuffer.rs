@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 
@@ -32,6 +30,7 @@ impl Drop for Framebuffer {
 impl Framebuffer {
     crate unsafe fn new(
         pass: Arc<RenderPass>,
+        // TODO: Should be EnumMap<AttachmentName, Attachment>
         attachments: Vec<Attachment>,
     ) -> Self {
         create_framebuffer(pass, attachments)

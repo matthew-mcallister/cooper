@@ -19,20 +19,38 @@ crate struct Scheduler {
 #[derivative(Debug)]
 crate struct RenderPassNode {
     framebuffer: Arc<Framebuffer>,
+    clear_values: Vec<vk::ClearValue>,
     // An array of tasks per subpass
     // TODO: Maybe tasks should be named for debug output purposes
+    // All rendering nodes really
     #[derivative(Debug = "ignore")]
     tasks: Vec<Vec<SubpassTask>>,
 }
 
 impl RenderPassNode {
     crate fn new(framebuffer: Arc<Framebuffer>) -> Self {
-        let tasks = std::iter::repeat_with(Default::default)
-            .take(framebuffer.pass().subpasses().len())
+        Self::with_clear(framebuffer, Vec::new())
+    }
+
+    crate fn with_clear(
+        framebuffer: Arc<Framebuffer>,
+        clear_values: Vec<vk::ClearValue>,
+    ) -> Self {
+        let tasks: Vec<_> = (0..framebuffer.pass().subpasses().len())
+            .map(|_| Vec::new())
             .collect();
+
+        // validate
+        for (i, _) in framebuffer.pass().attachments().iter().enumerate()
+            .filter(|(_, attch)| attch.load_op == vk::AttachmentLoadOp::CLEAR)
+        {
+            assert!(clear_values.len() > i);
+        }
+
         RenderPassNode {
-            tasks,
             framebuffer,
+            clear_values,
+            tasks,
         }
     }
 
@@ -65,6 +83,7 @@ impl Scheduler {
         let cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             pass.framebuffer,
+            &pass.clear_values,
             SubpassContents::Inline,
         );
 

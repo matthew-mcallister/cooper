@@ -9,6 +9,7 @@ crate struct WorldRenderer {
     scheduler: Scheduler,
     pass: Arc<TrivialPass>,
     framebuffers: Vec<Arc<Framebuffer>>,
+    clear_values: [vk::ClearValue; 1],
     debug: Option<Box<DebugRenderer>>,
 }
 
@@ -21,18 +22,23 @@ impl WorldRenderer {
     ) -> Self {
         let pass = Arc::new(TrivialPass::new(Arc::clone(&state.device)));
         let framebuffers = pass.create_framebuffers(&swapchain);
+        let clear_values = [vk::ClearValue {
+            color: vk::ClearColorValue { float_32: [0.0; 4], },
+        }];
         let debug = DebugRenderer::new(state, Arc::clone(&globals));
         Self {
             globals,
             scheduler,
             pass,
             framebuffers,
+            clear_values,
             debug: Some(Box::new(debug)),
         }
     }
 
-    crate fn invalidate_swapchain(&mut self, _new_swapchain: &Swapchain) {
-        todo!();
+    /// Used when recreating the swapchain
+    crate fn into_inner(self) -> Scheduler {
+        self.scheduler
     }
 
     crate fn run(
@@ -49,7 +55,8 @@ impl WorldRenderer {
 
         let framebuffer =
             Arc::clone(&self.framebuffers[swapchain_image as usize]);
-        let mut pass = RenderPassNode::new(framebuffer);
+        let clear_values = self.clear_values.to_vec();
+        let mut pass = RenderPassNode::with_clear(framebuffer, clear_values);
 
         let view = SceneViewState::new(state, &world);
         let mut debug = self.debug.take().unwrap();

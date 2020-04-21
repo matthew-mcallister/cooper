@@ -555,6 +555,7 @@ impl RenderPassCmds {
     crate fn new(
         cmds: CmdBuffer,
         framebuffer: Arc<Framebuffer>,
+        clear_values: &[vk::ClearValue],
         contents: SubpassContents,
     ) -> Self {
         assert!(cmds.supports_graphics());
@@ -565,7 +566,7 @@ impl RenderPassCmds {
             cur_subpass: -1,
             cur_contents: Default::default(),
         };
-        unsafe { cmds.begin(contents); }
+        unsafe { cmds.begin(clear_values, contents); }
         cmds
     }
 
@@ -605,7 +606,11 @@ impl RenderPassCmds {
         }
     }
 
-    unsafe fn begin(&mut self, contents: SubpassContents) {
+    unsafe fn begin(
+        &mut self,
+        clear_values: &[vk::ClearValue],
+        contents: SubpassContents,
+    ) {
         assert!(self.cur_subpass < 0);
         self.cur_subpass = 0;
         self.cur_contents = contents;
@@ -623,6 +628,8 @@ impl RenderPassCmds {
             render_pass: self.framebuffer.pass().inner(),
             framebuffer: self.framebuffer.inner(),
             render_area: self.framebuffer.render_area(),
+            clear_value_count: clear_values.len() as _,
+            p_clear_values: clear_values.as_ptr(),
             ..Default::default()
         };
         self.dt().cmd_begin_render_pass(

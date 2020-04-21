@@ -16,7 +16,7 @@ crate struct RenderPass {
     dependencies: Vec<vk::SubpassDependency>,
 }
 
-// TODO: Get rid of this type?
+// TODO: I don't like this name
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 crate enum AttachmentName {
     /// SRGB screen buffer
@@ -242,10 +242,8 @@ fn subpass_state(
     }
 }
 
-fn validate_subpass(
-    attachments: &[AttachmentDescription],
-    desc: &SubpassDesc,
-) {
+fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
+{
     let get = |idx: u32| &attachments[idx as usize];
 
     // Sample count
@@ -321,9 +319,13 @@ fn validate_dependencies(
     }
 }
 
+// TODO: why is this not called RenderPass::new?
 crate unsafe fn create_render_pass(
     device: Arc<Device>,
     attachments: Vec<AttachmentDescription>,
+    // TODO:
+    //attachments: EnumMap<AttachmentName, AttachmentDescription>,
+    //bindings: Vec<AttachmentName>, // no dupes
     subpasses: Vec<SubpassDesc>,
     dependencies: Vec<vk::SubpassDependency>,
 ) -> Arc<RenderPass> {
@@ -408,6 +410,7 @@ unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
             AttachmentDescription {
                 name: AttachmentName::Backbuffer,
                 format: Format::BGRA8_SRGB,
+                load_op: vk::AttachmentLoadOp::CLEAR,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             },
