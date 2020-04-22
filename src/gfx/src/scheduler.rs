@@ -36,6 +36,7 @@ impl RenderPassNode {
         framebuffer: Arc<Framebuffer>,
         clear_values: Vec<vk::ClearValue>,
     ) -> Self {
+        // Can't use the vec! macro here...
         let tasks: Vec<_> = (0..framebuffer.pass().subpasses().len())
             .map(|_| Vec::new())
             .collect();

@@ -2,14 +2,88 @@ use std::sync::Arc;
 
 use crate::*;
 
+#[derive(Debug)]
+crate struct BasicPass {
+    crate pass: Arc<RenderPass>,
+    crate subpass: Subpass,
+}
+
+impl BasicPass {
+    crate fn new(device: Arc<Device>) -> Self {
+        let pass = unsafe { create_basic_pass(device) };
+        let mut subpasses = pass.subpasses();
+        BasicPass {
+            pass: Arc::clone(&pass),
+            subpass: subpasses.next().unwrap(),
+        }
+    }
+
+    crate fn create_framebuffers(
+        &self,
+        state: &SystemState,
+        swapchain: &Swapchain,
+    ) -> Vec<Arc<Framebuffer>> {
+        unsafe {
+            swapchain.create_views().into_iter()
+                .map(|view| {
+                    let depth_view = create_render_target(
+                        state,
+                        &self.pass,
+                        1,
+                        swapchain.extent(),
+                        false,
+                    );
+                    Arc::new(Framebuffer::new(
+                        Arc::clone(&self.pass),
+                        vec![view.into(), depth_view.into()],
+                    ))
+                })
+                .collect()
+        }
+    }
+}
+
+unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
+    create_render_pass(
+        device,
+        vec![
+            AttachmentDescription {
+                name: AttachmentName::Backbuffer,
+                format: Format::BGRA8_SRGB,
+                load_op: vk::AttachmentLoadOp::CLEAR,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                ..Default::default()
+            },
+            AttachmentDescription {
+                name: AttachmentName::DepthStencil,
+                format: Format::D32F,
+                load_op: vk::AttachmentLoadOp::CLEAR,
+                // TODO: Maybe initial_layout should equal final_layout.
+                // But that would require a manual layout transition
+                // before the first frame.
+                final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                ..Default::default()
+            },
+        ],
+        vec![
+            SubpassDesc {
+                color_attchs: vec![0],
+                depth_stencil_attch: Some(1),
+                ..Default::default()
+            },
+        ],
+        vec![],
+    )
+}
+
 /// Top-level renderer.
 #[derive(Debug)]
 crate struct WorldRenderer {
     globals: Arc<Globals>,
     scheduler: Scheduler,
-    pass: Arc<TrivialPass>,
+    basic_pass: BasicPass,
     framebuffers: Vec<Arc<Framebuffer>>,
-    clear_values: [vk::ClearValue; 1],
+    clear_values: [vk::ClearValue; 2],
     debug: Option<Box<DebugRenderer>>,
 }
 
@@ -20,16 +94,14 @@ impl WorldRenderer {
         swapchain: &Swapchain,
         scheduler: Scheduler,
     ) -> Self {
-        let pass = Arc::new(TrivialPass::new(Arc::clone(&state.device)));
-        let framebuffers = pass.create_framebuffers(&swapchain);
-        let clear_values = [vk::ClearValue {
-            color: vk::ClearColorValue { float_32: [0.0; 4], },
-        }];
+        let basic_pass = BasicPass::new(Arc::clone(&state.device));
+        let framebuffers = basic_pass.create_framebuffers(state, &swapchain);
+        let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
         let debug = DebugRenderer::new(state, Arc::clone(&globals));
         Self {
             globals,
             scheduler,
-            pass,
+            basic_pass,
             framebuffers,
             clear_values,
             debug: Some(Box::new(debug)),

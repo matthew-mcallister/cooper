@@ -38,8 +38,8 @@ crate struct AttachmentDescription {
     #[derivative(Default(value = "Format::R8"))]
     crate format: Format,
     crate samples: SampleCount,
-    // These fields follow a reasonable-sounding convention: "if you
-    // don't specify it, you don't care about it".
+    // These fields follow a possibly dumb but reasonable-sounding
+    // convention: if you don't specify it, you don't care about it.
     #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
     crate load_op: vk::AttachmentLoadOp,
     #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
@@ -202,10 +202,11 @@ fn subpass_samples(
     SampleCount::One
 }
 
-fn subpass_state(
-    attachments: &[AttachmentDescription],
-    desc: SubpassDesc,
-) -> SubpassState {
+// TODO: Layouts should be defined manually. If necessary, a helper
+// function can fill in the appropriate layouts.
+fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
+    SubpassState
+{
     let get = |idx: u32| &attachments[idx as usize];
 
     validate_subpass(attachments, &desc);
@@ -410,7 +411,6 @@ unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
             AttachmentDescription {
                 name: AttachmentName::Backbuffer,
                 format: Format::BGRA8_SRGB,
-                load_op: vk::AttachmentLoadOp::CLEAR,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             },

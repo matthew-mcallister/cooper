@@ -78,6 +78,18 @@ crate fn clear_color(color: [f32; 4]) -> vk::ClearValue {
 }
 
 #[inline]
+crate fn clear_depth(depth: f32) -> vk::ClearValue {
+    clear_depth_stencil(depth, 0)
+}
+
+#[inline]
+crate fn clear_depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
+    vk::ClearValue {
+        depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
+    }
+}
+
+#[inline]
 crate fn ptr_eq<T, P: Deref<Target = T>>(this: &P, other: &P) -> bool {
     let this: &T = this.deref();
     let other: &T = other.deref();

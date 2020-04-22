@@ -160,6 +160,10 @@ impl DebugRenderer {
                     self.vert_shader.shader(),
                 );
                 desc.cull_mode = view.cull_mode;
+                desc.depth_test = true;
+                desc.depth_write = true;
+                desc.depth_cmp_op = vk::CompareOp::GREATER;
+
                 let pipeline = state.gfx_pipes.get_or_create(&desc);
                 cmds.bind_gfx_pipe(&pipeline);
 

@@ -84,6 +84,10 @@ impl Swapchain {
         Ok(result)
     }
 
+    crate fn extent(&self) -> Extent2D {
+        self.extent
+    }
+
     crate fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent.into())
     }
