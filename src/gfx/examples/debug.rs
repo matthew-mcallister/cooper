@@ -56,7 +56,7 @@ unsafe fn render_world(world: &mut RenderWorld, mesh: &Mesh) {
     world.set_view(view);
 
     // Framerate is not bounded yet, so the frequency is kind of
-    // arbitrary. Also no screen clearing, so it looks awful.
+    // arbitrary.
     let t = world.frame_num() as f32 / 60.0;
     let f = 0.2;
     let phi = 2.0 * std::f32::consts::PI * f * t;
@@ -69,10 +69,13 @@ unsafe fn render_world(world: &mut RenderWorld, mesh: &Mesh) {
 
     world.add_debug(DebugMesh {
         mesh: Arc::clone(&mesh.render_mesh),
-        display: DebugDisplay::Normal,
         rot,
         pos: Default::default(),
-        colors: [[1.0, 0.0, 1.0, 1.0], [0.5, 0.5, 0.5, 1.0]],
+        debug_props: DebugInstanceProps {
+            display: DebugDisplay::Normal,
+            colors: [[1.0, 0.0, 1.0, 1.0], [0.5, 0.5, 0.5, 1.0]],
+            ..Default::default()
+        },
     });
 }
 

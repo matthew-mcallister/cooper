@@ -7,9 +7,6 @@ crate struct SceneViewState {
     state: Arc<Box<SystemState>>,
     crate uniforms: SceneViewUniforms,
     crate uniform_buffer: BufferBox<SceneViewUniforms>,
-    // TODO:
-    //crate culling_disabled: bool,
-    crate cull_mode: vk::CullModeFlags,
 }
 
 // TODO: Override Default
@@ -76,8 +73,6 @@ impl SceneViewState {
             state,
             uniforms,
             uniform_buffer,
-            // TODO: may encounter double-sided geometry
-            cull_mode: vk::CullModeFlags::BACK_BIT,
         }
     }
 

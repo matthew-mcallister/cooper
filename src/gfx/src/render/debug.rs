@@ -1,24 +1,33 @@
 use std::sync::Arc;
 
+use derivative::Derivative;
 use enum_map::{Enum, EnumMap};
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Derivative, Enum, Eq, Hash, PartialEq)]
+#[derivative(Default)]
 pub enum DebugDisplay {
+    #[derivative(Default)]
     Checker = 0,
     Depth = 1,
     Normal = 2,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DebugInstanceProps {
+    pub display: DebugDisplay,
+    pub colors: [[f32; 4]; 2],
+    pub force_cull_mode: Option<vk::CullModeFlags>,
+}
+
 #[derive(Debug)]
 pub struct DebugMesh {
     pub mesh: Arc<RenderMesh>,
-    pub display: DebugDisplay,
     // TODO: rot is a misnomer as the matrix is arbitrary
     pub rot: [[f32; 3]; 3],
     pub pos: [f32; 3],
-    pub colors: [[f32; 4]; 2],
+    pub debug_props: DebugInstanceProps,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -112,7 +121,7 @@ impl DebugRenderer {
         let mesh_iter = meshes.iter().map(|mesh| {
             let m = affine_xform(mesh.rot, mesh.pos);
             let mv = mat_x_mat(view.uniforms.view, m);
-            DebugInstance { mv, colors: mesh.colors }
+            DebugInstance { mv, colors: mesh.debug_props.colors }
         });
         let instances = view.state().buffers.box_iter(
             BufferBinding::Storage, Lifetime::Frame, mesh_iter);
@@ -149,17 +158,20 @@ impl DebugRenderer {
         for display in DebugDisplay::values() {
             desc.stages[ShaderStage::Fragment] =
                 Some(Arc::clone(&self.frag_shaders[display]));
-            for (i, mesh) in meshes.iter()
-                .filter(|mesh| mesh.display == display).enumerate()
+            for (i, dbg_mesh) in meshes.iter()
+                .filter(|mesh| mesh.debug_props.display == display)
+                .enumerate()
             {
-                let mesh = &mesh.mesh;
+                let mesh = &dbg_mesh.mesh;
+                let props = &dbg_mesh.debug_props;
                 let inst = i as u32;
 
                 desc.vertex_layout = VertexInputLayout::new(
                     &mesh.vertex_layout(),
                     self.vert_shader.shader(),
                 );
-                desc.cull_mode = view.cull_mode;
+                desc.cull_mode = props.force_cull_mode
+                    .unwrap_or(vk::CullModeFlags::BACK_BIT);
                 desc.depth_test = true;
                 desc.depth_write = true;
                 desc.depth_cmp_op = vk::CompareOp::GREATER;
