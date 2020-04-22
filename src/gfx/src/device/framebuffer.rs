@@ -8,12 +8,12 @@ use crate::*;
 #[derive(Debug)]
 crate struct Framebuffer {
     pass: Arc<RenderPass>,
-    attachments: Vec<Attachment>,
+    attachments: Vec<AttachmentImage>,
     inner: vk::Framebuffer,
 }
 
 #[derive(Debug, From)]
-crate enum Attachment {
+crate enum AttachmentImage {
     Image(Arc<ImageView>),
     Swapchain(Arc<SwapchainView>),
 }
@@ -30,8 +30,8 @@ impl Drop for Framebuffer {
 impl Framebuffer {
     crate unsafe fn new(
         pass: Arc<RenderPass>,
-        // TODO: Should be EnumMap<AttachmentName, Attachment>
-        attachments: Vec<Attachment>,
+        // TODO: Should be EnumMap<Attachment, AttachmentImage>
+        attachments: Vec<AttachmentImage>,
     ) -> Self {
         create_framebuffer(pass, attachments)
     }
@@ -48,7 +48,7 @@ impl Framebuffer {
         &self.pass
     }
 
-    crate fn attachments(&self) -> &[Attachment] {
+    crate fn attachments(&self) -> &[AttachmentImage] {
         &self.attachments
     }
 
@@ -77,7 +77,7 @@ impl Framebuffer {
     }
 }
 
-impl Attachment {
+impl AttachmentImage {
     crate fn view(&self) -> vk::ImageView {
         match &self {
             Self::Image(view) => view.inner(),
@@ -115,7 +115,7 @@ impl Attachment {
 
 unsafe fn create_framebuffer(
     render_pass: Arc<RenderPass>,
-    attachments: Vec<Attachment>,
+    attachments: Vec<AttachmentImage>,
 ) -> Framebuffer {
     let dt = &*render_pass.device().table;
 
@@ -147,7 +147,7 @@ unsafe fn create_framebuffer(
 
 fn validate_framebuffer_creation(
     render_pass: &RenderPass,
-    attachments: &[Attachment],
+    attachments: &[AttachmentImage],
 ) {
     assert!(attachments.len() > 0);
     assert_eq!(attachments.len(), render_pass.attachments().len());
@@ -161,7 +161,7 @@ fn validate_framebuffer_creation(
 
         assert_eq!(attch.extent(), extent);
 
-        if let Attachment::Image(view) = &attch {
+        if let AttachmentImage::Image(view) = &attch {
             assert_eq!(view.layers(), 1);
             assert_eq!(view.mip_levels(), 1);
         }
@@ -203,8 +203,6 @@ crate fn create_render_target(
 
 #[cfg(test)]
 crate unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
-    use AttachmentName::*;
-
     let device = Arc::clone(&swapchain.device);
     let state = SystemState::new(device);
 

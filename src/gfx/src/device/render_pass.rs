@@ -16,9 +16,8 @@ crate struct RenderPass {
     dependencies: Vec<vk::SubpassDependency>,
 }
 
-// TODO: I don't like this name
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum AttachmentName {
+crate enum Attachment {
     /// SRGB screen buffer
     Backbuffer,
     DepthStencil,
@@ -33,8 +32,8 @@ crate enum AttachmentName {
 crate struct AttachmentDescription {
     // TODO: It's unfortunate that this has a default value. Maybe
     // default() should just panic?
-    #[derivative(Default(value = "AttachmentName::Backbuffer"))]
-    crate name: AttachmentName,
+    #[derivative(Default(value = "Attachment::Backbuffer"))]
+    crate name: Attachment,
     #[derivative(Default(value = "Format::R8"))]
     crate format: Format,
     crate samples: SampleCount,
@@ -92,6 +91,15 @@ impl Drop for RenderPass {
 }
 
 impl RenderPass {
+    crate unsafe fn new(
+        device: Arc<Device>,
+        attachments: Vec<AttachmentDescription>,
+        subpasses: Vec<SubpassDesc>,
+        dependencies: Vec<vk::SubpassDependency>,
+    ) -> Arc<Self> {
+        create_render_pass(device, attachments, subpasses, dependencies)
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
@@ -320,13 +328,12 @@ fn validate_dependencies(
     }
 }
 
-// TODO: why is this not called RenderPass::new?
-crate unsafe fn create_render_pass(
+unsafe fn create_render_pass(
     device: Arc<Device>,
     attachments: Vec<AttachmentDescription>,
     // TODO:
-    //attachments: EnumMap<AttachmentName, AttachmentDescription>,
-    //bindings: Vec<AttachmentName>, // no dupes
+    //attachments: EnumMap<Attachment, AttachmentDescription>,
+    //bindings: Vec<Attachment>, // no dupes
     subpasses: Vec<SubpassDesc>,
     dependencies: Vec<vk::SubpassDependency>,
 ) -> Arc<RenderPass> {
@@ -386,12 +393,12 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
 
     // Defining render passes is rather technical and so is done
     // manually rather than via a half-baked algorithm.
-    create_render_pass(
+    RenderPass::new(
         device,
         vec![
             // Screen
             AttachmentDescription {
-                name: AttachmentName::Backbuffer,
+                name: Attachment::Backbuffer,
                 format: Format::BGRA8_SRGB,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
@@ -400,14 +407,14 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
             // TODO: Not sure if it's a better practice to set
             // initial_layout or not.
             AttachmentDescription {
-                name: AttachmentName::Hdr,
+                name: Attachment::Hdr,
                 format: Format::RGBA16F,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
             },
             // Depth/stencil
             AttachmentDescription {
-                name: AttachmentName::DepthStencil,
+                name: Attachment::DepthStencil,
                 format: Format::D32F_S8,
                 load_op: vk::AttachmentLoadOp::CLEAR,
                 final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -415,14 +422,14 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
             },
             // Normals
             AttachmentDescription {
-                name: AttachmentName::Normal,
+                name: Attachment::Normal,
                 format: Format::RGBA8,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()
             },
             // Albedo
             AttachmentDescription {
-                name: AttachmentName::Albedo,
+                name: Attachment::Albedo,
                 format: Format::RGBA8,
                 final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 ..Default::default()

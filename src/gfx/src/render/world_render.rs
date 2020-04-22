@@ -44,18 +44,18 @@ impl BasicPass {
 }
 
 unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
-    create_render_pass(
+    RenderPass::new(
         device,
         vec![
             AttachmentDescription {
-                name: AttachmentName::Backbuffer,
+                name: Attachment::Backbuffer,
                 format: Format::BGRA8_SRGB,
                 load_op: vk::AttachmentLoadOp::CLEAR,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             },
             AttachmentDescription {
-                name: AttachmentName::DepthStencil,
+                name: Attachment::DepthStencil,
                 format: Format::D32F,
                 load_op: vk::AttachmentLoadOp::CLEAR,
                 // TODO: Maybe initial_layout should equal final_layout.

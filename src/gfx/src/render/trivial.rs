@@ -122,11 +122,11 @@ impl TrivialPass {
 }
 
 unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
-    let pass = create_render_pass(
+    let pass = RenderPass::new(
         device,
         vec![
             AttachmentDescription {
-                name: AttachmentName::Backbuffer,
+                name: Attachment::Backbuffer,
                 format: Format::BGRA8_SRGB,
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
