@@ -14,6 +14,13 @@ crate struct TrivialRenderer {
     descs: [DescriptorSet; 2],
 }
 
+/// Render pass with a single subpass and single backbuffer attachment.
+#[derive(Debug)]
+crate struct TrivialPass {
+    crate pass: Arc<RenderPass>,
+    crate subpass: Subpass,
+}
+
 impl TrivialRenderer {
     crate const fn vertex_count() -> u32 {
         VERTEX_COUNT
@@ -92,6 +99,52 @@ impl TrivialRenderer {
         cmds.bind_gfx_descs(1, &self.descs[1]);
 
         unsafe { cmds.draw(Self::vertex_count(), 1); }
+    }
+}
+
+impl TrivialPass {
+    crate fn new(device: Arc<Device>) -> Self {
+        unsafe { create_trivial_pass(device) }
+    }
+
+    crate fn create_framebuffers(&self, swapchain: &Swapchain) ->
+        Vec<Arc<Framebuffer>>
+    {
+        unsafe {
+            swapchain.create_views().into_iter()
+                .map(|view| Arc::new(Framebuffer::new(
+                    Arc::clone(&self.pass),
+                    vec![view.into()],
+                )))
+                .collect()
+        }
+    }
+}
+
+unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
+    let pass = create_render_pass(
+        device,
+        vec![
+            AttachmentDescription {
+                name: AttachmentName::Backbuffer,
+                format: Format::BGRA8_SRGB,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                ..Default::default()
+            },
+        ],
+        vec![
+            SubpassDesc {
+                color_attchs: vec![0],
+                ..Default::default()
+            },
+        ],
+        vec![],
+    );
+
+    let mut subpasses = pass.subpasses();
+    TrivialPass {
+        pass: Arc::clone(&pass),
+        subpass: subpasses.next().unwrap(),
     }
 }
 

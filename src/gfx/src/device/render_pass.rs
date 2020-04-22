@@ -378,59 +378,6 @@ crate unsafe fn create_render_pass(
     })
 }
 
-/// Render pass with a single subpass and single backbuffer attachment.
-#[derive(Debug)]
-crate struct TrivialPass {
-    crate pass: Arc<RenderPass>,
-    crate subpass: Subpass,
-}
-
-impl TrivialPass {
-    crate fn new(device: Arc<Device>) -> Self {
-        unsafe { create_trivial_pass(device) }
-    }
-
-    crate fn create_framebuffers(&self, swapchain: &Swapchain) ->
-        Vec<Arc<Framebuffer>>
-    {
-        unsafe {
-            swapchain.create_views().into_iter()
-                .map(|view| Arc::new(Framebuffer::new(
-                    Arc::clone(&self.pass),
-                    vec![view.into()],
-                )))
-                .collect()
-        }
-    }
-}
-
-unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
-    let pass = create_render_pass(
-        device,
-        vec![
-            AttachmentDescription {
-                name: AttachmentName::Backbuffer,
-                format: Format::BGRA8_SRGB,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-                ..Default::default()
-            },
-        ],
-        vec![
-            SubpassDesc {
-                color_attchs: vec![0],
-                ..Default::default()
-            },
-        ],
-        vec![],
-    );
-
-    let mut subpasses = pass.subpasses();
-    TrivialPass {
-        pass: Arc::clone(&pass),
-        subpass: subpasses.next().unwrap(),
-    }
-}
-
 // Simplified render pass with G-buffer.
 #[cfg(test)]
 crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
