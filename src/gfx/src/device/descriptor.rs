@@ -243,12 +243,15 @@ impl Set {
         &mut self,
         binding: u32,
         view: &Arc<ImageView>,
+        layout: vk::ImageLayout,
         sampler: Option<&Arc<Sampler>>,
     ) {
-        self.write_images(binding, 0, &[view], try_opt!(&[sampler?][..]));
+        let sampler = try_opt!([sampler?]);
+        let samplers = try_opt!(&sampler.as_ref()?[..]);
+        self.write_images(binding, 0, &[view], layout, samplers);
     }
 
-    /// Writes image to the descriptor set. Combined image/samplers
+    /// Writes images to the descriptor set. Combined image/samplers
     /// must specify an array of samplers.
     // TODO: Perhaps should take an iterator
     crate unsafe fn write_images(
@@ -256,6 +259,7 @@ impl Set {
         binding: u32,
         first_element: u32,
         views: &[&Arc<ImageView>],
+        layout: vk::ImageLayout,
         samplers: Option<&[&Arc<Sampler>]>,
     ) {
         if let Some(samplers) = samplers {
@@ -265,7 +269,7 @@ impl Set {
         for (i, &view) in views.iter().enumerate() {
             let sampler = try_opt!(samplers?[i]);
             let elem = first_element + i as u32;
-            self.write_image_element(binding, elem, view, sampler);
+            self.write_image_element(binding, elem, view, layout, sampler);
         }
     }
 
@@ -274,9 +278,11 @@ impl Set {
         binding: u32,
         element: u32,
         view: &Arc<ImageView>,
+        layout: vk::ImageLayout,
         sampler: Option<&Arc<Sampler>>,
     ) {
         use vk::DescriptorType as Dt;
+        use vk::ImageLayout as Il;
 
         let dt = &self.layout.device().table;
         let layout_binding = &self.layout.bindings()[binding as usize];
@@ -297,28 +303,20 @@ impl Set {
                     assert!(flags.contains(ImageFlags::INPUT_ATTACHMENT)),
                 _ => unreachable!(),
             }
+            match ty {
+                Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
+                    assert_eq!(layout, Il::SHADER_READ_ONLY_OPTIMAL),
+                Dt::STORAGE_IMAGE => assert_eq!(layout, Il::GENERAL),
+                _ => {},
+            }
             // combined image/sampler <=> sampler not null
             assert_eq!(ty == Dt::COMBINED_IMAGE_SAMPLER, !sampler.is_null());
         }
 
-        // TODO: More sophisticated layout decision making will probably
-        // be required eventually.
-        let image_layout = match ty {
-            Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
-                if view.format().is_depth_stencil() {
-                    vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
-                } else {
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-                },
-            Dt::STORAGE_IMAGE => vk::ImageLayout::GENERAL,
-            Dt::INPUT_ATTACHMENT => input_attachment_layout(view.format()),
-            _ => unreachable!(),
-        };
-
         let info = [vk::DescriptorImageInfo {
             sampler,
             image_view: view.inner(),
-            image_layout,
+            image_layout: layout,
         }];
         let writes = [vk::WriteDescriptorSet {
             dst_set: self.inner(),
@@ -718,12 +716,14 @@ mod tests {
 
         let mut desc = state.descriptors.alloc(&layout);
         let buffers = vec![globals.empty_uniform_buffer.range(); 2];
+        let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
         desc.write_buffers(0, 0, &buffers);
-        desc.write_image(1, &globals.empty_image_2d, None);
+        desc.write_image(1, &globals.empty_image_2d, layout, None);
         desc.write_images(
             2,
             0,
             &vec![&globals.empty_image_2d; 2],
+            layout,
             Some(&vec![&globals.empty_sampler; 2]),
         );
     }

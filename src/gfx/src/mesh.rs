@@ -187,6 +187,7 @@ mod tests {
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
+            &[],
             SubpassContents::Inline,
         ).enter_subpass();
 

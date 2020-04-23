@@ -748,6 +748,7 @@ mod tests {
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
+            &[],
             SubpassContents::Inline,
         ).enter_subpass();
         record_subpass(&state, &globals, &trivial, &mut cmds);
@@ -759,6 +760,7 @@ mod tests {
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
+            &[],
             SubpassContents::Inline,
         );
         cmds.next_subpass(SubpassContents::Inline);
@@ -769,6 +771,7 @@ mod tests {
         let cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
+            &[],
             SubpassContents::Secondary,
         );
         cmds.enter_subpass();
@@ -779,6 +782,7 @@ mod tests {
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
+            &[],
             SubpassContents::Inline,
         );
         cmds.execute_cmds(&[vk::null()]);

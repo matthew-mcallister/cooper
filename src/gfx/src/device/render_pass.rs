@@ -74,6 +74,7 @@ impl Eq for Subpass {}
 #[derive(Debug, Default)]
 crate struct SubpassDesc {
     // TODO: Name subpasses?
+    crate layouts: Vec<vk::ImageLayout>,
     crate input_attchs: Vec<u32>,
     crate color_attchs: Vec<u32>,
     crate resolve_attchs: Vec<u32>,
@@ -191,14 +192,6 @@ impl From<AttachmentDescription> for vk::AttachmentDescription {
     }
 }
 
-crate fn input_attachment_layout(format: Format) -> vk::ImageLayout {
-    if format.is_depth_stencil() {
-        vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
-    } else {
-        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-    }
-}
-
 fn subpass_samples(
     attachments: &[AttachmentDescription],
     desc: &SubpassDesc,
@@ -210,36 +203,27 @@ fn subpass_samples(
     SampleCount::One
 }
 
-// TODO: Layouts should be defined manually. If necessary, a helper
-// function can fill in the appropriate layouts.
 fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
     SubpassState
 {
-    let get = |idx: u32| &attachments[idx as usize];
+    let attch = |idx: u32| vk::AttachmentReference {
+        attachment: idx,
+        layout: desc.layouts[idx as usize],
+    };
+    macro_rules! attchs {
+        ($iter:expr) => {
+            $iter.map(|&idx| attch(idx))
+        }
+    }
 
     validate_subpass(attachments, &desc);
 
     let samples = subpass_samples(attachments, &desc);
 
-    let input_attchs: Vec<_> = desc.input_attchs.iter().map(|&idx| {
-        let layout = input_attachment_layout(get(idx).format);
-        vk::AttachmentReference { attachment: idx, layout }
-    }).collect();
-    let color_attchs: Vec<_> = desc.color_attchs.iter().map(|&idx| {
-        let layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
-        vk::AttachmentReference { attachment: idx, layout }
-    }).collect();
-    let depth_stencil_attch = try_opt!(vk::AttachmentReference {
-        attachment: desc.depth_stencil_attch?,
-        // TODO: DEPTH_STENCIL_READ_ONLY_OPTIMAL may be useful here
-        layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    });
-    let resolve_attchs = desc.resolve_attchs.iter().map(|&idx| {
-        vk::AttachmentReference {
-            attachment: idx,
-            layout: vk::ImageLayout::UNDEFINED,
-        }
-    }).collect();
+    let input_attchs: Vec<_> = attchs!(desc.input_attchs.iter()).collect();
+    let color_attchs: Vec<_> = attchs!(desc.color_attchs.iter()).collect();
+    let depth_stencil_attch = desc.depth_stencil_attch.map(|idx| attch(idx));
+    let resolve_attchs: Vec<_> = attchs!(desc.resolve_attchs.iter()).collect();
 
     SubpassState {
         input_attchs,
@@ -254,6 +238,8 @@ fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
 fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
 {
     let get = |idx: u32| &attachments[idx as usize];
+
+    assert_eq!(desc.layouts.len(), attachments.len());
 
     // Sample count
     let samples = subpass_samples(attachments, desc);
@@ -389,6 +375,7 @@ unsafe fn create_render_pass(
 #[cfg(test)]
 crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
     use vk::AccessFlags as Af;
+    use vk::ImageLayout as Il;
     use vk::PipelineStageFlags as Pf;
 
     // Defining render passes is rather technical and so is done
@@ -400,16 +387,16 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
             AttachmentDescription {
                 name: Attachment::Backbuffer,
                 format: Format::BGRA8_SRGB,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                // TODO: Not sure if it's a better practice to set
+                // initial_layout or not.
+                final_layout: Il::PRESENT_SRC_KHR,
                 ..Default::default()
             },
             // HDR lighting buffer
-            // TODO: Not sure if it's a better practice to set
-            // initial_layout or not.
             AttachmentDescription {
                 name: Attachment::Hdr,
                 format: Format::RGBA16F,
-                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
             // Depth/stencil
@@ -417,39 +404,60 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
                 name: Attachment::DepthStencil,
                 format: Format::D32F_S8,
                 load_op: vk::AttachmentLoadOp::CLEAR,
-                final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                final_layout: Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
             // Normals
             AttachmentDescription {
                 name: Attachment::Normal,
                 format: Format::RGBA8,
-                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
             // Albedo
             AttachmentDescription {
                 name: Attachment::Albedo,
                 format: Format::RGBA8,
-                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
         ],
         vec![
             // G-buffer pass
             SubpassDesc {
+                layouts: vec![
+                    Il::UNDEFINED,
+                    Il::UNDEFINED,
+                    Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    Il::COLOR_ATTACHMENT_OPTIMAL,
+                    Il::COLOR_ATTACHMENT_OPTIMAL,
+                ],
                 color_attchs: vec![3, 4],
                 depth_stencil_attch: Some(2),
                 ..Default::default()
             },
             // Lighting pass
             SubpassDesc {
+                layouts: vec![
+                    Il::UNDEFINED,
+                    Il::COLOR_ATTACHMENT_OPTIMAL,
+                    Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                    Il::SHADER_READ_ONLY_OPTIMAL,
+                    Il::SHADER_READ_ONLY_OPTIMAL,
+                ],
                 color_attchs: vec![1],
                 input_attchs: vec![2, 3, 4],
                 ..Default::default()
             },
             // Tonemapping
             SubpassDesc {
+                layouts: vec![
+                    Il::COLOR_ATTACHMENT_OPTIMAL,
+                    Il::SHADER_READ_ONLY_OPTIMAL,
+                    Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                    Il::SHADER_READ_ONLY_OPTIMAL,
+                    Il::SHADER_READ_ONLY_OPTIMAL,
+                ],
                 color_attchs: vec![0],
                 input_attchs: vec![1],
                 ..Default::default()

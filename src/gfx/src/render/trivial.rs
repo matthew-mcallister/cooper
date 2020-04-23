@@ -122,6 +122,7 @@ impl TrivialPass {
 }
 
 unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
+    use vk::ImageLayout as Layout;
     let pass = RenderPass::new(
         device,
         vec![
@@ -134,6 +135,7 @@ unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
         ],
         vec![
             SubpassDesc {
+                layouts: vec![Layout::COLOR_ATTACHMENT_OPTIMAL],
                 color_attchs: vec![0],
                 ..Default::default()
             },

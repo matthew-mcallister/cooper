@@ -44,6 +44,7 @@ impl BasicPass {
 }
 
 unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
+    use vk::ImageLayout as Il;
     RenderPass::new(
         device,
         vec![
@@ -67,6 +68,10 @@ unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
         ],
         vec![
             SubpassDesc {
+                layouts: vec![
+                    Il::COLOR_ATTACHMENT_OPTIMAL,
+                    Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                ],
                 color_attchs: vec![0],
                 depth_stencil_attch: Some(1),
                 ..Default::default()

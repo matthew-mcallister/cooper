@@ -112,15 +112,18 @@ impl Globals {
             Dt::COMBINED_IMAGE_SAMPLER => {
                 let views = vec![&self.empty_image_2d; count];
                 let samplers = vec![&self.empty_sampler; count];
-                desc.write_images(binding, 0, &views, Some(&samplers));
+                let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+                desc.write_images(binding, 0, &views, layout, Some(&samplers));
             },
             Dt::SAMPLED_IMAGE => {
                 let views = vec![&self.empty_image_2d; count];
-                desc.write_images(binding, 0, &views, None);
+                let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+                desc.write_images(binding, 0, &views, layout, None);
             },
             Dt::STORAGE_IMAGE => {
                 let views = vec![&self.empty_storage_image_2d; count];
-                desc.write_images(binding, 0, &views, None);
+                let layout = vk::ImageLayout::GENERAL;
+                desc.write_images(binding, 0, &views, layout, None);
             },
             Dt::UNIFORM_BUFFER => {
                 let bufs = vec![self.empty_uniform_buffer.range(); count];
