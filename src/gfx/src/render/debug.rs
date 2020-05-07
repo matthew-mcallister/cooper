@@ -40,6 +40,9 @@ crate struct DebugInstance {
 }
 
 // Minimal mesh rendering for visualization and debugging.
+// TODO: Rename to SimpleRenderer, use for testing. Visualization and
+// debugging have different needs from final rendering and ought to have
+// a dedicated interface.
 #[derive(Debug)]
 crate struct DebugRenderer {
     globals: Arc<Globals>,

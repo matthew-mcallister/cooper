@@ -63,7 +63,7 @@ crate struct Image {
 }
 
 #[derive(Debug)]
-crate struct ImageView {
+pub struct ImageView {
     image: Arc<Image>,
     ty: vk::ImageViewType,
     format: Format,

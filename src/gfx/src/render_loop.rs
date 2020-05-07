@@ -30,7 +30,7 @@ pub struct RenderLoop {
     render_sem: Semaphore,
     render_fence: Fence,
     // This is declared last so that it will be dropped last
-    crate state: Option<Box<SystemState>>,
+    state: Option<Box<SystemState>>,
 }
 
 impl SystemState {
@@ -101,6 +101,18 @@ impl RenderLoop {
         })
     }
 
+    crate fn state(&self) -> &SystemState {
+        &self.state.as_ref().unwrap()
+    }
+
+    fn state_mut(&mut self) -> &mut SystemState {
+        &mut *self.state.as_mut().unwrap()
+    }
+
+    crate fn renderer(&self) -> &WorldRenderer {
+        &self.renderer
+    }
+
     crate fn frame_num(&self) -> u64 {
         self.frame_num
     }
@@ -118,9 +130,7 @@ impl RenderLoop {
         self.frame_num += 1;
     }
 
-    pub fn render(&mut self, mut world: RenderWorld) {
-        self.state = world.state.take();
-
+    crate fn render(&mut self, world: RenderWorldData) {
         self.finish_frame();
 
         debug!("beginning frame {}", self.frame_num);
@@ -153,7 +163,7 @@ impl RenderLoop {
     }
 
     fn pre_render(&mut self) {
-        let state = self.state.as_mut().unwrap();
+        let state = self.state_mut();
         state.gfx_pipes.commit();
         state.samplers.commit();
     }

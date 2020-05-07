@@ -75,7 +75,7 @@ impl<'a> RenderMeshBuilder<'a> {
 
     pub fn from_loop(rloop: &'a RenderLoop) -> Self {
         Self {
-            state: rloop.state.as_ref().unwrap(),
+            state: rloop.state(),
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }

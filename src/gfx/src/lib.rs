@@ -3,7 +3,6 @@
 #![feature(const_generics)]
 #![feature(cow_is_borrowed)]
 #![feature(crate_visibility_modifier)]
-#![feature(manually_drop_take)]
 #![feature(maybe_uninit_extra)]
 #![feature(try_blocks)]
 #![feature(type_ascription)]

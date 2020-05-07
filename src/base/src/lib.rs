@@ -1,5 +1,4 @@
 #![feature(crate_visibility_modifier)]
-#![feature(manually_drop_take)]
 #![feature(trait_alias)]
 #![feature(try_blocks)]
 #![feature(untagged_unions)]

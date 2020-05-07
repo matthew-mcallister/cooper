@@ -52,7 +52,8 @@ crate struct SceneViewUniforms {
 }
 
 impl SceneViewState {
-    crate fn new(state: Arc<Box<SystemState>>, world: &RenderWorld) -> Self {
+    crate fn new(state: Arc<Box<SystemState>>, world: &RenderWorldData) -> Self
+    {
         let view = world.view;
 
         let view_inv = affine_xform(view.rot, view.pos);

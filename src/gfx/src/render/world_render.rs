@@ -121,7 +121,7 @@ impl WorldRenderer {
     crate fn run(
         &mut self,
         state: Arc<Box<SystemState>>,
-        world: RenderWorld,
+        world: RenderWorldData,
         _frame_num: u64,
         swapchain_image: u32,
         present_sem: &mut Semaphore,

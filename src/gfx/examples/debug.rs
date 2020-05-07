@@ -95,16 +95,17 @@ unsafe fn unsafe_main() {
             ..Default::default()
         };
 
-        let mut rl = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
+        let rl = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
 
         let path = std::env::var("GLTF_PATH")?;
         let bundle = GltfBundle::import(&path)?;
         let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
 
+        let mut rl = Some(Box::new(rl));
         while !window.should_close() {
-            let mut world = RenderWorld::new(&mut rl);
+            let mut world = RenderWorld::new(rl.take().unwrap());
             render_world(&mut world, &mesh);
-            rl.render(world);
+            rl = Some(world.render());
         }
 
         Ok(())

@@ -340,6 +340,8 @@ macro_rules! pipeline_cache {
         desc: $desc:ident,
         factory: $factory:ident$(,)?
     ) => {
+        // TODO: It may be better to have a cache per material type.
+        // This is what Unreal does. Should obviate synchronization.
         #[derive(Debug)]
         crate struct $name {
             device: Arc<Device>,
