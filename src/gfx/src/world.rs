@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::*;
 
 #[derive(Debug)]
@@ -53,6 +55,19 @@ impl RenderWorld {
         let world = self.data;
         rloop.render(world);
         rloop
+    }
+
+    pub fn create_material(
+        &self,
+        program: MaterialProgram,
+        images: MaterialImageMap,
+    ) -> Arc<Material> {
+        let desc = self.rloop.renderer().compile_material(program, &images);
+        Arc::new(Material {
+            program,
+            images,
+            desc,
+        })
     }
 }
 

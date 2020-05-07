@@ -32,6 +32,10 @@ crate struct TestVars {
 }
 
 impl TestVars {
+    crate fn swapchain(&self) -> &Swapchain {
+        &self.swapchain
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.swapchain.device
     }

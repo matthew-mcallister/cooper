@@ -153,4 +153,61 @@ impl WorldRenderer {
 
         self.debug = Some(debug_return.take().unwrap());
     }
+
+    pub fn create_material(
+        &self,
+        program: MaterialProgram,
+        images: MaterialImageMap,
+    ) -> Arc<Material> {
+        let desc = self.compile_material(program, &images);
+        Arc::new(Material {
+            program,
+            images,
+            desc,
+        })
+    }
 }
+
+impl Renderer for WorldRenderer {
+    fn compile_material(
+        &self,
+        program: MaterialProgram,
+        images: &MaterialImageMap,
+    ) -> Option<DescriptorSet> {
+        match program {
+            MaterialProgram::Debug(_) => self.debug.as_ref().unwrap()
+                .compile_material(program, images),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use super::*;
+
+    unsafe fn create_renderer(vars: &crate::testing::TestVars) ->
+        (SystemState, WorldRenderer)
+    {
+        let state = SystemState::new(Arc::clone(vars.device()));
+        let globals = Arc::new(Globals::new(&state));
+        let scheduler = Scheduler::new(Arc::clone(vars.gfx_queue()));
+        let renderer =
+            WorldRenderer::new(&state, globals, vars.swapchain(), scheduler);
+        (state, renderer)
+    }
+
+    unsafe fn material_test(vars: crate::testing::TestVars) {
+        let (_state, renderer) = create_renderer(&vars);
+        let _material = renderer.create_material(
+            MaterialProgram::Debug(DebugDisplay::Checker),
+            MaterialImageMap::default(),
+        );
+    }
+
+    unit::declare_tests![
+        material_test,
+    ];
+}
+
+unit::collect_tests![tests];

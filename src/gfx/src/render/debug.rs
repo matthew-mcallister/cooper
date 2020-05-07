@@ -197,3 +197,13 @@ impl DebugRenderer {
         }
     }
 }
+
+impl Renderer for DebugRenderer {
+    fn compile_material(
+        &self,
+        _program: MaterialProgram,
+        _images: &MaterialImageMap,
+    ) -> Option<DescriptorSet> {
+        None
+    }
+}
