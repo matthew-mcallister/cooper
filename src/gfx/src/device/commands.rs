@@ -379,6 +379,7 @@ impl SubpassCmds {
         self.inner.reset_dynamic_state(&self.framebuffer);
     }
 
+    // TODO: Allow binding multiple in one call
     crate fn bind_gfx_descs(
         &mut self,
         index: u32,

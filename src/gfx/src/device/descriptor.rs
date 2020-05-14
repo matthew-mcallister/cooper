@@ -341,6 +341,13 @@ impl Set {
     }
 }
 
+impl Debuggable for Set {
+    type Handle = vk::DescriptorSet;
+    fn handle(&self) -> Self::Handle {
+        self.inner
+    }
+}
+
 // Begin boilerplate
 
 impl Default for DescriptorCounts {

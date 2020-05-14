@@ -86,6 +86,9 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
     fn invoke(&self, test: &unit::Test<VulkanTestData>) {
         // Recreate the full state so that every test has a clean slate.
         unsafe {
+            // Poke the event loop to refresh the timeout.
+            self.proxy.poke();
+
             let vars = self.init_vars().unwrap_or_else(|e| {
                 panic!("failed to initialize video: {}", e);
             });
@@ -93,22 +96,37 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
 
             (test.data())(vars);
 
-            assert_eq!(instance.debug_message_count(), 0);
+            let msg_count = instance.debug_message_count();
+            assert!(msg_count == 0, "caught {} validation errors", msg_count);
         }
     }
 }
 
 crate fn run_tests() {
     let (mut evt, proxy) = unsafe { window::init().unwrap() };
-    let thread = thread::spawn(move || {
+
+    let builder = thread::Builder::new().name("test_0".into());
+    builder.spawn(move || {
         let context = VulkanTestContext::new(proxy);
         let context = unit::PanicTestContext::new(context);
         let mut builder = unit::TestDriverBuilder::<VulkanTest>::parse_args();
         crate::__collect_tests(&mut builder);
         let mut driver = builder.build(Box::new(context));
         driver.run();
-    });
-    // FIXME: This is deadlocking when the test thread crashes
-    evt.pump();
-    thread.join().unwrap();
+    }).unwrap();
+
+    evt.set_poll_interval(std::time::Duration::new(1, 0));
+    loop {
+        match evt.pump_with_timeout() {
+            Ok(0) => {
+                // When the test thread aborts without unwinding, the
+                // channel never gets closed; hence the timeout.
+                eprintln!();
+                eprintln!("test thread timed out to avert deadlock");
+                break;
+            },
+            Ok(_) => continue,
+            Err(_) => break,
+        }
+    }
 }

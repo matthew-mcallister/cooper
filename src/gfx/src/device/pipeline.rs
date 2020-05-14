@@ -10,6 +10,8 @@ use log::trace;
 
 use crate::*;
 
+crate type ShaderStageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
+
 #[derive(Debug)]
 crate struct PipelineLayout {
     device: Arc<Device>,
@@ -37,7 +39,7 @@ crate struct GraphicsPipelineDesc {
     crate vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
-    crate stages: EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>,
+    crate stages: ShaderStageMap,
     crate cull_mode: vk::CullModeFlags,
     crate wireframe: bool,
     crate depth_test: bool,
@@ -180,8 +182,6 @@ impl GraphicsPipelineDesc {
         self.stages[ShaderStage::Vertex].as_ref()
     }
 }
-
-type StageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
 
 unsafe fn create_graphics_pipeline(
     device: Arc<Device>,

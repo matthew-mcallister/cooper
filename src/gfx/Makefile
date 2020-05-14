@@ -9,7 +9,7 @@ SHADER_SRC_FILES := \
     trivial_vert.glsl \
     trivial_frag.glsl \
     static_vert.glsl \
-    debug_frag.glsl
+    simple_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
 
 SHADER_HDR_FILES := \

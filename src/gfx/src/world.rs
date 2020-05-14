@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::*;
 
 #[derive(Debug)]
@@ -10,7 +8,7 @@ pub struct RenderWorld {
 
 #[derive(Debug, Default)]
 crate struct RenderWorldData {
-    crate debug: Vec<DebugMesh>,
+    crate instances: Vec<MeshInstance>,
     crate view: SceneView,
 }
 
@@ -26,16 +24,16 @@ impl RenderWorld {
         &self.rloop
     }
 
+    pub fn into_inner(self) -> Box<RenderLoop> {
+        self.rloop
+    }
+
     crate fn state(&self) -> &SystemState {
         self.rloop.state()
     }
 
     crate fn renderer(&self) -> &WorldRenderer {
         self.rloop.renderer()
-    }
-
-    pub fn add_debug(&mut self, mesh: DebugMesh) {
-        self.data.debug.push(mesh)
     }
 
     pub fn view(&self) -> &SceneView {
@@ -50,24 +48,15 @@ impl RenderWorld {
         self.rloop.frame_num()
     }
 
+    pub fn add_instance(&mut self, inst: MeshInstance) {
+        self.data.instances.push(inst);
+    }
+
     pub fn render(self) -> Box<RenderLoop> {
         let mut rloop = self.rloop;
         let world = self.data;
         rloop.render(world);
         rloop
-    }
-
-    pub fn create_material(
-        &self,
-        program: MaterialProgram,
-        images: MaterialImageMap,
-    ) -> Arc<Material> {
-        let desc = self.rloop.renderer().compile_material(program, &images);
-        Arc::new(Material {
-            program,
-            images,
-            desc,
-        })
     }
 }
 

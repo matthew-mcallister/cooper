@@ -299,14 +299,14 @@ impl Device {
         &self.features
     }
 
-    crate unsafe fn set_debug_name<T, A>(&self, obj: T, name: A)
-    where
-        T: DebugUtils,
-        A: AsRef<str>,
-    {
+    crate fn set_name(
+        &self,
+        obj: &impl Debuggable,
+        name: &(impl AsRef<str> + ?Sized),
+    ) {
         if self.app_info.debug {
             let name = CString::new(name.as_ref()).unwrap();
-            set_debug_name(&self.table, obj, name.as_ptr());
+            unsafe { set_name(&self.table, obj, name.as_ptr()); }
         }
     }
 

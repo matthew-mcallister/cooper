@@ -1,3 +1,4 @@
+// TODO: rename to rloop.rs or something
 use std::sync::Arc;
 
 use log::debug;
@@ -23,6 +24,7 @@ pub struct RenderLoop {
     device: Arc<Device>,
     gfx_queue: Arc<Queue>,
     swapchain: Swapchain,
+    globals: Arc<Globals>,
     renderer: WorldRenderer,
     frame_num: u64,
     frame_in_flight: u64,
@@ -78,7 +80,7 @@ impl RenderLoop {
         let scheduler = Scheduler::new(Arc::clone(&gfx_queue));
         let renderer = WorldRenderer::new(
             &state,
-            globals,
+            Arc::clone(&globals),
             &swapchain,
             scheduler,
         );
@@ -91,6 +93,7 @@ impl RenderLoop {
             device,
             gfx_queue,
             swapchain,
+            globals,
             renderer,
             frame_num: 1,
             frame_in_flight: 0,
@@ -119,6 +122,14 @@ impl RenderLoop {
 
     fn is_frame_in_flight(&self) -> bool {
         self.frame_in_flight == self.frame_num
+    }
+
+    pub fn create_material(
+        &self,
+        program: MaterialProgram,
+        images: MaterialImageMap,
+    ) -> Arc<Material> {
+        self.renderer.materials().create_material(program, images)
     }
 
     fn finish_frame(&mut self) {

@@ -8,11 +8,14 @@ use crate::*;
 crate struct Globals {
     crate device: Arc<Device>,
     crate shaders: GlobalShaders,
+    crate empty_pipeline_layout: Arc<PipelineLayout>,
     crate empty_uniform_buffer: Arc<BufferAlloc>,
     crate empty_storage_buffer: Arc<BufferAlloc>,
     crate empty_image_2d: Arc<ImageView>,
     crate empty_storage_image_2d: Arc<ImageView>,
     crate empty_sampler: Arc<Sampler>,
+    crate instance_buf_layout: Arc<DescriptorSetLayout>,
+    crate scene_unifs_layout: Arc<DescriptorSetLayout>,
 }
 
 #[derive(Debug)]
@@ -20,12 +23,12 @@ crate struct GlobalShaders {
     crate trivial_vert: Arc<Shader>,
     crate trivial_frag: Arc<Shader>,
     crate static_vert: Arc<Shader>,
-    crate debug_frag: Arc<Shader>,
+    crate simple_frag: Arc<Shader>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum ShaderConst {
-    DebugDisplay = 0,
+    SimpleMode = 0,
 }
 
 impl Globals {
@@ -37,6 +40,9 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
+
+        let empty_pipeline_layout =
+            Arc::new(PipelineLayout::new(Arc::clone(&device), vec![]));
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
@@ -80,14 +86,41 @@ impl Globals {
         };
         let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
 
+        let bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
+                    | vk::ShaderStageFlags::FRAGMENT_BIT,
+                ..Default::default()
+            },
+        ];
+        let scene_unifs_layout = Arc::new(DescriptorSetLayout::from_bindings(
+            Arc::clone(&device), &bindings));
+        let bindings = [
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
+                ..Default::default()
+            },
+        ];
+        let instance_buf_layout = Arc::new(DescriptorSetLayout::from_bindings(
+            Arc::clone(&device), &bindings));
+
         Globals {
             device,
             shaders,
+            empty_pipeline_layout,
             empty_uniform_buffer,
             empty_storage_buffer,
             empty_image_2d,
             empty_storage_image_2d,
             empty_sampler,
+            scene_unifs_layout,
+            instance_buf_layout,
         }
     }
 
@@ -156,7 +189,7 @@ mod shader_sources {
         TRIVIAL_VERT = "trivial_vert";
         TRIVIAL_FRAG = "trivial_frag";
         STATIC_VERT = "static_vert";
-        DEBUG_DEPTH_FRAG = "debug_frag";
+        DEBUG_DEPTH_FRAG = "simple_frag";
     }
 }
 
@@ -174,7 +207,7 @@ impl GlobalShaders {
             Arc::clone(&device),
             shader_sources::STATIC_VERT.to_vec(),
         ));
-        let debug_frag = Arc::new(Shader::new(
+        let simple_frag = Arc::new(Shader::new(
             Arc::clone(&device),
             shader_sources::DEBUG_DEPTH_FRAG.to_vec(),
         ));
@@ -182,7 +215,7 @@ impl GlobalShaders {
             trivial_vert,
             trivial_frag,
             static_vert,
-            debug_frag,
+            simple_frag,
         }
     }
 }

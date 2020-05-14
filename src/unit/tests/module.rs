@@ -22,6 +22,7 @@ mod tests {
     }
 
     #[allow(const_err)]
+    #[allow(unconditional_panic)]
     fn divide_by_zero_panics() {
         assert_eq!(1 / 0, 0);
     }

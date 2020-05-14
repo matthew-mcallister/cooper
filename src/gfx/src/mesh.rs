@@ -191,11 +191,16 @@ mod tests {
             SubpassContents::Inline,
         ).enter_subpass();
 
-        let layout = DebugRenderer::create_set_layout(dev());
-        let mut desc_set = state.descriptors.alloc(&layout);
-        globals.write_empty_descriptors(&mut desc_set);
+        let layouts = vec![
+            Arc::clone(&globals.scene_unifs_layout),
+            Arc::clone(&globals.instance_buf_layout),
+        ];
+        let mut scene_unifs = state.descriptors.alloc(&layouts[0]);
+        let mut inst_unifs = state.descriptors.alloc(&layouts[1]);
+        globals.write_empty_descriptors(&mut scene_unifs);
+        globals.write_empty_descriptors(&mut inst_unifs);
 
-        let pipe_layout = Arc::new(PipelineLayout::new(dev(), vec![layout]));
+        let pipe_layout = Arc::new(PipelineLayout::new(dev(), layouts));
         let mut desc =
             GraphicsPipelineDesc::new(cmds.subpass().clone(), pipe_layout);
 
@@ -203,7 +208,7 @@ mod tests {
         desc.stages[ShaderStage::Vertex] =
             Some(Arc::new(Arc::clone(&shaders.static_vert).into()));
         desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.debug_frag).into()));
+            Some(Arc::new(Arc::clone(&shaders.simple_frag).into()));
 
         desc.vertex_layout = mesh.vertex_layout()
             .to_input_layout(desc.vertex_stage().unwrap().shader());
@@ -211,7 +216,8 @@ mod tests {
         let pipe = state.gfx_pipes.get_or_create(&desc);
         cmds.bind_gfx_pipe(&pipe);
 
-        cmds.bind_gfx_descs(0, &desc_set);
+        cmds.bind_gfx_descs(0, &scene_unifs);
+        cmds.bind_gfx_descs(1, &inst_unifs);
 
         let idx = mesh.index.as_ref().unwrap();
         cmds.bind_index_buffer(idx.alloc.range(), idx.ty);

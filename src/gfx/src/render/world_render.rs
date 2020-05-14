@@ -89,7 +89,8 @@ crate struct WorldRenderer {
     basic_pass: BasicPass,
     framebuffers: Vec<Arc<Framebuffer>>,
     clear_values: [vk::ClearValue; 2],
-    debug: Option<Box<DebugRenderer>>,
+    materials: MaterialSystem,
+    inst_renderer: Option<Box<InstanceRenderer>>,
 }
 
 impl WorldRenderer {
@@ -102,20 +103,26 @@ impl WorldRenderer {
         let basic_pass = BasicPass::new(Arc::clone(&state.device));
         let framebuffers = basic_pass.create_framebuffers(state, &swapchain);
         let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
-        let debug = DebugRenderer::new(state, Arc::clone(&globals));
+        let materials = MaterialSystem::new(state, &globals);
+        let inst = InstanceRenderer::new(state, &globals);
         Self {
             globals,
             scheduler,
             basic_pass,
             framebuffers,
             clear_values,
-            debug: Some(Box::new(debug)),
+            materials,
+            inst_renderer: Some(Box::new(inst)),
         }
     }
 
     /// Used when recreating the swapchain
     crate fn into_inner(self) -> Scheduler {
         self.scheduler
+    }
+
+    crate fn materials(&self) -> &MaterialSystem {
+        &self.materials
     }
 
     crate fn run(
@@ -135,11 +142,12 @@ impl WorldRenderer {
         let clear_values = self.clear_values.to_vec();
         let mut pass = RenderPassNode::with_clear(framebuffer, clear_values);
 
-        let view = SceneViewState::new(state, &world);
-        let mut debug = self.debug.take().unwrap();
-        let (debug_return, task) = subpass_task(move |cmds| {
-            debug.render(&view, world.debug, cmds);
-            debug
+        let view =
+            SceneViewState::new(state, Arc::clone(&self.globals), &world);
+        let mut inst = self.inst_renderer.take().unwrap();
+        let (inst_return, task) = subpass_task(move |cmds| {
+            inst.render(&view, world.instances, cmds);
+            inst
         });
         pass.add_task(0, task);
 
@@ -151,63 +159,6 @@ impl WorldRenderer {
             Some(render_fence),
         );
 
-        self.debug = Some(debug_return.take().unwrap());
-    }
-
-    pub fn create_material(
-        &self,
-        program: MaterialProgram,
-        images: MaterialImageMap,
-    ) -> Arc<Material> {
-        let desc = self.compile_material(program, &images);
-        Arc::new(Material {
-            program,
-            images,
-            desc,
-        })
+        self.inst_renderer = Some(inst_return.take().unwrap());
     }
 }
-
-impl Renderer for WorldRenderer {
-    fn compile_material(
-        &self,
-        program: MaterialProgram,
-        images: &MaterialImageMap,
-    ) -> Option<DescriptorSet> {
-        match program {
-            MaterialProgram::Debug(_) => self.debug.as_ref().unwrap()
-                .compile_material(program, images),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use super::*;
-
-    unsafe fn create_renderer(vars: &crate::testing::TestVars) ->
-        (SystemState, WorldRenderer)
-    {
-        let state = SystemState::new(Arc::clone(vars.device()));
-        let globals = Arc::new(Globals::new(&state));
-        let scheduler = Scheduler::new(Arc::clone(vars.gfx_queue()));
-        let renderer =
-            WorldRenderer::new(&state, globals, vars.swapchain(), scheduler);
-        (state, renderer)
-    }
-
-    unsafe fn material_test(vars: crate::testing::TestVars) {
-        let (_state, renderer) = create_renderer(&vars);
-        let _material = renderer.create_material(
-            MaterialProgram::Debug(DebugDisplay::Checker),
-            MaterialImageMap::default(),
-        );
-    }
-
-    unit::declare_tests![
-        material_test,
-    ];
-}
-
-unit::collect_tests![tests];

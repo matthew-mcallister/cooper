@@ -1,8 +1,8 @@
-const uint CONST_ID_DEBUG_DISPLAY = 0;
+const uint CONST_ID_SIMPLE_MODE = 0;
 
-const uint DEBUG_DISPLAY_CHECKER = 0;
-const uint DEBUG_DISPLAY_DEPTH = 1;
-const uint DEBUG_DISPLAY_NORMAL = 2;
+const uint SIMPLE_MODE_CHECKER = 0;
+const uint SIMPLE_MODE_DEPTH = 1;
+const uint SIMPLE_MODE_NORMAL = 2;
 
 const uint VERTEX_ATTR_POSITION = 0;
 const uint VERTEX_ATTR_NORMAL = 1;
@@ -24,11 +24,8 @@ struct SceneView {
     mat4 view_inv;
 };
 
-struct DebugInstance {
-    mat4 mv;
-    vec4 colors[2];
-    // TODO:
-    //mat4 mvp;
+struct Instance {
+    vec4 xform[3];
 };
 
 // Good for debugging

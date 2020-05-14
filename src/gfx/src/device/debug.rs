@@ -12,15 +12,29 @@ use crate::*;
 
 /// Adds type information to Vulkan object types from the debug_utils
 /// extension.
-crate trait DebugUtils: vk::traits::HandleType {
+// TODO: should set HandleType: Copy
+crate trait DebugHandle: vk::traits::HandleType + Copy {
     /// Returns the debug object type.
     fn object_type() -> vk::ObjectType;
+}
+
+/// Allows an object to have its debug name set.
+crate trait Debuggable {
+    type Handle: DebugHandle;
+    fn handle(&self) -> Self::Handle;
+}
+
+impl<T> Debuggable for T where T: DebugHandle {
+    type Handle = Self;
+    fn handle(&self) -> Self::Handle {
+        *self
+    }
 }
 
 macro_rules! impl_debug_marker_name {
     ($($type:ident = $value:ident;)*) => {
         $(
-            impl DebugUtils for vk::$type {
+            impl DebugHandle for vk::$type {
                 fn object_type() -> vk::ObjectType {
                     vk::ObjectType::$value
                 }
@@ -82,14 +96,14 @@ impl_debug_marker_name! {
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
 }
 
-crate unsafe fn set_debug_name<T: DebugUtils>(
+crate unsafe fn set_name<T: Debuggable>(
     device: &vkl::DeviceTable,
-    object: T,
+    object: &T,
     name: *const c_char,
 ) {
     let info = vk::DebugUtilsObjectNameInfoEXT {
-        object_type: T::object_type(),
-        object_handle: object.into(),
+        object_type: T::Handle::object_type(),
+        object_handle: object.handle().into(),
         p_object_name: name,
         ..Default::default()
     };

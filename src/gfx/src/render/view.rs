@@ -5,16 +5,26 @@ use crate::*;
 #[derive(Debug)]
 crate struct SceneViewState {
     state: Arc<Box<SystemState>>,
+    globals: Arc<Globals>,
     crate uniforms: SceneViewUniforms,
     crate uniform_buffer: BufferBox<SceneViewUniforms>,
+    // TODO: This gets destroyed at the end of each frame while still in
+    // use. This should be replaced with a frame-scope object.
+    uniform_desc: DescriptorSet,
+    crate force_cull_mode: Option<vk::CullModeFlags>,
 }
 
 // TODO: Override Default
+// TODO: Give clearer names to rot and pos
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SceneView {
     pub perspective: PerspectiveParams,
+    /// Rotation of view camera.
     pub rot: [[f32; 3]; 3],
+    /// Position of view camera.
     pub pos: [f32; 3],
+    /// For debugging
+    pub force_cull_mode: Option<vk::CullModeFlags>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -40,11 +50,14 @@ crate struct PerspectiveUniforms {
     crate max_depth: f32,
 }
 
+// TODO: Give clearer names to view and view_pos
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 crate struct SceneViewUniforms {
     crate perspective: PerspectiveUniforms,
+    /// Transforms from world space to view space.
     crate view: [[f32; 4]; 4],
+    /// Transforms from view space to world space.
     crate view_inv: [[f32; 4]; 4],
     // TODO:
     //crate view_proj: [[f32; 4]; 4],
@@ -52,8 +65,11 @@ crate struct SceneViewUniforms {
 }
 
 impl SceneViewState {
-    crate fn new(state: Arc<Box<SystemState>>, world: &RenderWorldData) -> Self
-    {
+    crate fn new(
+        state: Arc<Box<SystemState>>,
+        globals: Arc<Globals>,
+        world: &RenderWorldData,
+    ) -> Self {
         let view = world.view;
 
         let view_inv = affine_xform(view.rot, view.pos);
@@ -70,15 +86,31 @@ impl SceneViewState {
             uniforms,
         );
 
+        let mut uniform_desc =
+            state.descriptors.alloc(&globals.scene_unifs_layout);
+        state.device.set_name(&uniform_desc, "scene_uniform_desc");
+        uniform_desc.write_buffer(0, uniform_buffer.range());
+
         Self {
             state,
+            globals,
             uniforms,
             uniform_buffer,
+            uniform_desc,
+            force_cull_mode: view.force_cull_mode,
         }
+    }
+
+    crate fn uniform_desc(&self) -> &DescriptorSet {
+        &self.uniform_desc
     }
 
     crate fn state(&self) -> &SystemState {
         &self.state
+    }
+
+    crate fn globals(&self) -> &Arc<Globals> {
+        &self.globals
     }
 }
 

@@ -245,6 +245,15 @@ macro_rules! primitive_enum {
 #[macro_export]
 macro_rules! enum_map {
     (
+        $($key:expr => $value:expr),*$(,)?
+    ) => {
+        {
+            let mut map = EnumMap::default();
+            $(map[$key] = $value;)*
+            map
+        }
+    };
+    (
         $($key:expr => $value:expr,)*
         _ => $default:tt,
     ) => {
@@ -253,7 +262,7 @@ macro_rules! enum_map {
             $(map[$key] = $value;)*
             map
         }
-    }
+    };
 }
 
 // TODO: Math
@@ -322,6 +331,13 @@ crate fn affine_xform(mat: [[f32; 3]; 3], vec: [f32; 3]) -> [[f32; 4]; 4] {
         [mat[2][0], mat[2][1], mat[2][2], 0.0],
         [vec[0], vec[1], vec[2], 1.0],
     ]
+}
+
+/// Packs an affine transform into a 4×3 matrix. This is just the
+/// transpose with the last column truncated.
+crate fn pack_affine_xform(mat: [[f32; 4]; 4]) -> [[f32; 4]; 3] {
+    let mat = transpose(mat);
+    [mat[0], mat[1], mat[2]]
 }
 
 crate fn rigid_xform_inv(rot: [[f32; 3]; 3], offs: [f32; 3]) -> [[f32; 4]; 4] {

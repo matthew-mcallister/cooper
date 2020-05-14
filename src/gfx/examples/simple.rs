@@ -26,7 +26,11 @@ fn identity() -> [[f32; 3]; 3] {
     ]
 }
 
-unsafe fn render_world(world: &mut RenderWorld, mesh: &Mesh) {
+unsafe fn render_world(
+    world: &mut RenderWorld,
+    mesh: &Mesh,
+    material: &Arc<Material>,
+) {
     let mut view = SceneView::default();
 
     let fovy2 = 45.0f32.to_radians();
@@ -67,15 +71,12 @@ unsafe fn render_world(world: &mut RenderWorld, mesh: &Mesh) {
         [-s, 0.0, c],
     ];
 
-    world.add_debug(DebugMesh {
+    world.add_instance(MeshInstance {
+        /// Assumed to be orthogonal.
         mesh: Arc::clone(&mesh.render_mesh),
         rot,
         pos: Default::default(),
-        debug_props: DebugInstanceProps {
-            display: DebugDisplay::Normal,
-            colors: [[1.0, 0.0, 1.0, 1.0], [0.5, 0.5, 0.5, 1.0]],
-            ..Default::default()
-        },
+        material: Arc::clone(material),
     });
 }
 
@@ -101,10 +102,13 @@ unsafe fn unsafe_main() {
         let bundle = GltfBundle::import(&path)?;
         let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
 
+        let prog = MaterialProgram::Checker;
+        let material = rl.create_material(prog, Default::default());
+
         let mut rl = Some(Box::new(rl));
         while !window.should_close() {
             let mut world = RenderWorld::new(rl.take().unwrap());
-            render_world(&mut world, &mesh);
+            render_world(&mut world, &mesh, &material);
             rl = Some(world.render());
         }
 

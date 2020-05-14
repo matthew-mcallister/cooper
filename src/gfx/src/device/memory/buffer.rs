@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 use std::ptr::{self, NonNull};
 use std::sync::{Arc, Weak};
 
@@ -177,7 +178,7 @@ impl<T: ?Sized> From<BufferBox<T>> for BufferAlloc {
 
 impl<T: ?Sized> BufferBox<T> {
     unsafe fn new(alloc: BufferAlloc, ptr: *mut T) -> Self {
-        BufferBox { alloc, ptr: NonNull::new_unchecked(ptr) }
+        BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
     }
 
     crate fn alloc(&self) -> &BufferAlloc {
@@ -367,6 +368,19 @@ impl BufferHeap {
         let alloc = self.alloc(
             binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::copy_from_slice(alloc, src)
+    }
+
+    crate fn box_uninit<T: Copy>(
+        self: &Arc<Self>,
+        binding: BufferBinding,
+        lifetime: Lifetime,
+        len: usize,
+    ) -> BufferBox<[MaybeUninit<T>]> {
+        let size = std::mem::size_of::<T>() * len;
+        let mut alloc = self.alloc(
+            binding, lifetime, MemoryMapping::Mapped, size as _);
+        let ptr = alloc.as_mut_slice::<T>(len) as *mut _;
+        unsafe { BufferBox::new(alloc, ptr) }
     }
 
     /// Invalidates frame-scope allocations.

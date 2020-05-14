@@ -100,6 +100,7 @@ impl WindowHandle {
 
 #[derive(Debug)]
 enum Request {
+    Poke,
     CreateWindow {
         info: CreateInfo,
     },
@@ -204,17 +205,19 @@ impl EventLoop {
     }
 
     /// Pumps requests and window system events according to the current
-    /// polling interval.
-    pub fn pump_with_timeout(&mut self) -> Result<(), cc::RecvError> {
+    /// polling interval. Returns the number of events handled. If the
+    /// number of events is zero, it may be safe to assume the other end
+    /// of the channel has stalled.
+    pub fn pump_with_timeout(&mut self) -> Result<u64, cc::RecvError> {
         unsafe { glfw::poll_events(); }
-        self.service.pump_with_fallback(&self.ticker)?;
-        Ok(())
+        let (count, _) = self.service.pump_with_fallback(&self.ticker)?;
+        Ok(count)
     }
 
     /// Pumps requests and window system events until the channel is
     /// disconnected.
     pub fn pump(&mut self) {
-        while let Ok(()) = self.pump_with_timeout() {}
+        while let Ok(_) = self.pump_with_timeout() {}
     }
 }
 
@@ -264,6 +267,7 @@ impl rq::RequestHandler for EventHandler {
 
     fn handle(&mut self, req: Self::Request) -> Option<Self::Response> {
         match req {
+            Request::Poke => None,
             Request::CreateWindow { info } => {
                 Some(unsafe { self.create_window(info).into() })
             },
@@ -371,6 +375,14 @@ impl AsRef<EventLoopProxy> for RequestSender {
 impl EventLoopProxy {
     pub fn vk_platform(&self) -> &VulkanPlatform {
         self.sender.as_ref()
+    }
+
+    /// Sends a message to the event loop which does nothing but
+    /// increase the message counter. Doesn't wait for a response. This
+    /// is useful to wake the event loop thread and let it know it isn't
+    /// deadlocked.
+    pub fn poke(&self) {
+        self.sender.send(Request::Poke).unwrap();
     }
 
     pub fn create_window(&self, info: CreateInfo) -> Result<Window, Error> {
