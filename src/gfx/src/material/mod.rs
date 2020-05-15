@@ -33,15 +33,14 @@ pub type MaterialImageMap = EnumMap<MaterialImage, Option<Arc<ImageView>>>;
 // TODO: Maybe make this a trait
 #[derive(Debug)]
 pub struct Material {
-    crate renderer: Arc<dyn MaterialRenderer>,
+    crate renderer: Arc<dyn MaterialFactory>,
     crate program: MaterialProgram,
     crate images: MaterialImageMap,
     // Some material types
     crate desc: Option<DescriptorSet>,
 }
 
-// TODO: Actually a better name might be "MaterialFactory".
-crate trait MaterialRenderer: std::fmt::Debug + Send + Sync {
+crate trait MaterialFactory: std::fmt::Debug + Send + Sync {
     fn create_descriptor_set(&self, images: &MaterialImageMap) ->
         Option<DescriptorSet>;
 
@@ -63,18 +62,18 @@ impl Material {
 
 #[derive(Debug)]
 crate struct MaterialSystem {
-    materials: EnumMap<MaterialProgram, Arc<dyn MaterialRenderer>>,
+    materials: EnumMap<MaterialProgram, Arc<dyn MaterialFactory>>,
 }
 
 impl MaterialSystem {
     crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
         let [checker, depth, normal] =
-            SimpleMaterialRenderer::new(state, globals);
+            SimpleMaterialFactory::new(state, globals);
         let materials = unsafe { std::mem::transmute([
              Arc::new(checker),  // Checker
              Arc::new(depth),    // FragDepth
              Arc::new(normal),   // FragNormal
-        ]: [Arc<dyn MaterialRenderer>; 3]) };
+        ]: [Arc<dyn MaterialFactory>; 3]) };
         Self {
             materials,
         }

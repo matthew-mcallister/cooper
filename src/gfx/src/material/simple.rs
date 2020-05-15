@@ -27,14 +27,14 @@ impl TryFrom<MaterialProgram> for SimpleMode {
 }
 
 #[derive(Debug)]
-crate struct SimpleMaterialRenderer {
+crate struct SimpleMaterialFactory {
     mode: SimpleMode,
     pipe_layout: Arc<PipelineLayout>,
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
 }
 
-impl SimpleMaterialRenderer {
+impl SimpleMaterialFactory {
     crate fn new(state: &SystemState, globals: &Arc<Globals>) -> [Self; 3] {
         let device = Arc::clone(&state.device);
 
@@ -66,7 +66,7 @@ impl SimpleMaterialRenderer {
     }
 }
 
-impl MaterialRenderer for SimpleMaterialRenderer {
+impl MaterialFactory for SimpleMaterialFactory {
     fn create_descriptor_set(
         &self,
         _images: &MaterialImageMap,
