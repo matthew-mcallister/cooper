@@ -24,7 +24,7 @@ macro_rules! repr_bool {
         $(#[$($meta:meta)*])*
         $vis:vis enum $name:ident {
             $(#[$($meta_f:meta)*])*
-            $falsy:ident = false,
+            $falsey:ident = false,
             $(#[$($meta_t:meta)*])*
             $truthy:ident = true$(,)?
         }
@@ -37,7 +37,7 @@ macro_rules! repr_bool {
         #[repr(u8)]
         $vis enum $name {
             $(#[$($meta_f)*])*
-            $falsy = 0,
+            $falsey = 0,
             $(#[$($meta_t)*])*
             $truthy = 1,
         }
@@ -140,16 +140,6 @@ crate fn flatten_arrays<T, const N: usize>(arrays: &[[T; N]]) -> &[T] {
     }
 }
 
-/// Implements FromIterator for EnumMap
-#[inline]
-crate fn enum_map<K: Enum<V>, V: Default>(
-    iter: impl IntoIterator<Item = (K, V)>,
-) -> EnumMap<K, V> {
-    let mut map = EnumMap::new();
-    map.extend(iter);
-    map
-}
-
 crate struct DebugIter<I: IntoIterator>
     where I::Item: std::fmt::Debug
 {
@@ -240,6 +230,15 @@ macro_rules! primitive_enum {
         @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
         enum $name:ident { $($member:ident = $val:expr,)* }
     ) => {};
+}
+
+// TODO: This is stupid.
+crate fn enum_map<K: Enum<V>, V>(array: K::Array) -> EnumMap<K, V> {
+    unsafe {
+        let res = std::ptr::read(&array as *const _ as *const EnumMap<K, V>);
+        std::mem::forget(array);
+        res
+    }
 }
 
 #[macro_export]

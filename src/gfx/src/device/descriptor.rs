@@ -3,6 +3,7 @@ use std::sync::{Arc, Weak};
 
 use base::impl_bin_ops;
 use derive_more::*;
+use enum_map::EnumMap;
 use log::trace;
 use parking_lot::Mutex;
 use vk::traits::*;
@@ -36,7 +37,7 @@ crate type SetLayout = DescriptorSetLayout;
 #[derive(Debug)]
 crate struct DescriptorSet {
     layout: Arc<DescriptorSetLayout>,
-    heap: Weak<DescriptorHeap>,
+    pool: Weak<Mutex<DescriptorPool>>,
     inner: vk::DescriptorSet,
 }
 
@@ -165,8 +166,8 @@ fn is_storage_buffer(ty: vk::DescriptorType) -> bool {
 
 impl Drop for Set {
     fn drop(&mut self) {
-        if let Some(heap) = Weak::upgrade(&self.heap) {
-            unsafe { heap.free(self); }
+        if let Some(pool) = Weak::upgrade(&self.pool) {
+            unsafe { pool.lock().free(self); }
         }
     }
 }
@@ -349,6 +350,7 @@ impl Debuggable for Set {
 }
 
 // Begin boilerplate
+// TODO: Aren't there already have macros for this stuff somewhere?
 
 impl Default for DescriptorCounts {
     fn default() -> Self {
@@ -462,10 +464,11 @@ impl std::iter::FromIterator<(vk::DescriptorType, u32)> for DescriptorCounts {
 
 /// Fixed-size general-purpose descriptor pool.
 #[derive(Debug)]
-crate struct DescriptorPool {
+struct DescriptorPool {
     device: Arc<Device>,
     inner: vk::DescriptorPool,
     flags: vk::DescriptorPoolCreateFlags,
+    lifetime: Lifetime,
     // Note: limits are not hard but are informative
     max_sets: u32,
     used_sets: u32,
@@ -475,7 +478,7 @@ crate struct DescriptorPool {
 
 #[derive(Debug)]
 crate struct DescriptorHeap {
-    crate pool: Mutex<DescriptorPool>,
+    pools: EnumMap<Lifetime, Arc<Mutex<DescriptorPool>>>,
 }
 
 impl Drop for Pool {
@@ -486,14 +489,17 @@ impl Drop for Pool {
 }
 
 impl Pool {
-    crate unsafe fn new(
+    crate fn new(
         device: Arc<Device>,
         max_sets: u32,
         descriptor_counts: Counts,
+        lifetime: Lifetime,
     ) -> Self {
         let dt = &*device.table;
 
-        let flags = vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT;
+        let flags = if lifetime == Lifetime::Static {
+            vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET_BIT
+        } else { Default::default() };
         let pool_sizes = pool_sizes(&descriptor_counts);
         let create_info = vk::DescriptorPoolCreateInfo {
             flags,
@@ -503,13 +509,16 @@ impl Pool {
             ..Default::default()
         };
         let mut inner = vk::null();
-        dt.create_descriptor_pool(&create_info, ptr::null(), &mut inner)
-            .check().unwrap();
+        unsafe {
+            dt.create_descriptor_pool(&create_info, ptr::null(), &mut inner)
+                .check().unwrap();
+        }
 
         DescriptorPool {
             device,
             inner,
             flags,
+            lifetime,
             max_sets,
             used_sets: 0,
             max_descriptors: descriptor_counts,
@@ -563,7 +572,7 @@ impl Pool {
         sets.into_iter().map(|inner| {
             DescriptorSet {
                 layout: layout.clone(),
-                heap: Weak::new(),
+                pool: Weak::new(),
                 inner,
             }
         }).collect()
@@ -574,6 +583,7 @@ impl Pool {
     }
 
     unsafe fn free(&mut self, set: &Set) {
+        // TODO: Maybe assert this is the correct VkDescriptorPool
         trace!("freeing descriptor set: {:?}", set);
 
         self.used_sets -= 1;
@@ -591,42 +601,66 @@ impl Pool {
     }
 }
 
+impl Debuggable for Pool {
+    type Handle = vk::DescriptorPool;
+    fn handle(&self) -> Self::Handle { self.inner }
+}
+
 impl Heap {
-    crate fn new(device: Arc<Device>) -> Self {
-        let (max_sets, pool_sizes) = global_descriptor_counts();
-        unsafe {
-            Self {
-                pool: Mutex::new(Pool::new(device, max_sets, pool_sizes)),
-            }
+    crate fn new(device: &Arc<Device>) -> Self {
+        let (static_sets, static_sizes) = static_descriptor_counts();
+        let static_pool = Pool::new(
+            Arc::clone(&device), static_sets, static_sizes,
+            Lifetime::Static,
+        );
+        device.set_name(&static_pool, "static_pool");
+
+        let (frame_sets, frame_sizes) = frame_descriptor_counts();
+        let frame_pool = Pool::new(
+            Arc::clone(&device), frame_sets, frame_sizes,
+            Lifetime::Frame,
+        );
+        device.set_name(&frame_pool, "frame_pool");
+
+        Self {
+            pools: enum_map([
+                Arc::new(Mutex::new(static_pool)),
+                Arc::new(Mutex::new(frame_pool)),
+            ])
         }
     }
 
     crate fn alloc_many(
         self: &Arc<Self>,
+        lifetime: Lifetime,
         layout: &Arc<DescriptorSetLayout>,
         count: u32,
     ) -> Vec<DescriptorSet> {
-        let mut sets = self.pool.lock().alloc_many(layout, count);
-        for set in sets.iter_mut() {
-            set.heap = Arc::downgrade(self);
+        let mut sets = self.pools[lifetime].lock().alloc_many(layout, count);
+        if lifetime == Lifetime::Static {
+            for set in sets.iter_mut() {
+                set.pool = Arc::downgrade(&self.pools[lifetime]);
+            }
         }
         sets
     }
 
-    crate fn alloc(self: &Arc<Self>, layout: &Arc<DescriptorSetLayout>) -> Set
-    {
-        self.alloc_many(layout, 1).pop().unwrap()
+    crate fn alloc(
+        self: &Arc<Self>,
+        lifetime: Lifetime,
+        layout: &Arc<DescriptorSetLayout>,
+    ) -> Set {
+        self.alloc_many(lifetime, layout, 1).pop().unwrap()
     }
 
-    unsafe fn free(&self, set: &Set) {
-        self.pool.lock().free(set);
+    crate unsafe fn clear_frame(&self) {
+        self.pools[Lifetime::Frame].lock().reset();
     }
 }
 
 /// Returns a reasonable number of descriptor sets and pool sizes for
 /// a global descriptor pool.
-crate fn global_descriptor_counts() -> (u32, Counts) {
-    let max_sets = 0x1_0000;
+fn global_descriptor_counts(max_sets: u32) -> (u32, Counts) {
     let max_descs = [
         (vk::DescriptorType::SAMPLER,                   1 * max_sets),
         (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),
@@ -634,11 +668,19 @@ crate fn global_descriptor_counts() -> (u32, Counts) {
         (vk::DescriptorType::STORAGE_IMAGE,             1 * max_sets),
         (vk::DescriptorType::UNIFORM_TEXEL_BUFFER,      1 * max_sets),
         (vk::DescriptorType::STORAGE_TEXEL_BUFFER,      1 * max_sets),
-        (vk::DescriptorType::UNIFORM_BUFFER,            1 * max_sets),
-        (vk::DescriptorType::STORAGE_BUFFER,            1 * max_sets),
+        (vk::DescriptorType::UNIFORM_BUFFER,            2 * max_sets),
+        (vk::DescriptorType::STORAGE_BUFFER,            2 * max_sets),
         (vk::DescriptorType::INPUT_ATTACHMENT,          256),
     ].iter().cloned().collect();
     (max_sets, max_descs)
+}
+
+fn static_descriptor_counts() -> (u32, Counts) {
+    global_descriptor_counts(0x1_0000)
+}
+
+fn frame_descriptor_counts() -> (u32, Counts) {
+    global_descriptor_counts(0x1000)
 }
 
 #[cfg(test)]
@@ -680,11 +722,12 @@ mod tests {
     unsafe fn alloc_test(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
 
-        let (max_sets, descriptor_counts) = global_descriptor_counts();
+        let (max_sets, descriptor_counts) = frame_descriptor_counts();
         let mut pool = DescriptorPool::new(
             Arc::clone(&device),
             max_sets,
             descriptor_counts,
+            Lifetime::Static,
         );
         let constant_buffer_layout = constant_buffer_layout(&device);
         let material_layout = material_layout(&device);
@@ -721,7 +764,7 @@ mod tests {
         ];
         let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
 
-        let mut desc = state.descriptors.alloc(&layout);
+        let mut desc = state.descriptors.alloc(Lifetime::Static, &layout);
         let buffers = vec![globals.empty_uniform_buffer.range(); 2];
         let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
         desc.write_buffers(0, 0, &buffers);

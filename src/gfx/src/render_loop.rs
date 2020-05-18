@@ -40,7 +40,7 @@ impl SystemState {
         let dev = || Arc::clone(&device);
         let heap = DeviceHeap::new(dev());
         let buffers = BufferHeap::new(dev());
-        let descriptors = Arc::new(DescriptorHeap::new(dev()));
+        let descriptors = Arc::new(DescriptorHeap::new(&device));
         let gfx_pipes = GraphicsPipelineCache::new(dev());
         let samplers = SamplerCache::new(dev());
         SystemState {
@@ -175,6 +175,10 @@ impl RenderLoop {
 
     fn pre_render(&mut self) {
         let state = self.state_mut();
+        unsafe {
+            state.buffers.clear_frame();
+            state.descriptors.clear_frame();
+        }
         state.gfx_pipes.commit();
         state.samplers.commit();
     }

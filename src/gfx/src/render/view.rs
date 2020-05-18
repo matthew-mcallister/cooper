@@ -8,8 +8,6 @@ crate struct SceneViewState {
     globals: Arc<Globals>,
     crate uniforms: SceneViewUniforms,
     crate uniform_buffer: BufferBox<SceneViewUniforms>,
-    // TODO: This gets destroyed at the end of each frame while still in
-    // use. This should be replaced with a frame-scope object.
     uniform_desc: DescriptorSet,
     crate force_cull_mode: Option<vk::CullModeFlags>,
 }
@@ -86,8 +84,10 @@ impl SceneViewState {
             uniforms,
         );
 
-        let mut uniform_desc =
-            state.descriptors.alloc(&globals.scene_unifs_layout);
+        let mut uniform_desc = state.descriptors.alloc(
+            Lifetime::Frame,
+            &globals.scene_unifs_layout,
+        );
         state.device.set_name(&uniform_desc, "scene_uniform_desc");
         uniform_desc.write_buffer(0, uniform_buffer.range());
 

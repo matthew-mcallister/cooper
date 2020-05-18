@@ -29,7 +29,7 @@ fn identity() -> [[f32; 3]; 3] {
 unsafe fn render_world(
     world: &mut RenderWorld,
     mesh: &Mesh,
-    material: &Arc<Material>,
+    materials: &[Arc<Material>],
 ) {
     let mut view = SceneView::default();
 
@@ -71,6 +71,8 @@ unsafe fn render_world(
         [-s, 0.0, c],
     ];
 
+    let idx = (world.frame_num() / 109) as usize;
+    let material = &materials[idx % materials.len()];
     world.add_instance(MeshInstance {
         /// Assumed to be orthogonal.
         mesh: Arc::clone(&mesh.render_mesh),
@@ -102,15 +104,23 @@ unsafe fn unsafe_main() {
         let bundle = GltfBundle::import(&path)?;
         let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
 
-        let prog = MaterialProgram::Checker;
-        let material = rl.create_material(prog, Default::default());
+        let materials = [
+            rl.create_material(MaterialProgram::Checker, Default::default()),
+            rl.create_material(MaterialProgram::FragDepth, Default::default()),
+            rl.create_material(MaterialProgram::FragNormal, Default::default()),
+        ];
 
         let mut rl = Some(Box::new(rl));
         while !window.should_close() {
             let mut world = RenderWorld::new(rl.take().unwrap());
-            render_world(&mut world, &mesh, &material);
+            render_world(&mut world, &mesh, &materials);
             rl = Some(world.render());
         }
+
+        // Manually dropping things sucks; for that reason it seems
+        // better to dynamically initialize them inside the main loop.
+        std::mem::drop(mesh);
+        std::mem::drop(materials);
 
         Ok(())
     });

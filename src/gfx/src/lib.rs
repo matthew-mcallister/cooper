@@ -6,6 +6,7 @@
 #![feature(maybe_uninit_extra)]
 #![feature(try_blocks)]
 #![feature(type_ascription)]
+#![feature(weak_into_raw)]
 
 #![allow(dead_code)]
 

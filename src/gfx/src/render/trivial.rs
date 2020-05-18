@@ -56,7 +56,10 @@ impl TrivialRenderer {
         let frag_shader = Arc::new(Arc::clone(&shaders.trivial_frag).into());
 
         let descs = &state.descriptors;
-        let mut descs = [descs.alloc(&layout0), descs.alloc(&layout1)];
+        let mut descs = [
+            descs.alloc(Lifetime::Static, &layout0),
+            descs.alloc(Lifetime::Static, &layout1),
+        ];
         for desc in descs.iter_mut() {
             unsafe { globals.write_empty_descriptors(desc); }
         }

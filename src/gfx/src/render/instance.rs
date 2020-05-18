@@ -23,17 +23,13 @@ struct PerInstanceData {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 crate struct InstanceRenderer {
-    instance_desc: DescriptorSet,
 }
 
 impl InstanceRenderer {
-    crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
-        let desc = state.descriptors.alloc(&globals.instance_buf_layout);
-        state.device.set_name(&desc, "instance_desc");
-        InstanceRenderer {
-            instance_desc: desc,
-        }
+    crate fn new(_state: &SystemState, _globals: &Arc<Globals>) -> Self {
+        InstanceRenderer {}
     }
 
     crate fn render(
@@ -43,18 +39,14 @@ impl InstanceRenderer {
         cmds: &mut SubpassCmds,
     ) {
         unsafe {
-            render_instances(&mut self.instance_desc, view, instances, cmds);
+            render_instances(view, instances, cmds);
         }
     }
 }
 
 // TODO: Sort meshes by pipeline, or at least display type
 // TODO: Instance sorted meshes.
-// TODO: In the case of vertex shader skinning, we need an extra
-// per-instance binding (the joints) and a different vertex shader.
-// This can be accommodated; also, compute skinning is a workaround.
 unsafe fn render_instances(
-    instance_desc: &mut DescriptorSet,
     view: &SceneViewState,
     instances: Vec<MeshInstance>,
     cmds: &mut SubpassCmds,
@@ -64,13 +56,18 @@ unsafe fn render_instances(
     let state = view.state();
     let globals = view.globals();
 
+    // TODO: Upload to device-local memory?
     let mut instance_data = view.state().buffers.box_uninit(
         BufferBinding::Storage,
         Lifetime::Frame,
         instances.len(),
     );
-    // TODO: Upload to device-local memory?
     // TODO: Use dynamic offset buffers to skip this?
+    let mut instance_desc = state.descriptors.alloc(
+        Lifetime::Frame,
+        &globals.instance_buf_layout,
+    );
+    state.device.set_name(&instance_desc, "instance_desc");
     instance_desc.write_buffer(0, instance_data.range());
 
     let mut desc = GraphicsPipelineDesc::new(

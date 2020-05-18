@@ -47,6 +47,7 @@ crate trait MaterialFactory: std::fmt::Debug + Send + Sync {
     // FIXME: Hacked in because there's no pipeline layout cache.
     fn pipeline_layout(&self) -> &Arc<PipelineLayout>;
 
+    // TODO: Is this a sign that this abstraction is not all that good?
     fn select_shaders(&self, skinned: bool) -> ShaderStageMap;
 }
 

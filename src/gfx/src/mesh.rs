@@ -195,8 +195,14 @@ mod tests {
             Arc::clone(&globals.scene_unifs_layout),
             Arc::clone(&globals.instance_buf_layout),
         ];
-        let mut scene_unifs = state.descriptors.alloc(&layouts[0]);
-        let mut inst_unifs = state.descriptors.alloc(&layouts[1]);
+        let mut scene_unifs = state.descriptors.alloc(
+            Lifetime::Frame,
+            &layouts[0],
+        );
+        let mut inst_unifs = state.descriptors.alloc(
+            Lifetime::Frame,
+            &layouts[1],
+        );
         globals.write_empty_descriptors(&mut scene_unifs);
         globals.write_empty_descriptors(&mut inst_unifs);
 

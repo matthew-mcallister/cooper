@@ -249,7 +249,7 @@ mod tests {
         ];
         let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
 
-        let mut desc = state.descriptors.alloc(&layout);
+        let mut desc = state.descriptors.alloc(Lifetime::Frame, &layout);
         globals.write_empty_descriptors(&mut desc);
     }
 
