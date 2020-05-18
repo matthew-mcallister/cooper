@@ -10,21 +10,21 @@ harness = false
 
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
-bitflags = "^1.2.1"
-crossbeam = "^0.7.2"
+bitflags = "1.2.1"
+crossbeam = "0.7.2"
 derive_more = "0.15"
-derivative = "^2.1.1"
-enum-map = "^0.6.1"
+derivative = "2.1.1"
+enum-map = "0.6.1"
 fnv = "1.0"
-log = "^0.4.8"
-itertools = "^0.8.2"
+log = "0.4.8"
+itertools = "0.8.2"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }
 owning_ref = "0.4"
 parking_lot = { version = "0.9", features = ["owning_ref"] }
 prelude = { path = "../prelude", package = "cooper-prelude" }
-spirv_headers = "^1.4.2"
-spirv-reflect = "^0.2.3"
+spirv_headers = "1.4.2"
+spirv-reflect = "0.2.3"
 unit = { path = "../unit", package = "cooper-unit" }
 window = { path = "../window", package = "cooper-window" }
 
@@ -37,7 +37,7 @@ git = "https://gitlab.com/matthew-mcallister/vk-ffi"
 package = "vulkan-loader"
 
 [dev-dependencies]
-anyhow = "^1.0.28"
-fehler = "^1.0.0"
+anyhow = "1.0.28"
+fehler = "1.0.0"
 env_logger = "0.7.1"
-gltf = { version = "^0.15.1", features = ["import"] }
+gltf = { version = "0.15.1", features = ["import"] }
