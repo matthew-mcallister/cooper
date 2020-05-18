@@ -85,6 +85,11 @@ impl<T> NodeArray<T> {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
     pub fn add(&mut self, value: T) -> Id<T> {
         Id::new(self.pool.add(Node::new(value)))
     }

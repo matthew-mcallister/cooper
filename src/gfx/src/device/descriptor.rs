@@ -661,6 +661,7 @@ impl Heap {
 /// Returns a reasonable number of descriptor sets and pool sizes for
 /// a global descriptor pool.
 fn global_descriptor_counts(max_sets: u32) -> (u32, Counts) {
+    #![allow(clippy::identity_op)]
     let max_descs = [
         (vk::DescriptorType::SAMPLER,                   1 * max_sets),
         (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),

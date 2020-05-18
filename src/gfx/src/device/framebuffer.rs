@@ -149,7 +149,7 @@ fn validate_framebuffer_creation(
     render_pass: &RenderPass,
     attachments: &[AttachmentImage],
 ) {
-    assert!(attachments.len() > 0);
+    assert!(!attachments.is_empty());
     assert_eq!(attachments.len(), render_pass.attachments().len());
 
     let extent = attachments[0].extent();

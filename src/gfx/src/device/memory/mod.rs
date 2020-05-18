@@ -93,11 +93,10 @@ fn find_memory_type(
     // required properties is probably the best for general use.
     iter_memory_types(device)
         .enumerate()
-        .filter(|&(idx, ty)| {
+        .find(|&(idx, ty)| {
             compatible_type(type_mask, idx as u32)
                 && ty.property_flags.contains(flags)
         })
-        .next()
         .map(|(idx, _)| idx as u32)
 }
 

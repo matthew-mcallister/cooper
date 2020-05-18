@@ -15,7 +15,7 @@ use crate::*;
 crate struct Shader {
     device: Arc<Device>,
     module: vk::ShaderModule,
-    code: Vec<u8>,
+    code: Vec<u32>,
     stage: ShaderStage,
     source_file: String,
     inputs: Vec<ShaderLocation>,
@@ -57,19 +57,19 @@ impl Drop for Shader {
 }
 
 impl Shader {
-    crate unsafe fn new(device: Arc<Device>, code: Vec<u8>) -> Self {
+    crate unsafe fn new(device: Arc<Device>, code: Vec<u32>) -> Self {
         let dt = &device.table;
-        assert_eq!(code.len() % 4, 0);
         let create_info = vk::ShaderModuleCreateInfo {
-            code_size: code.len(),
-            p_code: code.as_ptr() as _,
+            code_size: 4 * code.len(),
+            p_code: code.as_ptr(),
             ..Default::default()
         };
         let mut module = vk::null();
         dt.create_shader_module(&create_info, ptr::null(), &mut module)
             .check().unwrap();
 
-        let reflected = spirv_reflect::ShaderModule::load_u8_data(&code)
+        let data = code.as_bytes();
+        let reflected = spirv_reflect::ShaderModule::load_u8_data(data)
             .unwrap();
         let stage = reflected.get_spirv_execution_model().try_into().unwrap();
         let source_file = reflected.get_source_file();
@@ -98,7 +98,7 @@ impl Shader {
         unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") }
     }
 
-    crate fn code(&self) -> &[u8] {
+    crate fn code(&self) -> &[u32] {
         &self.code
     }
 

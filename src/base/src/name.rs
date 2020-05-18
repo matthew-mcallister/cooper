@@ -51,6 +51,10 @@ impl Name {
         self.len as _
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn empty() -> Self {
         Name {
             bytes: [0; Name::capacity()],

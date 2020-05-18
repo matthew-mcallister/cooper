@@ -1,14 +1,25 @@
-#![feature(arbitrary_self_types)]
-#![feature(bool_to_option)]
-#![feature(const_generics)]
-#![feature(cow_is_borrowed)]
-#![feature(crate_visibility_modifier)]
-#![feature(maybe_uninit_extra)]
-#![feature(try_blocks)]
-#![feature(type_ascription)]
-#![feature(weak_into_raw)]
+#![feature(
+    arbitrary_self_types,
+    bool_to_option,
+    const_generics,
+    cow_is_borrowed,
+    crate_visibility_modifier,
+    maybe_uninit_extra,
+    try_blocks,
+    type_ascription,
+    weak_into_raw,
+)]
 
-#![allow(dead_code)]
+#![allow(dead_code, incomplete_features)]
+
+#![allow(
+    clippy::missing_safety_doc,
+    clippy::module_inception,
+    clippy::needless_range_loop,
+    clippy::too_many_arguments,
+    clippy::try_err,
+    clippy::type_complexity,
+)]
 
 #[cfg(test)]
 macro_rules! test_type {

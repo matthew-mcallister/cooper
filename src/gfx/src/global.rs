@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use log::trace;
+use prelude::*;
 
 use crate::*;
 
@@ -195,21 +196,29 @@ mod shader_sources {
 
 impl GlobalShaders {
     unsafe fn new(device: &Arc<Device>) -> Self {
+        let to_words = |bytes: &[u8]| {
+            assert_eq!(bytes.len() % 4, 0);
+            let mut words = Vec::with_capacity(bytes.len() / 4);
+            words.set_len(words.capacity());
+            words.as_bytes_mut().copy_from_slice(bytes);
+            words
+        };
+
         let trivial_vert = Arc::new(Shader::new(
             Arc::clone(&device),
-            shader_sources::TRIVIAL_VERT.to_vec(),
+            to_words(shader_sources::TRIVIAL_VERT),
         ));
         let trivial_frag = Arc::new(Shader::new(
             Arc::clone(&device),
-            shader_sources::TRIVIAL_FRAG.to_vec(),
+            to_words(shader_sources::TRIVIAL_FRAG),
         ));
         let static_vert = Arc::new(Shader::new(
             Arc::clone(&device),
-            shader_sources::STATIC_VERT.to_vec(),
+            to_words(shader_sources::STATIC_VERT),
         ));
         let simple_frag = Arc::new(Shader::new(
             Arc::clone(&device),
-            shader_sources::DEBUG_DEPTH_FRAG.to_vec(),
+            to_words(shader_sources::DEBUG_DEPTH_FRAG),
         ));
         GlobalShaders {
             trivial_vert,

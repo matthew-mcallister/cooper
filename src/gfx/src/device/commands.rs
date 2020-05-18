@@ -79,8 +79,8 @@ impl Drop for CmdPool {
 }
 
 impl CmdPool {
-    crate fn new<'dev>(
-        queue_family: QueueFamily<'dev>,
+    crate fn new(
+        queue_family: QueueFamily<'_>,
         flags: vk::CommandPoolCreateFlags,
     ) -> Self {
         use vk::CommandPoolCreateFlags as Flags;
@@ -174,7 +174,7 @@ impl CmdBuffer {
     crate fn new(mut pool: Box<CmdPool>, level: CmdBufferLevel) -> Self {
         CmdBuffer {
             device: Arc::clone(&pool.device),
-            inner: pool.alloc(level.into()),
+            inner: pool.alloc(level),
             level,
             pool,
             state: Default::default(),

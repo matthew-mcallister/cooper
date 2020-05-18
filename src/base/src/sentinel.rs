@@ -22,10 +22,16 @@ impl std::cmp::Eq for Sentinel {}
 
 impl Sentinel {
     pub fn new() -> Self {
-        Sentinel { inner: Arc::new(()) }
+        Self { inner: Arc::new(()) }
     }
 
     pub fn in_use(&self) -> bool {
         Arc::strong_count(&self.inner) > 1
+    }
+}
+
+impl Default for Sentinel {
+    fn default() -> Self {
+        Self::new()
     }
 }

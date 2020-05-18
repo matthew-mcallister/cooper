@@ -124,7 +124,7 @@ impl RenderPass {
             .map(move |index| Subpass { pass: Arc::clone(self), index })
     }
 
-    crate fn subpass<'a>(self: &'a Arc<Self>, index: usize) -> Subpass {
+    crate fn subpass(self: &Arc<Self>, index: usize) -> Subpass {
         assert!(index < self.subpasses.len());
         Subpass { pass: Arc::clone(self), index }
     }
@@ -222,7 +222,7 @@ fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
 
     let input_attchs: Vec<_> = attchs!(desc.input_attchs.iter()).collect();
     let color_attchs: Vec<_> = attchs!(desc.color_attchs.iter()).collect();
-    let depth_stencil_attch = desc.depth_stencil_attch.map(|idx| attch(idx));
+    let depth_stencil_attch = desc.depth_stencil_attch.map(attch);
     let resolve_attchs: Vec<_> = attchs!(desc.resolve_attchs.iter()).collect();
 
     SubpassState {

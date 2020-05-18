@@ -1,3 +1,5 @@
+#![allow(clippy::len_without_is_empty, clippy::should_implement_trait)]
+
 use derivative::*;
 use derive_more::*;
 use enum_map::{Enum, EnumMap};

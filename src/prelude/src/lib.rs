@@ -59,6 +59,9 @@ pub trait SliceExt {
     /// Casts a slice to a byte array.
     fn as_bytes(&self) -> &[u8];
 
+    /// Casts a slice to a mutable byte array.
+    fn as_bytes_mut(&mut self) -> &mut [u8];
+
     /// Converts a slice to a *non-dangling* pointer. This means that,
     /// if the slice has length zero, the returned pointer is NULL.
     /// Though it is hardly undocumented, this is not the case for
@@ -73,6 +76,12 @@ impl<T> SliceExt for [T] {
     fn as_bytes(&self) -> &[u8] {
         let len = self.len() * std::mem::size_of::<T>();
         unsafe { std::slice::from_raw_parts(self as *const [T] as _, len) }
+    }
+
+    #[inline(always)]
+    fn as_bytes_mut(&mut self) -> &mut [u8] {
+        let len = self.len() * std::mem::size_of::<T>();
+        unsafe { std::slice::from_raw_parts_mut(self as *mut [T] as _, len) }
     }
 
     #[inline(always)]

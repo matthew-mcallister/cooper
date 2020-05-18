@@ -8,6 +8,8 @@
 #![feature(negative_impls)]
 #![feature(optin_builtin_traits)]
 
+#![allow(clippy::missing_safety_doc)]
+
 #[cfg(test)]
 macro_rules! test_type {
     () => { unit::PlainTest }
@@ -217,7 +219,7 @@ impl EventLoop {
     /// Pumps requests and window system events until the channel is
     /// disconnected.
     pub fn pump(&mut self) {
-        while let Ok(_) = self.pump_with_timeout() {}
+        while self.pump_with_timeout().is_ok() {}
     }
 }
 
@@ -307,7 +309,7 @@ pub struct VulkanPlatform {
 
 impl AsRef<VulkanPlatform> for RequestSender {
     fn as_ref(&self) -> &VulkanPlatform {
-        unsafe { std::mem::transmute(self) }
+        unsafe { &*(self as *const _ as *const _) }
     }
 }
 
@@ -368,7 +370,7 @@ pub struct EventLoopProxy {
 
 impl AsRef<EventLoopProxy> for RequestSender {
     fn as_ref(&self) -> &EventLoopProxy {
-        unsafe { std::mem::transmute(self) }
+        unsafe { &*(self as *const _ as *const _) }
     }
 }
 

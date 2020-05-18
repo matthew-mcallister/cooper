@@ -1,3 +1,5 @@
+#![allow(clippy::or_fun_call)]
+
 mod commands;
 mod debug;
 mod descriptor;

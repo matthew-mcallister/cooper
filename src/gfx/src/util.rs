@@ -122,12 +122,12 @@ crate fn byte_hash<T, H: Hasher>(this: &T, state: &mut H) {
 
 #[inline]
 crate fn as_uninit<T>(src: &T) -> &MaybeUninit<T> {
-    unsafe { std::mem::transmute(src) }
+    unsafe { &*(src as *const _ as *const _) }
 }
 
 #[inline]
 crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
-    unsafe { std::mem::transmute(src) }
+    unsafe { &*(src as *const _ as *const _) }
 }
 
 #[inline]

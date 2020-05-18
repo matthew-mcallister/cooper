@@ -234,6 +234,10 @@ impl<T> Pool<T> {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn get_slot(&self, id: PoolId) -> Option<&Slot<T>> {
         let slot = self.slots.get(id.idx as usize)?;
         opt(slot.gen() == id.gen)?;

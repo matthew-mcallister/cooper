@@ -10,7 +10,7 @@ harness = false
 
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
-crossbeam-channel = "0.3"
+crossbeam-channel = "^0.4.2"
 derive_more = "0.14"
 prelude = { path = "../prelude", package = "cooper-prelude" }
 unit = { path = "../unit", package = "cooper-unit" }

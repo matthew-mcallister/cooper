@@ -56,7 +56,7 @@ impl RenderPassNode {
     }
 
     crate fn add_task(&mut self, subpass: usize, task: SubpassTask) {
-        self.tasks[subpass].push(task.into())
+        self.tasks[subpass].push(task)
     }
 }
 
