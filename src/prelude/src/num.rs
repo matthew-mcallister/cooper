@@ -1,3 +1,5 @@
+use crate::float::*;
+
 pub trait Zero {
     fn zero() -> Self;
 }
@@ -14,7 +16,25 @@ pub fn one<T: One>() -> T {
     T::one()
 }
 
-macro_rules! impl_primitive {
+pub trait FromInt: Sized {
+    fn from_u64(val: u64) -> Self;
+    fn from_i64(val: i64) -> Self;
+    fn from_usize(val: usize) -> Self {
+        Self::from_u64(val as _)
+    }
+    fn from_isize(val: isize) -> Self {
+        Self::from_i64(val as _)
+    }
+}
+
+pub trait FromFloat: FromInt {
+    fn from_f64(val: f64) -> Self;
+    fn from_f32(val: f32) -> Self {
+        Self::from_f64(val as _)
+    }
+}
+
+macro_rules! impl_int {
     ($name:ident) => {
         impl Zero for $name {
             fn zero() -> Self {
@@ -27,22 +47,56 @@ macro_rules! impl_primitive {
                 1u8 as _
             }
         }
+
+        impl FromInt for $name {
+            fn from_u64(val: u64) -> Self {
+                val as _
+            }
+
+            fn from_i64(val: i64) -> Self {
+                val as _
+            }
+        }
+
+        impl FromFloat for $name {
+            fn from_f64(val: f64) -> Self {
+                val as _
+            }
+        }
     }
 }
 
-impl_primitive!(u8);
-impl_primitive!(u16);
-impl_primitive!(u32);
-impl_primitive!(u64);
-impl_primitive!(u128);
-impl_primitive!(i8);
-impl_primitive!(i16);
-impl_primitive!(i32);
-impl_primitive!(i64);
-impl_primitive!(i128);
-impl_primitive!(f32);
-impl_primitive!(f64);
+impl_int!(u8);
+impl_int!(u16);
+impl_int!(u32);
+impl_int!(u64);
+impl_int!(u128);
+impl_int!(i8);
+impl_int!(i16);
+impl_int!(i32);
+impl_int!(i64);
+impl_int!(i128);
+impl_int!(f32);
+impl_int!(f64);
 
+//macro_rules! float_ops {
+//    (
+//        $(fn $fn:ident(self) -> Self;)*
+//        $(const $const:ident: $const_ty:ty;)*
+//    ) => {
+//        trait FloatOps: Sized {
+//            $(fn $fn(self) -> Self;)*
+//            $(const $const: $const_ty;)*
+//        }
+//        impl FloatOps for f32 {
+//            $(fn $fn(self) -> Self { f32::$fn(self) })*
+//            $(const $const: $const_ty = f32::$const;)*
+//        }
+//    }
+//}
+//
+
+// TODO: Actually want *all 4* variants of binary ops.
 pub trait NumOps
     = Sized
     + std::ops::Add<Output = Self>
@@ -54,7 +108,12 @@ pub trait NumOps
     + std::ops::SubAssign
     + std::ops::DivAssign
     + std::ops::MulAssign
-    + std::ops::RemAssign;
+    + std::ops::RemAssign
+    + for<'a> std::ops::AddAssign<&'a Self>
+    + for<'a> std::ops::SubAssign<&'a Self>
+    + for<'a> std::ops::DivAssign<&'a Self>
+    + for<'a> std::ops::MulAssign<&'a Self>
+    + for<'a> std::ops::RemAssign<&'a Self>;
 
 pub trait BitOps
     = Sized
@@ -68,23 +127,54 @@ pub trait BitOps
     + std::ops::BitOrAssign
     + std::ops::BitXorAssign
     + std::ops::ShlAssign
-    + std::ops::ShrAssign;
+    + std::ops::ShrAssign
+    + for<'a> std::ops::BitAndAssign<&'a Self>
+    + for<'a> std::ops::BitOrAssign<&'a Self>
+    + for<'a> std::ops::BitXorAssign<&'a Self>
+    + for<'a> std::ops::ShlAssign<&'a Self>
+    + for<'a> std::ops::ShrAssign<&'a Self>;
 
 pub trait Num
     = NumOps
     + Zero
     + One
+    + FromInt
     + std::fmt::Debug
     + std::fmt::Display
     + Default
     + PartialEq
-    + PartialOrd
-    + std::hash::Hash;
+    + PartialOrd;
 
 pub trait Signed = Num + std::ops::Neg<Output = Self>;
 
 pub trait Primitive = Copy + Num;
 
 pub trait Integer = BitOps + Eq + Ord;
-
 pub trait PrimInt = Primitive + Integer;
+
+pub trait Float = FloatOps + FromFloat + Signed;
+pub trait PrimFloat = Copy + Float;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trait_test_inner<F: PrimFloat>() {
+        let a = F::from_f32(1.0);
+        let b = F::from_f32(2.5);
+        assert_eq!(a * b, b);
+        assert_eq!(b.floor(), F::from_f32(2.0));
+        assert_eq!(F::RADIX, 2);
+        assert_eq!(F::zero().clamp(a, b), a);
+    }
+
+    #[test]
+    fn trait_test_f32() {
+        trait_test_inner::<f32>();
+    }
+
+    #[test]
+    fn trait_test_f64() {
+        trait_test_inner::<f64>();
+    }
+}
