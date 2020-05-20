@@ -52,7 +52,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 /// Returns the smallest multiple of `alignment` that is `>= offset`.
 #[inline(always)]
 pub fn align<T: Copy + num::PrimInt>(alignment: T, offset: T) -> T {
-    ((offset + alignment - num::one()) / alignment) * alignment
+    ((offset + alignment - T::one()) / alignment) * alignment
 }
 
 pub trait SliceExt {

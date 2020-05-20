@@ -1,4 +1,6 @@
-use crate::float::*;
+use std::ops::*;
+
+use crate::float::FloatOps;
 
 pub trait Zero {
     fn zero() -> Self;
@@ -79,60 +81,89 @@ impl_int!(i128);
 impl_int!(f32);
 impl_int!(f64);
 
-//macro_rules! float_ops {
-//    (
-//        $(fn $fn:ident(self) -> Self;)*
-//        $(const $const:ident: $const_ty:ty;)*
-//    ) => {
-//        trait FloatOps: Sized {
-//            $(fn $fn(self) -> Self;)*
-//            $(const $const: $const_ty;)*
-//        }
-//        impl FloatOps for f32 {
-//            $(fn $fn(self) -> Self { f32::$fn(self) })*
-//            $(const $const: $const_ty = f32::$const;)*
-//        }
-//    }
-//}
-//
+macro_rules! impl_num_ops {
+    ($(($Op:ident, $OpAssign:ident),)+) => {
+        pub trait NumOps = where
+            Self: Sized,
+            $(
+                Self: std::ops::$Op<Self, Output = Self>,
+                Self: for<'a> std::ops::$Op<&'a Self, Output = Self>,
+                for<'a> &'a Self: std::ops::$Op<Self, Output = Self>,
+                for<'a, 'b> &'a Self: std::ops::$Op<&'b Self, Output = Self>,
+                Self: std::ops::$OpAssign<Self>,
+                Self: for<'a> std::ops::$OpAssign<&'a Self>,
+            )*
+            ;
+    }
+}
 
-// TODO: Actually want *all 4* variants of binary ops.
-pub trait NumOps
-    = Sized
-    + std::ops::Add<Output = Self>
-    + std::ops::Sub<Output = Self>
-    + std::ops::Div<Output = Self>
-    + std::ops::Mul<Output = Self>
-    + std::ops::Rem<Output = Self>
-    + std::ops::AddAssign
-    + std::ops::SubAssign
-    + std::ops::DivAssign
-    + std::ops::MulAssign
-    + std::ops::RemAssign
-    + for<'a> std::ops::AddAssign<&'a Self>
-    + for<'a> std::ops::SubAssign<&'a Self>
-    + for<'a> std::ops::DivAssign<&'a Self>
-    + for<'a> std::ops::MulAssign<&'a Self>
-    + for<'a> std::ops::RemAssign<&'a Self>;
+impl_num_ops! {
+    (Add, AddAssign),
+    (Sub, SubAssign),
+    (Mul, MulAssign),
+    (Div, DivAssign),
+    (Rem, RemAssign),
+}
 
-pub trait BitOps
-    = Sized
-    + std::ops::Not<Output = Self>
-    + std::ops::BitAnd<Output = Self>
-    + std::ops::BitOr<Output = Self>
-    + std::ops::BitXor<Output = Self>
-    + std::ops::Shl<Output = Self>
-    + std::ops::Shr<Output = Self>
-    + std::ops::BitAndAssign
-    + std::ops::BitOrAssign
-    + std::ops::BitXorAssign
-    + std::ops::ShlAssign
-    + std::ops::ShrAssign
-    + for<'a> std::ops::BitAndAssign<&'a Self>
-    + for<'a> std::ops::BitOrAssign<&'a Self>
-    + for<'a> std::ops::BitXorAssign<&'a Self>
-    + for<'a> std::ops::ShlAssign<&'a Self>
-    + for<'a> std::ops::ShrAssign<&'a Self>;
+macro_rules! impl_shift_ops {
+    ($($Rhs:ident,)*) => {
+        pub trait ShiftOps = where
+            Self: Sized,
+            $(
+            Self: Shl<$Rhs, Output = Self>,
+            Self: for<'r> Shl<&'r $Rhs, Output = Self>,
+            for<'l> &'l Self: Shl<$Rhs, Output = Self>,
+            for<'l, 'r> &'l Self: Shl<&'r $Rhs, Output = Self>,
+            Self: ShlAssign<$Rhs>,
+            Self: for<'r> ShlAssign<&'r $Rhs>,
+
+            Self: Shr<$Rhs, Output = Self>,
+            Self: for<'r> Shr<&'r $Rhs, Output = Self>,
+            for<'l> &'l Self: Shr<$Rhs, Output = Self>,
+            for<'l, 'r> &'l Self: Shr<&'r $Rhs, Output = Self>,
+            Self: ShrAssign<$Rhs>,
+            Self: for<'r> ShrAssign<&'r $Rhs>,
+            )*
+            ;
+    }
+}
+
+impl_shift_ops! {
+    Self,
+    u8,
+    u16,
+    u32,
+    u64,
+    usize,
+    i8,
+    i16,
+    i32,
+    i64,
+    isize,
+}
+
+macro_rules! impl_bit_ops {
+    ($(($Op:ident, $OpAssign:ident),)*) => {
+        pub trait BitOps = where
+            Self: ShiftOps,
+            Self: Not<Output = Self>,
+            $(
+            Self: $Op<Self, Output = Self>,
+            Self: for<'r> $Op<&'r Self, Output = Self>,
+            for<'l> &'l Self: $Op<Self, Output = Self>,
+            for<'l, 'r> &'l Self: $Op<&'r Self, Output = Self>,
+            Self: $OpAssign<Self>,
+            Self: for<'r> $OpAssign<&'r Self>,
+            )*
+            ;
+    }
+}
+
+impl_bit_ops! {
+    (BitAnd, BitAndAssign),
+    (BitOr, BitOrAssign),
+    (BitXor, BitXorAssign),
+}
 
 pub trait Num
     = NumOps
@@ -143,17 +174,18 @@ pub trait Num
     + std::fmt::Display
     + Default
     + PartialEq
-    + PartialOrd;
+    + PartialOrd
+    ;
 
 pub trait Signed = Num + std::ops::Neg<Output = Self>;
 
-pub trait Primitive = Copy + Num;
+pub trait Primitive = Num + Copy;
 
-pub trait Integer = BitOps + Eq + Ord;
+pub trait Integer = Num + BitOps + Eq + Ord;
 pub trait PrimInt = Primitive + Integer;
 
-pub trait Float = FloatOps + FromFloat + Signed;
-pub trait PrimFloat = Copy + Float;
+pub trait Float = Signed + FloatOps + FromFloat;
+pub trait PrimFloat = Float + Copy;
 
 #[cfg(test)]
 mod tests {
