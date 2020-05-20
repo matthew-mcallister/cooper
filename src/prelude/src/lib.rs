@@ -1,7 +1,7 @@
 #![feature(clamp)]
 #![feature(trait_alias)]
 
-mod float;
+pub mod float;
 pub mod num;
 
 #[macro_export]

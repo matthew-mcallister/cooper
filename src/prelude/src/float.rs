@@ -1,5 +1,11 @@
-//! This module exists to work around some kind of bug or limitation in
-//! the compiler---it won't compile when placed in the `num` module.
+//! This module defines a trait, `FloatOps`, providing all the floating
+//! point operations and constants of the `f32` and `f64` types for
+//! writing generic code. Importing it will cause naming conflicts so
+//! you should usually only use the fully qualified name to refer to it.
+
+// This real reason this module exists is to work around some kind of
+// bug or limitation in the compiler---it just won't compile when placed
+// inside the `num` module.
 
 macro_rules! float_ops {
     (

@@ -1,5 +1,9 @@
-mod linear;
-mod mesh;
+#![feature(array_value_iter)]
+#![feature(const_generics)]
+#![feature(trait_alias)]
 
-pub use linear::*;
-pub use mesh::*;
+#![allow(incomplete_features)]
+
+mod vector;
+
+pub use vector::*;

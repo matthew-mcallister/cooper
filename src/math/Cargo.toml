@@ -6,5 +6,6 @@ edition = "2018"
 publish = false
 
 [dependencies]
+base = { path = "../base", package = "cooper-base" }
 approx = "0.3"
-na = { package = "nalgebra", version = "0.18" }
+prelude = { path = "../prelude", package = "cooper-prelude" }

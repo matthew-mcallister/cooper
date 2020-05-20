@@ -1,7 +1,5 @@
 use std::ops::*;
 
-use crate::float::FloatOps;
-
 pub trait Zero {
     fn zero() -> Self;
 }
@@ -147,6 +145,7 @@ macro_rules! impl_bit_ops {
         pub trait BitOps = where
             Self: ShiftOps,
             Self: Not<Output = Self>,
+            for<'a> &'a Self: Not<Output = Self>,
             $(
             Self: $Op<Self, Output = Self>,
             Self: for<'r> $Op<&'r Self, Output = Self>,
@@ -177,14 +176,18 @@ pub trait Num
     + PartialOrd
     ;
 
-pub trait Signed = Num + std::ops::Neg<Output = Self>;
+pub trait Signed = where
+    Self: Num,
+    Self: Neg<Output = Self>,
+    for<'a> &'a Self: Neg<Output = Self>,
+    ;
 
 pub trait Primitive = Num + Copy;
 
 pub trait Integer = Num + BitOps + Eq + Ord;
 pub trait PrimInt = Primitive + Integer;
 
-pub trait Float = Signed + FloatOps + FromFloat;
+pub trait Float = Signed + crate::float::FloatOps + FromFloat;
 pub trait PrimFloat = Float + Copy;
 
 #[cfg(test)]
