@@ -27,13 +27,6 @@ pub trait FromInt: Sized {
     }
 }
 
-pub trait FromFloat: FromInt {
-    fn from_f64(val: f64) -> Self;
-    fn from_f32(val: f32) -> Self {
-        Self::from_f64(val as _)
-    }
-}
-
 macro_rules! impl_int {
     ($name:ident) => {
         impl Zero for $name {
@@ -58,7 +51,7 @@ macro_rules! impl_int {
             }
         }
 
-        impl FromFloat for $name {
+        impl crate::float::FromFloat for $name {
             fn from_f64(val: f64) -> Self {
                 val as _
             }
@@ -84,12 +77,12 @@ macro_rules! impl_num_ops {
         pub trait NumOps = where
             Self: Sized,
             $(
-                Self: std::ops::$Op<Self, Output = Self>,
-                Self: for<'a> std::ops::$Op<&'a Self, Output = Self>,
-                for<'a> &'a Self: std::ops::$Op<Self, Output = Self>,
-                for<'a, 'b> &'a Self: std::ops::$Op<&'b Self, Output = Self>,
-                Self: std::ops::$OpAssign<Self>,
-                Self: for<'a> std::ops::$OpAssign<&'a Self>,
+                Self: $Op<Self, Output = Self>,
+                Self: for<'a> $Op<&'a Self, Output = Self>,
+                for<'a> &'a Self: $Op<Self, Output = Self>,
+                for<'a, 'b> &'a Self: $Op<&'b Self, Output = Self>,
+                Self: $OpAssign<Self>,
+                Self: for<'a> $OpAssign<&'a Self>,
             )*
             ;
     }
@@ -186,30 +179,3 @@ pub trait Primitive = Num + Copy;
 
 pub trait Integer = Num + BitOps + Eq + Ord;
 pub trait PrimInt = Primitive + Integer;
-
-pub trait Float = Signed + crate::float::FloatOps + FromFloat;
-pub trait PrimFloat = Float + Copy;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn trait_test_inner<F: PrimFloat>() {
-        let a = F::from_f32(1.0);
-        let b = F::from_f32(2.5);
-        assert_eq!(a * b, b);
-        assert_eq!(b.floor(), F::from_f32(2.0));
-        assert_eq!(F::RADIX, 2);
-        assert_eq!(F::zero().clamp(a, b), a);
-    }
-
-    #[test]
-    fn trait_test_f32() {
-        trait_test_inner::<f32>();
-    }
-
-    #[test]
-    fn trait_test_f64() {
-        trait_test_inner::<f64>();
-    }
-}

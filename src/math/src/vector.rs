@@ -6,10 +6,10 @@ use prelude::num::*;
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
-// TODO: Primitive is actually too strict---what about bvec?
+// TODO: An explicit SIMD variant with proper alignment would be great.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct Vector<F: Primitive, const N: usize> {
+pub struct Vector<F, const N: usize> {
     elems: [F; N],
 }
 
@@ -22,15 +22,10 @@ pub type Vector7<F> = Vector<F, 7>;
 pub type Vector8<F> = Vector<F, 8>;
 pub type Vector9<F> = Vector<F, 9>;
 
-impl<F: Primitive, const N: usize> Vector<F, N> {
+impl<F, const N: usize> Vector<F, N> {
     #[inline(always)]
     pub fn new(elems: [F; N]) -> Self {
         elems.into()
-    }
-
-    #[inline(always)]
-    pub fn from_scalar(val: F) -> Self {
-        [val; N].into()
     }
 
     #[inline(always)]
@@ -46,15 +41,22 @@ impl<F: Primitive, const N: usize> Vector<F, N> {
     }
 }
 
+impl<F: Copy, const N: usize> Vector<F, N> {
+    #[inline(always)]
+    pub fn from_scalar(val: F) -> Self {
+        [val; N].into()
+    }
+}
+
 #[inline(always)]
-pub fn vec<F: Primitive, const N: usize>(elems: [F; N]) -> Vector<F, N> {
+pub fn vec<F, const N: usize>(elems: [F; N]) -> Vector<F, N> {
     Vector::new(elems)
 }
 
 macro_rules! impl_vecn {
     ($VectorN:ident, $vecn:ident, $($arg:ident),*) => {
         #[inline(always)]
-        pub fn $vecn<F: Primitive>($($arg: F,)*) -> $VectorN<F> {
+        pub fn $vecn<F>($($arg: F,)*) -> $VectorN<F> {
             Vector::new([$($arg,)*])
         }
     }
@@ -84,76 +86,75 @@ macro_rules! impl_accessor {
     };
 }
 
-impl<F: Primitive> Vector<F, 1> { impl_accessors!(0); }
-impl<F: Primitive> Vector<F, 2> { impl_accessors!(0 1); }
-impl<F: Primitive> Vector<F, 3> { impl_accessors!(0 1 2); }
-impl<F: Primitive> Vector<F, 4> { impl_accessors!(0 1 2 3); }
+impl<F: Copy> Vector<F, 1> { impl_accessors!(0); }
+impl<F: Copy> Vector<F, 2> { impl_accessors!(0 1); }
+impl<F: Copy> Vector<F, 3> { impl_accessors!(0 1 2); }
+impl<F: Copy> Vector<F, 4> { impl_accessors!(0 1 2 3); }
 
-impl<F: Primitive, const N: usize> std::fmt::Debug for Vector<F, N> {
+impl<F: std::fmt::Debug, const N: usize> std::fmt::Debug for Vector<F, N> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.elems[..].fmt(f)
     }
 }
 
-impl<F: Primitive, const N: usize> From<[F; N]> for Vector<F, N> {
+impl<F, const N: usize> From<[F; N]> for Vector<F, N> {
     #[inline(always)]
     fn from(elems: [F; N]) -> Self {
         Vector { elems }
     }
 }
 
-impl<F: Primitive, const N: usize> From<Vector<F, N>> for [F; N] {
+impl<F, const N: usize> From<Vector<F, N>> for [F; N] {
     #[inline(always)]
     fn from(vec: Vector<F, N>) -> Self {
         vec.elems
     }
 }
 
-impl<F: Primitive, const N: usize> Default for Vector<F, N> {
+// TODO: impl From<&[F]>
+
+impl<F: Default + Copy, const N: usize> Default for Vector<F, N> {
     #[inline(always)]
     fn default() -> Self {
         [Default::default(); N].into()
     }
 }
 
-impl<F: Primitive, const N: usize> AsRef<[F; N]> for Vector<F, N> {
+// TODO: Maybe impl AsRef<[F]>, AsRef<[[F; N]]> for [Vector<F, N>]
+impl<F, const N: usize> AsRef<[F; N]> for Vector<F, N> {
     #[inline(always)]
     fn as_ref(&self) -> &[F; N] {
         &self.elems
     }
 }
 
-impl<F: Primitive, const N: usize> AsRef<[F]> for Vector<F, N> {
+impl<F, const N: usize> AsMut<[F; N]> for Vector<F, N> {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [F; N] {
+        &mut self.elems
+    }
+}
+
+impl<F, const N: usize> AsRef<[F]> for Vector<F, N> {
     #[inline(always)]
     fn as_ref(&self) -> &[F] {
         &self.elems[..]
     }
 }
 
-macro_rules! impl_index {
-    ($Output:ty, $idx:ty) => {
-        impl<F: Primitive, const N: usize> Index<$idx> for Vector<F, N> {
-            type Output = $Output;
-            #[inline(always)]
-            fn index(&self, idx: $idx) -> &Self::Output {
-                &self.elems[idx]
-            }
-        }
-
-        impl<F: Primitive, const N: usize> IndexMut<$idx> for Vector<F, N> {
-            #[inline(always)]
-            fn index_mut(&mut self, idx: $idx) -> &mut Self::Output {
-                &mut self.elems[idx]
-            }
-        }
+impl<F, const N: usize> AsMut<[F]> for Vector<F, N> {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [F] {
+        &mut self.elems[..]
     }
 }
 
-// TODO: Maybe implement for Range etc.
-impl_index!(F, usize);
-impl_index!([F], RangeFull);
+derive_index!(
+    (F, const N: usize),
+    Vector<F, N>, elems, [F],
+);
 
-impl<F: Primitive, const N: usize> Zero for Vector<F, N> {
+impl<F: Zero + Copy, const N: usize> Zero for Vector<F, N> {
     #[inline(always)]
     fn zero() -> Self {
         Self::from_scalar(Zero::zero())
@@ -195,35 +196,6 @@ impl_un_op!(PrimInt, Not, not);
 // TODO: Bitwise ops (require a different trait bound)
 macro_rules! impl_bin_op {
     ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F: Primitive, const N: usize> $OpAssign<F>
-            for Vector<F, N>
-        {
-            #[inline(always)]
-            fn $op_assign(&mut self, rhs: F) {
-                for dst in self.iter_mut() {
-                    dst.$op_assign(rhs);
-                }
-            }
-        }
-
-        impl<'rhs, F: Primitive, const N: usize> $OpAssign<&'rhs F>
-            for Vector<F, N>
-        {
-            #[inline(always)]
-            fn $op_assign(&mut self, rhs: &'rhs F) {
-                for dst in self.iter_mut() {
-                    dst.$op_assign(rhs);
-                }
-            }
-        }
-
-        impl_bin_ops!(
-            {F: Primitive, const N: usize},
-            (Vector<F, N>), (F),
-            copy,
-            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
-        );
-
         impl<F: Primitive, const N: usize> $OpAssign for Vector<F, N> {
             #[inline(always)]
             fn $op_assign(&mut self, other: Self) {
@@ -253,15 +225,51 @@ macro_rules! impl_bin_op {
     }
 }
 
+macro_rules! impl_scalar_op {
+    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        impl<F: Primitive, const N: usize> $OpAssign<F> for Vector<F, N> {
+            #[inline(always)]
+            fn $op_assign(&mut self, rhs: F) {
+                for dst in self.iter_mut() {
+                    dst.$op_assign(rhs);
+                }
+            }
+        }
+
+        impl<'rhs, F: Primitive, const N: usize> $OpAssign<&'rhs F>
+            for Vector<F, N>
+        {
+            #[inline(always)]
+            fn $op_assign(&mut self, rhs: &'rhs F) {
+                for dst in self.iter_mut() {
+                    dst.$op_assign(rhs);
+                }
+            }
+        }
+
+        impl_bin_ops!(
+            {F: Primitive, const N: usize},
+            (Vector<F, N>), (F),
+            copy,
+            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
+        );
+    }
+}
+
+
 impl_bin_op!(Add, AddAssign, add, add_assign);
 impl_bin_op!(Sub, SubAssign, sub, sub_assign);
 impl_bin_op!(Mul, MulAssign, mul, mul_assign);
 impl_bin_op!(Div, DivAssign, div, div_assign);
 impl_bin_op!(Rem, RemAssign, rem, rem_assign);
 
-// TODO: Bitwise ops
+impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
+impl_scalar_op!(Div, DivAssign, div, div_assign);
+impl_scalar_op!(Rem, RemAssign, rem, rem_assign);
 
-impl<F: Primitive, const N: usize> PartialEq for Vector<F, N> {
+// TODO: Bitwise ops (should work for a boolean vector as well)
+
+impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(&self.elems[..], &other.elems[..])
@@ -273,7 +281,7 @@ impl<F: Primitive, const N: usize> PartialEq for Vector<F, N> {
     }
 }
 
-impl<F: Primitive + Eq, const N: usize> Eq for Vector<F, N> {}
+impl<F: Eq, const N: usize> Eq for Vector<F, N> {}
 
 // TODO: More ops, e.g. Hash
 
@@ -314,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn ops_test() {
+    fn accessor_test() {
         let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
         assert_eq!(v[0], 1.0);
         assert_eq!(v[1], 0.0);
@@ -323,14 +331,40 @@ mod tests {
         assert_eq!(v, [1.0, 0.0, 0.0].into());
         assert_eq!(&v[..], [1.0, 0.0, 0.0]);
         assert_eq!(v.as_ref(), [1.0, 0.0, 0.0]);
-        assert_eq!(-v, vec3(-1.0, 0.0, 0.0));
+    }
 
+    #[test]
+    fn vec_ops_test() {
+        let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
         let u: Vector3<f32> = vec([0.0, 1.0, 0.0]);
+        assert_eq!(-v, vec3(-1.0, 0.0, 0.0));
         assert_eq!(u + v, vec3(1.0, 1.0, 0.0));
         assert_eq!(u - v, vec3(-1.0, 1.0, 0.0));
         assert_eq!(u * v, Zero::zero());
+        assert_eq!(v - v, Zero::zero());
+        assert_eq!(v + v, vec3(2.0, 0.0, 0.0));
 
         assert_eq!(vec2(2.0, 1.0) / vec2(1.0, 2.0), vec2(2.0, 0.5));
         assert_eq!(vec2(1.0, 1.0) % vec2(1.0, 2.0), vec2(0.0, 1.0));
+    }
+
+    #[test]
+    fn scalar_ops_test() {
+        let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
+        assert_eq!(v * 1.0, v);
+        assert_eq!(v * 0.0, Zero::zero());
+        assert_eq!(v * 2.0, v + v);
+        assert_eq!(v * -1.0, -v);
+
+        assert_eq!(v / 1.0, v);
+        assert_eq!((v / 0.0)[0], f32::INFINITY);
+        assert!((v / 0.0)[1].is_nan());
+        assert_eq!(v / 2.0, v - v * 0.5);
+        assert_eq!(v / -1.0, -v);
+
+        assert_eq!(v % 1.0, Zero::zero());
+        assert!((v % 0.0).iter().all(|x| x.is_nan()));
+        assert_eq!(v % 2.0, v);
+        assert_eq!(v % -1.0, Zero::zero());
     }
 }

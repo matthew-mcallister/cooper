@@ -3,9 +3,9 @@
 //! writing generic code. Importing it will cause naming conflicts so
 //! you should usually only use the fully qualified name to refer to it.
 
-// This real reason this module exists is to work around some kind of
-// bug or limitation in the compiler---it just won't compile when placed
-// inside the `num` module.
+// The real reason this module exists is to work around the name
+// conflict issues caused by this trait and the associated trait
+// aliases.
 
 macro_rules! float_ops {
     (
@@ -98,4 +98,40 @@ float_ops! {
     const NAN: Self;
     const INFINITY: Self;
     const NEG_INFINITY: Self;
+}
+
+pub trait FromFloat: crate::num::FromInt {
+    fn from_f64(val: f64) -> Self;
+    fn from_f32(val: f32) -> Self {
+        Self::from_f64(val as _)
+    }
+}
+
+// https://github.com/rust-lang/rust/issues/72415
+//pub trait Float = crate::num::Signed + FloatOps + FromFloat;
+//pub trait PrimFloat = Float + Copy;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trait_test_inner<F: crate::num::Signed + FloatOps + FromFloat + Copy>()
+    {
+        let a = F::from_f32(1.0);
+        let b = F::from_f32(2.5);
+        assert_eq!(a * b, b);
+        assert_eq!(b.floor(), F::from_f32(2.0));
+        assert_eq!(F::RADIX, 2);
+        assert_eq!(F::zero().clamp(a, b), a);
+    }
+
+    #[test]
+    fn trait_test_f32() {
+        trait_test_inner::<f32>();
+    }
+
+    #[test]
+    fn trait_test_f64() {
+        trait_test_inner::<f64>();
+    }
 }
