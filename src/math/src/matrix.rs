@@ -390,5 +390,30 @@ mod tests {
         let mut b_1 = b;
         b_1 *= a;
         assert_eq!(b_1, b);
+
+        let c: Matrix2x3<f32> = [
+            [0.0, 1.0],
+            [2.0, 3.0],
+            [4.0, 5.0]].into();
+        assert_eq!(a * c, c);
+    }
+
+    #[test]
+    fn mat0() {
+        let a: Matrix<f32, 0, 0> = Default::default();
+        let b: Matrix<f32, 0, 0> = Matrix::new([]);
+        assert_eq!(a, b);
+        assert_eq!(a + b, a - b);
+    }
+
+    #[test]
+    fn mat1() {
+        let a: Matrix<f32, 1, 1> = Default::default();
+        let b: Matrix<f32, 1, 1> = [[1.0]].into();
+        assert_eq!(a[0][0], 0.0);
+        assert_eq!(b[0], vec([1.0]));
+        assert_eq!(a + b, b);
+        assert_eq!(a - b, -b);
+        assert_eq!(a * b, a);
     }
 }
