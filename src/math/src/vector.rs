@@ -1,8 +1,9 @@
 use std::ops::*;
 
 use base::impl_bin_ops;
-
 use prelude::num::*;
+
+use crate::macros::*;
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
@@ -161,111 +162,42 @@ impl<F: Zero + Copy, const N: usize> Zero for Vector<F, N> {
     }
 }
 
-macro_rules! impl_un_op {
-    ($Bound:ident, $Op:ident, $op:ident) => {
-        impl<F: $Bound, const N: usize> $Op for Vector<F, N> {
-            type Output = Vector<F, N>;
-            #[inline(always)]
-            fn $op(mut self) -> Self::Output {
-                for x in self.iter_mut() {
-                    *x = $Op::$op(&*x);
-                }
-                self
-            }
-        }
+impl_un_op!({F: PrimSigned, const N: usize}, (Vector<F, N>), Neg, neg);
+impl_un_op!({F: PrimInt, const N: usize}, (Vector<F, N>), Not, not);
 
-        impl<'a, F: $Bound, const N: usize> $Op for &'a Vector<F, N> {
-            type Output = Vector<F, N>;
-            #[inline(always)]
-            fn $op(self) -> Self::Output {
-                let mut res = Self::Output::default();
-                for (dst, &src) in res.iter_mut().zip(self.iter()) {
-                    *dst = $Op::$op(src);
-                }
-                res
-            }
-        }
-    }
-}
+impl_bin_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>),
+    Add, AddAssign, add, add_assign
+);
+impl_bin_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>),
+    Sub, SubAssign, sub, sub_assign
+);
+impl_bin_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>),
+    Mul, MulAssign, mul, mul_assign
+);
+impl_bin_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>),
+    Div, DivAssign, div, div_assign
+);
+impl_bin_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>),
+    Rem, RemAssign, rem, rem_assign
+);
 
-pub trait PrimSigned = Primitive + Signed;
-
-impl_un_op!(PrimSigned, Neg, neg);
-impl_un_op!(PrimInt, Not, not);
-
-// TODO: Bitwise ops (require a different trait bound)
-macro_rules! impl_bin_op {
-    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F: Primitive, const N: usize> $OpAssign for Vector<F, N> {
-            #[inline(always)]
-            fn $op_assign(&mut self, other: Self) {
-                for (dst, src) in self.iter_mut().zip(other.iter()) {
-                    dst.$op_assign(src);
-                }
-            }
-        }
-
-        impl<'rhs, F: Primitive, const N: usize> $OpAssign<&'rhs Self>
-            for Vector<F, N>
-        {
-            #[inline(always)]
-            fn $op_assign(&mut self, other: &'rhs Self) {
-                for (dst, src) in self.iter_mut().zip(other.iter()) {
-                    dst.$op_assign(src);
-                }
-            }
-        }
-
-        impl_bin_ops!(
-            {F: Primitive, const N: usize},
-            (Vector<F, N>), (Vector<F, N>),
-            copy,
-            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
-        );
-    }
-}
-
-macro_rules! impl_scalar_op {
-    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F: Primitive, const N: usize> $OpAssign<F> for Vector<F, N> {
-            #[inline(always)]
-            fn $op_assign(&mut self, rhs: F) {
-                for dst in self.iter_mut() {
-                    dst.$op_assign(rhs);
-                }
-            }
-        }
-
-        impl<'rhs, F: Primitive, const N: usize> $OpAssign<&'rhs F>
-            for Vector<F, N>
-        {
-            #[inline(always)]
-            fn $op_assign(&mut self, rhs: &'rhs F) {
-                for dst in self.iter_mut() {
-                    dst.$op_assign(rhs);
-                }
-            }
-        }
-
-        impl_bin_ops!(
-            {F: Primitive, const N: usize},
-            (Vector<F, N>), (F),
-            copy,
-            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
-        );
-    }
-}
-
-
-impl_bin_op!(Add, AddAssign, add, add_assign);
-impl_bin_op!(Sub, SubAssign, sub, sub_assign);
-impl_bin_op!(Mul, MulAssign, mul, mul_assign);
-impl_bin_op!(Div, DivAssign, div, div_assign);
-impl_bin_op!(Rem, RemAssign, rem, rem_assign);
-
-impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
-impl_scalar_op!(Div, DivAssign, div, div_assign);
-impl_scalar_op!(Rem, RemAssign, rem, rem_assign);
+impl_scalar_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>), (F),
+    Mul, MulAssign, mul, mul_assign
+);
+impl_scalar_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>), (F),
+    Div, DivAssign, div, div_assign
+);
+impl_scalar_op!(
+    {F: Primitive, const N: usize}, (Vector<F, N>), (F),
+    Rem, RemAssign, rem, rem_assign
+);
 
 // TODO: Bitwise ops (should work for a boolean vector as well)
 

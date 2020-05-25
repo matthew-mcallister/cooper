@@ -179,3 +179,5 @@ pub trait Primitive = Num + Copy;
 
 pub trait Integer = Num + BitOps + Eq + Ord;
 pub trait PrimInt = Primitive + Integer;
+
+pub trait PrimSigned = Primitive + Signed;

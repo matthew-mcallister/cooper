@@ -41,6 +41,27 @@ impl<F, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 
     #[inline(always)]
+    pub fn columns(&self) -> &[Vector<F, M>; N] {
+        &self.columns
+    }
+
+    #[inline(always)]
+    pub fn columns_mut(&mut self) -> &mut [Vector<F, M>; N] {
+        &mut self.columns
+    }
+
+    // TODO: Ought to be [F; M * N]
+    #[inline(always)]
+    pub fn elements(&self) -> &[F] {
+        unsafe { std::slice::from_raw_parts(self as *const _ as _, M * N) }
+    }
+
+    #[inline(always)]
+    pub fn elements_mut(&mut self) -> &mut [F] {
+        unsafe { std::slice::from_raw_parts_mut(self as *mut _ as _, M * N) }
+    }
+
+    #[inline(always)]
     pub fn iter(&self) ->
         impl Iterator<Item=&Vector<F, M>> + ExactSizeIterator
     {
@@ -99,22 +120,6 @@ impl<F: Copy + Default, const M: usize, const N: usize> Default
 {
     fn default() -> Self {
         Self::new([Default::default(); N])
-    }
-}
-
-impl<F, const M: usize, const N: usize> AsRef<[F]> for Matrix<F, M, N> {
-    #[inline(always)]
-    fn as_ref(&self) -> &[F] {
-        unsafe { std::slice::from_raw_parts(self as *const _ as _, M * N) }
-    }
-}
-
-impl<F, const M: usize, const N: usize> AsMut<[F]>
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn as_mut(&mut self) -> &mut [F] {
-        unsafe { std::slice::from_raw_parts_mut(self as *mut _ as _, M * N) }
     }
 }
 
@@ -181,6 +186,39 @@ derive_index!(
     Matrix<F, M, N>, columns, [Vector<F, M>],
 );
 
+impl_un_op!(
+    {F: PrimSigned, const M: usize, const N: usize},
+    (Matrix<F, M, N>), Neg, neg
+);
+impl_un_op!(
+    {F: PrimInt, const M: usize, const N: usize},
+    (Matrix<F, M, N>), Not, not
+);
+
+impl_bin_op!(
+    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>),
+    Add, AddAssign, add, add_assign
+);
+impl_bin_op!(
+    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>),
+    Sub, SubAssign, sub, sub_assign
+);
+// Mul is not implemented because it might be confused with matrix
+// multiplication. Div and Rem are not implemented for consistency.
+
+impl_scalar_op!(
+    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
+    Mul, MulAssign, mul, mul_assign
+);
+impl_scalar_op!(
+    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
+    Div, DivAssign, div, div_assign
+);
+impl_scalar_op!(
+    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
+    Rem, RemAssign, rem, rem_assign
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,11 +234,11 @@ mod tests {
         assert_eq!(m[0][1], c[0][1]);
         assert_eq!(m[1][1], c[1][1]);
         assert_eq!(&m[..], [u, v]);
-        assert_eq!(m.as_ref(), [0.707, 0.707, -0.707, 0.707]);
+        assert_eq!(m.elements(), [0.707, 0.707, -0.707, 0.707]);
     }
 
     #[test]
-    #[cfg(todo)]
+    #[cfg(test)]
     fn matrix_ops_test() {
         let a: Matrix2<f32> = [
             [1.0, 0.0],
@@ -209,23 +247,39 @@ mod tests {
             [0.0, 1.0],
             [1.0, 0.0]].into();
         assert_eq!(
-            (-a).as_ref(),
-            &[[-1.0, 0.0],
-              [0.0, -1.0]]);
+            (-a).elements(),
+            &[-1.0,  0.0
+            ,  0.0, -1.0]);
         assert_eq!(
-            (a + a).as_ref(),
-            &[[2.0, 0.0],
-              [0.0, 2.0]]);
+            (a + a).elements(),
+            &[2.0, 0.0
+            , 0.0, 2.0]);
         assert_eq!(
-            (a - b).as_ref(),
-            &[[ 1.0, -1.0],
-              [-1.0,  1.0]]);
-        assert_eq!(a * b, Zero::zero());
+            (a - b).elements(),
+            &[ 1.0, -1.0
+            , -1.0,  1.0]);
         assert_eq!(a - a, Zero::zero());
     }
 
     #[test]
     fn scalar_ops_test() {
-        todo!();
+        let a: Matrix2<f32> = [
+            [1.0, 0.0],
+            [0.0, 1.0]].into();
+        assert_eq!(a * 1.0, a);
+        assert_eq!(a * 0.0, Zero::zero());
+        assert_eq!(a * 2.0, a + a);
+        assert_eq!(a * -1.0, -a);
+
+        assert_eq!(a / 1.0, a);
+        assert_eq!((a / 0.0)[0][0], f32::INFINITY);
+        assert!((a / 0.0)[0][1].is_nan());
+        assert_eq!(a / 2.0, a - a * 0.5);
+        assert_eq!(a / -1.0, -a);
+
+        assert_eq!(a % 1.0, Zero::zero());
+        assert!((a % 0.0).elements().iter().all(|x| x.is_nan()));
+        assert_eq!(a % 2.0, a);
+        assert_eq!(a % -1.0, Zero::zero());
     }
 }
