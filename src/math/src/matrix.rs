@@ -203,8 +203,6 @@ impl_bin_op!(
     {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>),
     Sub, SubAssign, sub, sub_assign
 );
-// Mul is not implemented because it might be confused with matrix
-// multiplication. Div and Rem are not implemented for consistency.
 
 impl_scalar_op!(
     {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
@@ -219,12 +217,94 @@ impl_scalar_op!(
     Rem, RemAssign, rem, rem_assign
 );
 
+// Matrix--vector mul
+macro_rules! impl_matvec_mul {
+    ({$($lt:tt)*}, ($Lhs:ty), ($Rhs:ty)) => {
+        impl<$($lt)* F: Primitive, const M: usize, const N: usize> Mul<$Rhs>
+            for $Lhs
+        {
+            type Output = Vector<F, M>;
+            fn mul(self, other: $Rhs) -> Self::Output {
+                self.iter().zip(other.iter()).map(|(v, x)| v * x).sum()
+            }
+        }
+    }
+}
+
+impl_matvec_mul!({}, (Matrix<F, M, N>), (Vector<F, N>));
+impl_matvec_mul!({'rhs,}, (Matrix<F, M, N>), (&'rhs Vector<F, N>));
+impl_matvec_mul!({'lhs,}, (&'lhs Matrix<F, M, N>), (Vector<F, N>));
+impl_matvec_mul!({'lhs, 'rhs,}, (&'lhs Matrix<F, M, N>), (&'rhs Vector<F, N>));
+
+// Matrix--matrix mul
+
+impl<F: Primitive, const N: usize> MulAssign<Matrix<F, N, N>>
+    for Matrix<F, N, N>
+{
+    fn mul_assign(&mut self, rhs: Matrix<F, N, N>) {
+        let lhs = *self;
+        for (i, x) in rhs.iter().enumerate() {
+            self[i] = lhs * x;
+        }
+    }
+}
+
+impl<'rhs, F: Primitive, const N: usize> MulAssign<&'rhs Matrix<F, N, N>>
+    for Matrix<F, N, N>
+{
+    fn mul_assign(&mut self, rhs: &'rhs Matrix<F, N, N>) {
+        let lhs = *self;
+        for (i, x) in rhs.iter().enumerate() {
+            self[i] = lhs * x;
+        }
+    }
+}
+
+macro_rules! impl_matmat_mul {
+    ({$($lt:tt)*}, ($Output:ty), ($Lhs:ty), ($Rhs:ty)) => {
+        impl<
+            $($lt)*
+            F: Primitive,
+            const M: usize,
+            const N: usize,
+            const K: usize,
+        > Mul<$Rhs> for $Lhs {
+            type Output = $Output;
+            fn mul(self, other: $Rhs) -> Self::Output {
+                let mut out = Self::Output::zero();
+                for (i, x) in other.iter().enumerate() {
+                    out[i] = self * x;
+                }
+                out
+            }
+        }
+    }
+}
+
+impl_matmat_mul!(
+    {}, (Matrix<F, M, K>),
+    (Matrix<F, M, N>), (Matrix<F, N, K>)
+);
+impl_matmat_mul!(
+    {'rhs,}, (Matrix<F, M, K>),
+    (Matrix<F, M, N>), (&'rhs Matrix<F, N, K>)
+);
+impl_matmat_mul!(
+    {'lhs,}, (Matrix<F, M, K>),
+    (&'lhs Matrix<F, M, N>), (Matrix<F, N, K>)
+);
+impl_matmat_mul!(
+    {'lhs, 'rhs,}, (Matrix<F, M, K>),
+    (&'lhs Matrix<F, M, N>), (&'rhs Matrix<F, N, K>)
+);
+
 #[cfg(test)]
 mod tests {
+    use crate::vector::*;
     use super::*;
 
     #[test]
-    fn accessor_test() {
+    fn accessors() {
         let c = [[0.707, 0.707], [-0.707, 0.707]];
         let (u, v) = (c[0].into(), c[1].into());
         let m: Matrix2<f32> = mat2(u, v);
@@ -238,14 +318,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(test)]
-    fn matrix_ops_test() {
+    fn matrix_ops() {
         let a: Matrix2<f32> = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
         let b: Matrix2<f32> = [
             [0.0, 1.0],
             [1.0, 0.0]].into();
+        assert_eq!(a, a);
+        assert_ne!(a, b);
         assert_eq!(
             (-a).elements(),
             &[-1.0,  0.0
@@ -262,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn scalar_ops_test() {
+    fn scalar_ops() {
         let a: Matrix2<f32> = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
@@ -281,5 +362,33 @@ mod tests {
         assert!((a % 0.0).elements().iter().all(|x| x.is_nan()));
         assert_eq!(a % 2.0, a);
         assert_eq!(a % -1.0, Zero::zero());
+    }
+
+    #[test]
+    fn mat_vec_mul() {
+        let a: Matrix2<f32> = [
+            [1.0, 0.0],
+            [0.0, 1.0]].into();
+        assert_eq!(a * Vector::zero(), Vector::zero());
+        assert_eq!(a * &vec2(1.0, 2.0), vec2(1.0, 2.0));
+        let a: Matrix2<f32> = [
+            [ 0.0, 1.0],
+            [-1.0, 0.0]].into();
+        assert_eq!(&a * &vec2(1.0, 2.0), vec2(-2.0, 1.0));
+    }
+
+    #[test]
+    fn mat_mat_mul() {
+        let a: Matrix2<f32> = [
+            [1.0, 0.0],
+            [0.0, 1.0]].into();
+        let b: Matrix2<f32> = [
+            [ 0.0, 1.0],
+            [-1.0, 0.0]].into();
+        assert_eq!(a * b, b);
+        assert_eq!(&a * b, b);
+        let mut b_1 = b;
+        b_1 *= a;
+        assert_eq!(b_1, b);
     }
 }

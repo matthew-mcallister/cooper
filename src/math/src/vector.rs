@@ -3,8 +3,6 @@ use std::ops::*;
 use base::impl_bin_ops;
 use prelude::num::*;
 
-use crate::macros::*;
-
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
 // TODO: An explicit SIMD variant with proper alignment would be great.
@@ -207,7 +205,7 @@ impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
         PartialEq::eq(&self.elems[..], &other.elems[..])
     }
 
-#[inline(always)]
+    #[inline(always)]
     fn ne(&self, other: &Self) -> bool {
         PartialEq::ne(&self.elems[..], &other.elems[..])
     }
@@ -231,7 +229,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vec0_test() {
+    fn vec0() {
         let u: Vector<f32, 0> = Default::default();
         let v: Vector<f32, 0> = Vector::new([]);
         assert_eq!(u, v);
@@ -239,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn vec1_test() {
+    fn vec1() {
         let u: Vector<f32, 1> = Default::default();
         let v = vec([1.0]);
         assert_eq!(u.x(), 0.0);
@@ -254,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn accessor_test() {
+    fn accessors() {
         let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
         assert_eq!(v[0], 1.0);
         assert_eq!(v[1], 0.0);
@@ -266,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn vec_ops_test() {
+    fn vec_ops() {
         let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
         let u: Vector3<f32> = vec([0.0, 1.0, 0.0]);
         assert_eq!(-v, vec3(-1.0, 0.0, 0.0));
@@ -281,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn scalar_ops_test() {
+    fn scalar_ops() {
         let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
         assert_eq!(v * 1.0, v);
         assert_eq!(v * 0.0, Zero::zero());

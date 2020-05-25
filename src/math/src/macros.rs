@@ -1,5 +1,3 @@
-use base::impl_bin_ops;
-
 // derive_more doesn't work with const generics yet...
 #[macro_export]
 macro_rules! derive_index {
