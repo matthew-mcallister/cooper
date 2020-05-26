@@ -391,8 +391,8 @@ macro_rules! impl_vec_op {
         }
 
         impl_bin_ops!(
-            (DescriptorCounts), (DescriptorCounts),
-            $Op, $OpAssign, $op, $op_assign,
+            (DescriptorCounts), (DescriptorCounts), copy,
+            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
         );
     }
 }
@@ -412,8 +412,8 @@ macro_rules! impl_scalar_op {
         }
 
         impl_bin_ops!(
-            (DescriptorCounts), (u32),
-            $Op, $OpAssign, $op, $op_assign,
+            (DescriptorCounts), (u32), copy,
+            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
         );
     }
 }

@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use anyhow as any;
 use cooper_gfx::*;
+use math::vector::*;
+use math::matrix::*;
 
 mod common;
 
@@ -17,14 +19,6 @@ fn main() {
 }
 
 const NAME: &'static str = "debug example";
-
-fn identity() -> [[f32; 3]; 3] {
-    [
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ]
-}
 
 unsafe fn render_world(
     world: &mut RenderWorld,
@@ -39,12 +33,10 @@ unsafe fn render_world(
 
     // Calculate camera position and near/far planes, chosen so that
     // the mesh is always fully visible.
-    let std::ops::Range { start, end } = mesh.bbox;
-    let diam = (0..3).map(|i| { let x = end[i] - start[i]; x * x })
-        .sum::<f32>().sqrt();
+    let (start, end) = (vec(mesh.bbox.start), vec(mesh.bbox.end));
+    let diam = (end - start).length();
     let radius = diam / 2.0;
-    let mut mid = [0.0; 3];
-    (0..3).for_each(|i| mid[i] = (end[i] + start[i]) / 2.0);
+    let mid = (end + start) / 2.0;
 
     // Increase distance to center a bit in case mesh is spherical
     let dist = 1.1 * radius / fovy2.sin();
@@ -55,8 +47,8 @@ unsafe fn render_world(
         z_near, z_far, tan_fovx2, tan_fovy2, min_depth, max_depth,
     };
 
-    view.rot = identity();
-    view.pos = [mid[0], mid[1], mid[2] - dist];
+    view.rot = Matrix3::identity();
+    view.pos = mid - vec3(0.0, 0.0, dist);
     world.set_view(view);
 
     // Framerate is not bounded yet, so the frequency is kind of
@@ -65,11 +57,11 @@ unsafe fn render_world(
     let f = 0.2;
     let phi = 2.0 * std::f32::consts::PI * f * t;
     let (c, s) = (phi.cos(), phi.sin());
-    let rot = [
+    let rot = Matrix3::from([
         [c, 0.0, s],
         [0.0, 1.0, 0.0],
         [-s, 0.0, c],
-    ];
+    ]);
 
     let idx = (world.frame_num() / 109) as usize;
     let material = &materials[idx % materials.len()];

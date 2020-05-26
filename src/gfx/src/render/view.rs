@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use math::matrix::*;
+use math::vector::*;
+
 use crate::*;
 
 #[derive(Debug)]
@@ -18,9 +21,9 @@ crate struct SceneViewState {
 pub struct SceneView {
     pub perspective: PerspectiveParams,
     /// Rotation of view camera.
-    pub rot: [[f32; 3]; 3],
+    pub rot: Matrix3<f32>,
     /// Position of view camera.
-    pub pos: [f32; 3],
+    pub pos: Vector3<f32>,
     /// For debugging
     pub force_cull_mode: Option<vk::CullModeFlags>,
 }
@@ -38,7 +41,7 @@ pub struct PerspectiveParams {
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(16))]
 crate struct PerspectiveUniforms {
-    crate proj: [[f32; 4]; 4],
+    crate proj: Matrix4<f32>,
     //crate proj_inv: [[f32; 4]; 4],
     crate tan_fovx2: f32,
     crate tan_fovy2: f32,
@@ -54,9 +57,9 @@ crate struct PerspectiveUniforms {
 crate struct SceneViewUniforms {
     crate perspective: PerspectiveUniforms,
     /// Transforms from world space to view space.
-    crate view: [[f32; 4]; 4],
+    crate view: Matrix4<f32>,
     /// Transforms from view space to world space.
-    crate view_inv: [[f32; 4]; 4],
+    crate view_inv: Matrix4<f32>,
     // TODO:
     //crate view_proj: [[f32; 4]; 4],
     //crate view_proj_inv: [[f32; 4]; 4],
@@ -70,8 +73,8 @@ impl SceneViewState {
     ) -> Self {
         let view = world.view;
 
-        let view_inv = affine_xform(view.rot, view.pos);
-        let view_mat = rigid_xform_inv(view.rot, view.pos);
+        let view_inv = view.rot.translate(view.pos);
+        let view_mat = view.rot.transpose().translate(-view.pos);
 
         let uniforms = SceneViewUniforms {
             perspective: view.perspective.into(),
@@ -128,8 +131,8 @@ impl From<PerspectiveParams> for PerspectiveUniforms {
     }
 }
 
-/// Calculates a column-major perspective matrix.
-crate fn perspective(params: PerspectiveParams) -> [[f32; 4]; 4] {
+/// Calculates a perspective matrix.
+crate fn perspective(params: PerspectiveParams) -> Matrix4<f32> {
     let (z_n, z_f) = (params.z_near, params.z_far);
     let (d_n, d_f) = (params.min_depth, params.max_depth);
     let (s_x, s_y) = (params.tan_fovx2, params.tan_fovy2);
@@ -139,5 +142,5 @@ crate fn perspective(params: PerspectiveParams) -> [[f32; 4]; 4] {
         [0.0,       1.0 / s_y, 0.0,      0.0],
         [0.0,       0.0,       c + d_n,  1.0],
         [0.0,       0.0,       -z_n * c, 0.0],
-    ]
+    ].into()
 }

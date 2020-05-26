@@ -1,6 +1,9 @@
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 
+use math::matrix::*;
+use math::vector::*;
+
 use crate::*;
 
 // TODO: When should pipelines be compiled? When the instance is placed
@@ -10,8 +13,8 @@ pub struct MeshInstance {
     pub mesh: Arc<RenderMesh>,
     pub material: Arc<Material>,
     /// Assumed to be orthogonal.
-    pub rot: [[f32; 3]; 3],
-    pub pos: [f32; 3],
+    pub rot: Matrix3<f32>,
+    pub pos: Vector3<f32>,
     //TODO:
     //pub scale: f32,
 }
@@ -19,7 +22,7 @@ pub struct MeshInstance {
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(16))]
 struct PerInstanceData {
-    xform: [[f32; 4]; 3],
+    xform: Matrix4x3<f32>,
 }
 
 #[derive(Debug)]
@@ -84,10 +87,11 @@ unsafe fn render_instances(
         let mesh = instance.mesh;
         let material = instance.material;
 
-        let m = affine_xform(instance.rot, instance.pos);
-        let mv = mat_x_mat(view.uniforms.view, m);
+        let m = instance.rot.translate(instance.pos);
+        let mv = view.uniforms.view * m;
+        let mv: Matrix3x4<_> = mv.submatrix(0, 0);
         instance_data[i] = MaybeUninit::new(PerInstanceData {
-            xform: pack_affine_xform(mv)
+            xform: mv.transpose(),
         });
 
         desc.layout = Arc::clone(material.pipeline_layout());

@@ -7,8 +7,8 @@
 #[macro_use]
 mod macros;
 
-mod matrix;
-mod vector;
+pub mod matrix;
+pub mod vector;
 
 pub use matrix::*;
 pub use vector::*;
