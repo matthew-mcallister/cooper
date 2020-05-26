@@ -284,6 +284,29 @@ impl<F: Primitive + Signed + FloatOps, const N: usize> Vector<F, N> {
     }
 }
 
+// TODO: More general swizzles might be desirable.
+
+impl<F: Zero + Copy> Vector3<F> {
+    #[inline(always)]
+    pub fn xyz0(&self) -> Vector4<F> {
+        vec4(self[0], self[1], self[2], F::zero())
+    }
+}
+
+impl<F: One + Copy> Vector3<F> {
+    #[inline(always)]
+    pub fn xyz1(&self) -> Vector4<F> {
+        vec4(self[0], self[1], self[2], F::one())
+    }
+}
+
+impl<F: Copy> Vector4<F> {
+    #[inline(always)]
+    pub fn xyz(&self) -> Vector3<F> {
+        vec3(self[0], self[1], self[2])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{dot, cross};
@@ -396,5 +419,14 @@ mod tests {
         let len = x.normalize();
         assert_eq!(x, vec2(1.0, 0.0));
         assert_eq!(len, 2.0);
+    }
+
+    #[test]
+    fn swizzle() {
+        let a = vec3(1.0, 2.0, 3.0);
+        assert_eq!(a.xyz0(), vec4(1.0, 2.0, 3.0, 0.0));
+        assert_eq!(a.xyz1(), vec4(1.0, 2.0, 3.0, 1.0));
+        let b = vec4(1.0, 2.0, 3.0, 4.0);
+        assert_eq!(b.xyz(), a);
     }
 }

@@ -3,7 +3,7 @@ use std::ops::*;
 use base::impl_bin_ops;
 use prelude::num::*;
 
-use crate::vector::Vector;
+use crate::vector::*;
 
 /// A column-major, dense, M x N matrix meant for doing fast
 /// transformations and solving small systems of equations.
@@ -98,9 +98,28 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
         }
         trans
     }
+
+    /// Returns the K × L submatrix starting at a given row and column.
+    // TODO: I would prefer to take row and col as consts but the
+    // compiler can't support that yet (it ICEs).
+    #[inline(always)]
+    pub fn submatrix<const K: usize, const L: usize>(
+        &self,
+        row: usize,
+        col: usize,
+    ) -> Matrix<F, K, L> {
+        let mut sub: Matrix<F, K, L> = Default::default();
+        for i in 0..L {
+            for j in 0..K {
+                sub[i][j] = self[col + i][row + j];
+            }
+        }
+        sub
+    }
 }
 
 impl<F: Zero + Copy, const N: usize> Matrix<F, N, N> {
+    #[inline(always)]
     pub fn diagonal(diag: [F; N]) -> Self {
         let mut mat: Matrix<F, N, N> = Zero::zero();
         for i in 0..N {
@@ -111,6 +130,7 @@ impl<F: Zero + Copy, const N: usize> Matrix<F, N, N> {
 }
 
 impl<F: Zero + One + Copy, const N: usize> Matrix<F, N, N> {
+    #[inline(always)]
     pub fn identity() -> Self {
         let mut ident: Matrix<F, N, N> = Zero::zero();
         for i in 0..N {
@@ -343,6 +363,38 @@ impl_matmat_mul!(
     (&'lhs Matrix<F, M, N>), (&'rhs Matrix<F, N, K>)
 );
 
+impl<F: Zero + One + Copy> Matrix3<F> {
+    /// Turns a 3-dimensional matrix into an affine transformation on
+    /// the homogeneous coordinate space.
+    #[inline(always)]
+    pub fn translate(&self, trans: Vector3<F>) -> Matrix4<F> {
+        [self[0].xyz0(), self[1].xyz0(), self[2].xyz0(), trans.xyz1()].into()
+    }
+
+    #[inline(always)]
+    pub fn xyz1(&self) -> Matrix4<F> {
+        [
+            self[0].xyz0(), self[1].xyz0(), self[2].xyz0(),
+            vec4(Zero::zero(), Zero::zero(), Zero::zero(), One::one()),
+        ].into()
+    }
+}
+
+impl<F: Copy + Default> Matrix4<F> {
+    #[inline(always)]
+    pub fn xyz(&self) -> Matrix3<F> {
+        self.submatrix(0, 0)
+    }
+}
+
+impl<F: Copy> Matrix4<F> {
+    /// The first three elements of the last column.
+    #[inline(always)]
+    pub fn translation(&self) -> Vector3<F> {
+        self[3].xyz()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::vector::*;
@@ -475,5 +527,37 @@ mod tests {
             [ 0.0, 3.0
             , 1.0, 4.0
             , 2.0, 5.0]);
+    }
+
+    #[test]
+    fn swizzle() {
+        let mut a: Matrix4<f32> = [
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0]].into();
+        assert_eq!(
+            a.xyz().elements(),
+            [ 0.0, 1.0, 0.0
+            , 0.0, 0.0, 1.0
+            , 1.0, 0.0, 0.0]);
+        assert_eq!(a.xyz().xyz1(), a);
+        assert_eq!(a.xyz().translate(Zero::zero()), a);
+        assert_eq!(a.translation(), Zero::zero());
+
+        let t = vec3(2.0, 3.0, 0.0);
+        a[3] = t.xyz1();
+        assert_eq!(a.translation(), t);
+        assert_eq!(a.xyz().translate(t), a);
+
+        let b: Matrix<f32, 0, 0> = a.submatrix(42, 77);
+        assert_eq!(b, Matrix::new([]));
+        let b: Matrix<f32, 1, 1> = a.submatrix(1, 0);
+        assert_eq!(b, [[1.0]].into());
+        let b: Matrix3x2<f32> = a.submatrix(1, 2);
+        assert_eq!(
+            b.elements(),
+            [ 0.0, 0.0, 0.0
+            , 3.0, 0.0, 1.0]);
     }
 }
