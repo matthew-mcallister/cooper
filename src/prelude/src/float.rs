@@ -18,16 +18,22 @@ macro_rules! float_ops {
         }
 
         impl FloatOps for f32 {
-            $(fn $fn(self$(, $arg: $ty)*) -> $ret {
-                Self::$fn(self$(, $arg)*)
-            })*
+            $(
+                #[inline(always)]
+                fn $fn(self$(, $arg: $ty)*) -> $ret {
+                    Self::$fn(self$(, $arg)*)
+                }
+            )*
             $(const $const: $const_ty = Self::$const;)*
         }
 
         impl FloatOps for f64 {
-            $(fn $fn(self$(, $arg: $ty)*) -> $ret {
-                Self::$fn(self$(, $arg)*)
-            })*
+            $(
+                #[inline(always)]
+                fn $fn(self$(, $arg: $ty)*) -> $ret {
+                    Self::$fn(self$(, $arg)*)
+                }
+            )*
             $(const $const: $const_ty = Self::$const;)*
         }
     }
@@ -102,6 +108,7 @@ float_ops! {
 
 pub trait FromFloat: crate::num::FromInt {
     fn from_f64(val: f64) -> Self;
+    #[inline(always)]
     fn from_f32(val: f32) -> Self {
         Self::from_f64(val as _)
     }

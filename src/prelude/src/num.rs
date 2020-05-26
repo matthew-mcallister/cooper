@@ -30,28 +30,33 @@ pub trait FromInt: Sized {
 macro_rules! impl_int {
     ($name:ident) => {
         impl Zero for $name {
+            #[inline(always)]
             fn zero() -> Self {
                 0u8 as _
             }
         }
 
         impl One for $name {
+            #[inline(always)]
             fn one() -> Self {
                 1u8 as _
             }
         }
 
         impl FromInt for $name {
+            #[inline(always)]
             fn from_u64(val: u64) -> Self {
                 val as _
             }
 
+            #[inline(always)]
             fn from_i64(val: i64) -> Self {
                 val as _
             }
         }
 
         impl crate::float::FromFloat for $name {
+            #[inline(always)]
             fn from_f64(val: f64) -> Self {
                 val as _
             }
