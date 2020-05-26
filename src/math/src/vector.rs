@@ -2,6 +2,9 @@ use std::ops::*;
 
 use base::impl_bin_ops;
 use prelude::num::*;
+use prelude::float::*;
+
+use crate::{Cross, Dot};
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
@@ -119,6 +122,22 @@ impl<F: Default + Copy, const N: usize> Default for Vector<F, N> {
     }
 }
 
+impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(&self.elems[..], &other.elems[..])
+    }
+
+    #[inline(always)]
+    fn ne(&self, other: &Self) -> bool {
+        PartialEq::ne(&self.elems[..], &other.elems[..])
+    }
+}
+
+impl<F: Eq, const N: usize> Eq for Vector<F, N> {}
+
+// TODO: More ops, e.g. Hash
+
 // TODO: Maybe impl AsRef<[F]>, AsRef<[[F; N]]> for [Vector<F, N>]
 impl<F, const N: usize> AsRef<[F; N]> for Vector<F, N> {
     #[inline(always)]
@@ -197,24 +216,6 @@ impl_scalar_op!(
     Rem, RemAssign, rem, rem_assign
 );
 
-// TODO: Bitwise ops (should work for a boolean vector as well)
-
-impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        PartialEq::eq(&self.elems[..], &other.elems[..])
-    }
-
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        PartialEq::ne(&self.elems[..], &other.elems[..])
-    }
-}
-
-impl<F: Eq, const N: usize> Eq for Vector<F, N> {}
-
-// TODO: More ops, e.g. Hash
-
 impl<F: Primitive, const N: usize> std::iter::Sum for Vector<F, N> {
     #[inline(always)]
     fn sum<I>(iter: I) -> Self
@@ -224,8 +225,68 @@ impl<F: Primitive, const N: usize> std::iter::Sum for Vector<F, N> {
     }
 }
 
+// TODO: Bitwise ops (should work for a boolean vector as well)
+
+macro_rules! impl_dot {
+    ({$($lt:tt)*}, ($Lhs:ty), ($Rhs:ty)) => {
+        impl<$($lt)* F: Primitive, const N: usize> Dot<$Rhs> for $Lhs {
+            type Output = F;
+            #[inline(always)]
+            fn dot(self, rhs: $Rhs) -> Self::Output {
+                self.iter().zip(rhs.iter()).map(|(l, r)| l * r).sum()
+            }
+        }
+    }
+}
+
+impl_dot!({}, (Vector<F, N>), (Vector<F, N>));
+impl_dot!({'rhs,}, (Vector<F, N>), (&'rhs Vector<F, N>));
+impl_dot!({'lhs,}, (&'lhs Vector<F, N>), (Vector<F, N>));
+impl_dot!({'lhs, 'rhs,}, (&'lhs Vector<F, N>), (&'rhs Vector<F, N>));
+
+macro_rules! impl_cross {
+    ({$($lt:tt)*}, ($Lhs:ty), ($Rhs:ty)) => {
+        impl<$($lt)* F: Primitive> Cross<$Rhs> for $Lhs {
+            type Output = Vector3<F>;
+            fn cross(self, rhs: $Rhs) -> Self::Output {
+                vec3(
+                    self[1] * rhs[2] - self[2] * rhs[1],
+                    self[2] * rhs[0] - self[0] * rhs[2],
+                    self[0] * rhs[1] - self[1] * rhs[0],
+                )
+            }
+        }
+    }
+}
+
+impl_cross!({}, (Vector3<F>), (Vector3<F>));
+impl_cross!({'rhs,}, (Vector3<F>), (&'rhs Vector3<F>));
+impl_cross!({'lhs,}, (&'lhs Vector3<F>), (Vector3<F>));
+impl_cross!({'lhs, 'rhs,}, (&'lhs Vector3<F>), (&'rhs Vector3<F>));
+
+impl<F: Primitive + Signed + FloatOps, const N: usize> Vector<F, N> {
+    pub fn length_sq(&self) -> F {
+        self.dot(self)
+    }
+
+    pub fn length(&self) -> F {
+        self.length_sq().sqrt()
+    }
+
+    pub fn normalized(self) -> Self {
+        self / self.length()
+    }
+
+    pub fn normalize(&mut self) -> F {
+        let length = self.length();
+        *self /= length;
+        length
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::{dot, cross};
     use super::*;
 
     #[test]
@@ -296,5 +357,44 @@ mod tests {
         assert!((v % 0.0).iter().all(|x| x.is_nan()));
         assert_eq!(v % 2.0, v);
         assert_eq!(v % -1.0, Zero::zero());
+    }
+
+    #[test]
+    fn dot_and_cross() {
+        let b = [
+            -vec3(0.0, 0.0, 1.0),
+            -vec3(0.0, 1.0, 0.0),
+            -vec3(1.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 0.0),
+            vec3(1.0, 0.0, 0.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+        ];
+        let e = &b[4..7];
+        let k = [
+            [ 0,  3, -2],
+            [-3,  0,  1],
+            [ 2, -1,  0],
+        ];
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(dot(e[i], e[j]), if i == j { 1.0 } else { 0.0 });
+                assert_eq!(cross(e[i], e[j]), b[(k[i][j] + 3) as usize]);
+            }
+        }
+        assert_eq!(dot(cross(e[0], e[1]), e[2]), 1.0);
+        assert_eq!(dot(cross(e[0], e[1]), e[0]), 0.0);
+    }
+
+    #[test]
+    fn methods() {
+        assert_eq!(vec2(1.0, 0.0).length_sq(), 1.0);
+        assert_eq!(vec2(3.0, 4.0).length(), 5.0);
+        assert_eq!(vec2(2.0, 0.0).normalized(), vec2(1.0, 0.0));
+
+        let mut x = vec2(2.0, 0.0);
+        let len = x.normalize();
+        assert_eq!(x, vec2(1.0, 0.0));
+        assert_eq!(len, 2.0);
     }
 }

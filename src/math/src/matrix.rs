@@ -118,6 +118,7 @@ impl_matn!(9, mat9, a, b, c, d, e, f, g, h, i);
 impl<F: Copy + Default, const M: usize, const N: usize> Default
     for Matrix<F, M, N>
 {
+    #[inline(always)]
     fn default() -> Self {
         Self::new([Default::default(); N])
     }
@@ -163,10 +164,12 @@ impl<F, const M: usize, const N: usize> From<[Vector<F, M>; N]>
 impl<F: PartialEq, const M: usize, const N: usize> PartialEq
     for Matrix<F, M, N>
 {
+    #[inline(always)]
     fn ne(&self, other: &Self) -> bool {
         self.iter().zip(other.iter()).any(|(a, b)| PartialEq::ne(a, b))
     }
 
+    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         !PartialEq::ne(self, other)
     }
@@ -224,6 +227,7 @@ macro_rules! impl_matvec_mul {
             for $Lhs
         {
             type Output = Vector<F, M>;
+            #[inline(always)]
             fn mul(self, other: $Rhs) -> Self::Output {
                 self.iter().zip(other.iter()).map(|(v, x)| v * x).sum()
             }
@@ -241,6 +245,7 @@ impl_matvec_mul!({'lhs, 'rhs,}, (&'lhs Matrix<F, M, N>), (&'rhs Vector<F, N>));
 impl<F: Primitive, const N: usize> MulAssign<Matrix<F, N, N>>
     for Matrix<F, N, N>
 {
+    #[inline(always)]
     fn mul_assign(&mut self, rhs: Matrix<F, N, N>) {
         let lhs = *self;
         for (i, x) in rhs.iter().enumerate() {
@@ -252,6 +257,7 @@ impl<F: Primitive, const N: usize> MulAssign<Matrix<F, N, N>>
 impl<'rhs, F: Primitive, const N: usize> MulAssign<&'rhs Matrix<F, N, N>>
     for Matrix<F, N, N>
 {
+    #[inline(always)]
     fn mul_assign(&mut self, rhs: &'rhs Matrix<F, N, N>) {
         let lhs = *self;
         for (i, x) in rhs.iter().enumerate() {
@@ -270,6 +276,7 @@ macro_rules! impl_matmat_mul {
             const K: usize,
         > Mul<$Rhs> for $Lhs {
             type Output = $Output;
+            #[inline(always)]
             fn mul(self, other: $Rhs) -> Self::Output {
                 let mut out = Self::Output::zero();
                 for (i, x) in other.iter().enumerate() {

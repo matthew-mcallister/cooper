@@ -162,6 +162,7 @@ pub trait Num
     + Zero
     + One
     + FromInt
+    + std::iter::Sum
     + std::fmt::Debug
     + std::fmt::Display
     + Default
