@@ -87,6 +87,37 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
         }
         mat
     }
+
+    #[inline(always)]
+    pub fn transpose(&self) -> Matrix<F, N, M> {
+        let mut trans: Matrix<F, N, M> = Default::default();
+        for i in 0..N {
+            for j in 0..M {
+                trans[j][i] = self[i][j];
+            }
+        }
+        trans
+    }
+}
+
+impl<F: Zero + Copy, const N: usize> Matrix<F, N, N> {
+    pub fn diagonal(diag: [F; N]) -> Self {
+        let mut mat: Matrix<F, N, N> = Zero::zero();
+        for i in 0..N {
+            mat[i][i] = diag[i];
+        }
+        mat
+    }
+}
+
+impl<F: Zero + One + Copy, const N: usize> Matrix<F, N, N> {
+    pub fn identity() -> Self {
+        let mut ident: Matrix<F, N, N> = Zero::zero();
+        for i in 0..N {
+            ident[i][i] = One::one();
+        }
+        ident
+    }
 }
 
 impl<F: std::fmt::Debug, const M: usize, const N: usize> std::fmt::Debug
@@ -179,6 +210,13 @@ impl<F: Zero + Copy, const M: usize, const N: usize> Zero for Matrix<F, M, N> {
     #[inline(always)]
     fn zero() -> Self {
         Self::new([Zero::zero(); N])
+    }
+}
+
+impl<F: Zero + One + Copy, const N: usize> One for Matrix<F, N, N> {
+    #[inline(always)]
+    fn one() -> Self {
+        Self::identity()
     }
 }
 
@@ -422,5 +460,20 @@ mod tests {
         assert_eq!(a + b, b);
         assert_eq!(a - b, -b);
         assert_eq!(a * b, a);
+    }
+
+    #[test]
+    fn methods() {
+        let a: Matrix2<f32> = Matrix::identity();
+        assert_eq!(a, Matrix::diagonal([1.0, 1.0]));
+        assert_eq!(a, a.transpose());
+        let b: Matrix3x2<f32> = [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0]].into();
+        assert_eq!(
+            b.transpose().elements(),
+            [ 0.0, 3.0
+            , 1.0, 4.0
+            , 2.0, 5.0]);
     }
 }
