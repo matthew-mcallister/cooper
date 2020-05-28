@@ -29,21 +29,12 @@ impl TryFrom<MaterialProgram> for SimpleMode {
 #[derive(Debug)]
 crate struct SimpleMaterialFactory {
     mode: SimpleMode,
-    pipe_layout: Arc<PipelineLayout>,
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
 }
 
 impl SimpleMaterialFactory {
-    crate fn new(state: &SystemState, globals: &Arc<Globals>) -> [Self; 3] {
-        let device = Arc::clone(&state.device);
-
-        let set_layouts = vec![
-            Arc::clone(&globals.scene_unifs_layout),
-            Arc::clone(&globals.instance_buf_layout),
-        ];
-        let pipe_layout = Arc::new(PipelineLayout::new(device, set_layouts));
-
+    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> [Self; 3] {
         let vert_shader =
             Arc::new(Arc::clone(&globals.shaders.static_vert).into());
         let mk_rend = |mode| {
@@ -52,7 +43,6 @@ impl SimpleMaterialFactory {
             spec.set(ShaderConst::SimpleMode as _, &(mode as u32));
             Self {
                 mode,
-                pipe_layout: Arc::clone(&pipe_layout),
                 vert_shader: Arc::clone(&vert_shader),
                 frag_shader: Arc::new(spec),
             }
@@ -72,10 +62,6 @@ impl MaterialFactory for SimpleMaterialFactory {
         _images: &MaterialImageMap,
     ) -> Option<DescriptorSet> {
         None
-    }
-
-    fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
-        &self.pipe_layout
     }
 
     fn select_shaders(&self, skinned: bool) -> ShaderStageMap {

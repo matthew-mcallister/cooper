@@ -25,6 +25,7 @@ crate struct CmdPool {
     queue_family: u32,
 }
 
+// TODO: Should probably contain Arc<SystemState>
 #[derive(Debug)]
 crate struct CmdBuffer {
     device: Arc<Device>,
@@ -688,8 +689,8 @@ mod tests {
     use super::*;
 
     unsafe fn test_common(vars: &testing::TestVars) -> (
-        SystemState, Arc<Globals>, TrivialRenderer, TrivialPass,
-        Vec<Arc<Framebuffer>>, Box<CmdPool>,
+        SystemState, TrivialRenderer, TrivialPass, Vec<Arc<Framebuffer>>,
+        Box<CmdPool>,
     ) {
         let device = Arc::clone(vars.device());
 
@@ -704,60 +705,32 @@ mod tests {
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
-        (state, globals, trivial, pass, framebuffers, pool)
-    }
-
-    unsafe fn record_subpass(
-        state: &SystemState,
-        globals: &Globals,
-        trivial: &TrivialRenderer,
-        cmds: &mut SubpassCmds,
-    ) {
-        let mut desc = GraphicsPipelineDesc::new(
-            cmds.subpass().clone(),
-            Arc::clone(&trivial.pipeline_layout()),
-        );
-
-        let shaders = &globals.shaders;
-        desc.stages[ShaderStage::Vertex] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_vert).into()));
-        desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_frag).into()));
-
-        let pipe = state.gfx_pipes.get_or_create(&desc);
-        cmds.bind_gfx_pipe(&pipe);
-
-        cmds.bind_gfx_descs(0, &trivial.descriptors()[0]);
-        cmds.bind_gfx_descs(1, &trivial.descriptors()[1]);
-
-        cmds.draw(TrivialRenderer::vertex_count(), 1);
+        (state, trivial, pass, framebuffers, pool)
     }
 
     unsafe fn subpass_test(vars: testing::TestVars) {
-        let (state, globals, trivial, pass, framebuffers, pool) =
-            test_common(&vars);
+        let (state, trivial, pass, framebuffers, pool) = test_common(&vars);
         let mut cmds = SubpassCmds::secondary(
             Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
-        record_subpass(&state, &globals, &trivial, &mut cmds);
+        trivial.render(&state, &mut cmds);
         let (_, _) = cmds.end_secondary();
     }
 
     unsafe fn render_pass_test(vars: testing::TestVars) {
         // TODO: Test next_subpass()
-        let (state, globals, trivial, _, framebuffers, pool) =
-            test_common(&vars);
+        let (state, trivial, _, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
             &[],
             SubpassContents::Inline,
         ).enter_subpass();
-        record_subpass(&state, &globals, &trivial, &mut cmds);
+        trivial.render(&state, &mut cmds);
         let (_, _) = cmds.exit_subpass().end().end();
     }
 
     unsafe fn subpass_out_of_bounds(vars: testing::TestVars) {
-        let (_a, _b, _c, _d, framebuffers, pool) = test_common(&vars);
+        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
@@ -768,7 +741,7 @@ mod tests {
     }
 
     unsafe fn inline_in_secondary_subpass(vars: testing::TestVars) {
-        let (_a, _b, _c, _d, framebuffers, pool) = test_common(&vars);
+        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
         let cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
@@ -779,7 +752,7 @@ mod tests {
     }
 
     unsafe fn exec_in_inline_subpass(vars: testing::TestVars) {
-        let (_a, _b, _c, _d, framebuffers, pool) = test_common(&vars);
+        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),

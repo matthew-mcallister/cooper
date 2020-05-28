@@ -10,7 +10,8 @@ use parking_lot::Mutex;
 /// Committed cache hits require no synchronization, which is ideal for
 /// objects which are often used but rarely created.
 // TODO: This doesn't actually allow *parallel* object creation due to
-// the lock. The best-sounding solution right now is async programming.
+// the lock. The staging area could be stratified somewhat. Or async
+// programming could be employed.
 // TODO: Parameterize over hash function: FNV is a poor choice for pipes
 #[derive(Derivative)]
 #[derivative(Debug(bound = "FnvHashMap<K, V>: Debug"))]

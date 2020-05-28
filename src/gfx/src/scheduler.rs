@@ -150,7 +150,7 @@ mod tests {
         let state = Arc::new(SystemState::new(Arc::clone(&device)));
         let globals = Arc::new(Globals::new(&state));
         let pass = TrivialPass::new(Arc::clone(&device));
-        let mut trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
+        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
         let framebuffers = pass.create_framebuffers(&vars.swapchain);
 

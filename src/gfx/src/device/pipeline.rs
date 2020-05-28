@@ -10,8 +10,6 @@ use log::trace;
 
 use crate::*;
 
-crate type ShaderStageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
-
 #[derive(Debug)]
 crate struct PipelineLayout {
     device: Arc<Device>,
@@ -19,10 +17,23 @@ crate struct PipelineLayout {
     set_layouts: Vec<Arc<DescriptorSetLayout>>,
 }
 
+#[derive(Clone, Debug, Default, Derivative)]
+#[derivative(Hash, PartialEq)]
+crate struct PipelineLayoutDesc {
+    #[derivative(Hash(hash_with = "slice_hash"))]
+    #[derivative(PartialEq(compare_with = "slice_eq"))]
+    crate set_layouts: Vec<Arc<DescriptorSetLayout>>,
+    push_constants: Option<()>,
+}
+impl Eq for PipelineLayoutDesc {}
+
+crate type ShaderStageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
+
 #[derive(Debug)]
 crate struct GraphicsPipeline {
     device: Arc<Device>,
     inner: vk::Pipeline,
+    layout: Arc<PipelineLayout>,
     // TODO: Arc<Desc> so hashmap and pipeline share the same object
     desc: GraphicsPipelineDesc,
 }
@@ -30,11 +41,9 @@ crate struct GraphicsPipeline {
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct GraphicsPipelineDesc {
+    // TODO: Just make this an Option so we can impl Default
     crate subpass: Subpass,
-    // TODO: This should maybe just be Vec<Arc<SetLayout>>
-    #[derivative(Hash(hash_with = "ptr_hash"))]
-    #[derivative(PartialEq(compare_with = "ptr_eq"))]
-    crate layout: Arc<PipelineLayout>,
+    crate layout: PipelineLayoutDesc,
     // TODO: This needs encapsulation so it can be auto-computed
     crate vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
@@ -48,11 +57,62 @@ crate struct GraphicsPipelineDesc {
     crate depth_bias: bool,
     // We have no use case yet for multiple color blending states.
     crate blend_state: vk::PipelineColorBlendAttachmentState,
-    #[derivative(Hash(hash_with = "byte_eq"))]
     #[derivative(Hash(hash_with = "byte_hash"))]
+    #[derivative(PartialEq(compare_with = "byte_eq"))]
     crate blend_consts: [f32; 4],
 }
 impl Eq for GraphicsPipelineDesc {}
+
+#[derive(Debug)]
+crate struct PipelineLayoutCache {
+    device: Arc<Device>,
+    inner: StagedCache<PipelineLayoutDesc, Arc<PipelineLayout>>,
+}
+
+macro_rules! pipeline_cache {
+    (
+        name: $name:ident,
+        pipeline: $pipeline:ident,
+        desc: $desc:ident,
+    ) => {
+        #[derive(Debug)]
+        crate struct $name {
+            inner: StagedCache<$desc, Arc<$pipeline>>,
+        }
+
+        impl $name {
+            fn new() -> Self {
+                Self {
+                    inner: Default::default(),
+                }
+            }
+
+            fn commit(&mut self) {
+                self.inner.commit();
+            }
+
+            fn get_committed(&self, desc: &$desc) -> Option<&Arc<$pipeline>> {
+                self.inner.get_committed(desc)
+            }
+
+            unsafe fn get_or_create(
+                &self,
+                layout: Arc<PipelineLayout>,
+                desc: &$desc,
+            ) -> Cow<Arc<$pipeline>> {
+                self.inner.get_or_insert_with(desc, || {
+                    Arc::new($pipeline::new(layout, desc.clone()))
+                })
+            }
+        }
+    }
+}
+
+pipeline_cache! {
+    name: GraphicsPipelineCache,
+    pipeline: GraphicsPipeline,
+    desc: GraphicsPipelineDesc,
+}
 
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
@@ -62,18 +122,15 @@ impl Drop for PipelineLayout {
 }
 
 impl PipelineLayout {
-    crate fn new(
-        device: Arc<Device>,
-        set_layouts: Vec<Arc<DescriptorSetLayout>>,
-    ) -> Self {
-        unsafe { Self::unsafe_new(device, set_layouts) }
+    crate fn new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
+        unsafe { Self::unsafe_new(device, desc) }
     }
 
-    unsafe fn unsafe_new(
-        device: Arc<Device>,
-        set_layouts: Vec<Arc<DescriptorSetLayout>>,
-    ) -> Self {
+    unsafe fn unsafe_new(device: Arc<Device>, desc: PipelineLayoutDesc) ->
+        Self
+    {
         let dt = &*device.table;
+        let set_layouts = desc.set_layouts;
         let cap = device.limits().max_bound_descriptor_sets as usize;
         assert!(set_layouts.len() < cap);
 
@@ -117,6 +174,12 @@ impl Drop for GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
+    unsafe fn new(layout: Arc<PipelineLayout>, desc: GraphicsPipelineDesc) ->
+        Self
+    {
+        create_graphics_pipeline(layout, desc)
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
@@ -130,7 +193,7 @@ impl GraphicsPipeline {
     }
 
     crate fn layout(&self) -> &Arc<PipelineLayout> {
-        &self.desc.layout
+        &self.layout
     }
 
     crate fn vertex_layout(&self) -> &VertexInputLayout {
@@ -158,10 +221,10 @@ fn color_write_mask_all() -> vk::ColorComponentFlags {
 }
 
 impl GraphicsPipelineDesc {
-    crate fn new(subpass: Subpass, layout: Arc<PipelineLayout>) -> Self {
+    crate fn new(subpass: Subpass) -> Self {
         Self {
             subpass,
-            layout,
+            layout: Default::default(),
             vertex_layout: Default::default(),
             stages: Default::default(),
             cull_mode: vk::CullModeFlags::BACK_BIT,
@@ -184,12 +247,20 @@ impl GraphicsPipelineDesc {
 }
 
 unsafe fn create_graphics_pipeline(
-    device: Arc<Device>,
+    layout: Arc<PipelineLayout>,
     desc: GraphicsPipelineDesc,
-) -> Result<Arc<GraphicsPipeline>, ()> {
-    trace!("creating graphics pipeline: {:?}", desc);
+) -> GraphicsPipeline {
+    trace!("create_graphics_pipeline(desc: {:?})", desc);
 
-    let layout = Arc::clone(&desc.layout);
+    let device = Arc::clone(&layout.device);
+
+    // TODO: This redundancy is unfortunate.
+    assert!(
+        layout.set_layouts.iter().zip(desc.layout.set_layouts.iter())
+            .all(|(layout, desc)| Arc::ptr_eq(layout, desc)),
+        "layout: {:?}, desc: {:?}",
+        layout.set_layouts, desc.layout.set_layouts,
+    );
 
     let have = |stage| desc.stages[stage].is_some();
     assert!(have(ShaderStage::Vertex));
@@ -326,62 +397,86 @@ unsafe fn create_graphics_pipeline(
         &mut pipeline,
     );
 
-    Ok(Arc::new(GraphicsPipeline {
+    GraphicsPipeline {
         device,
         inner: pipeline,
+        layout,
         desc,
-    }))
-}
-
-macro_rules! pipeline_cache {
-    (
-        name: $name:ident,
-        pipeline: $pipeline:ident,
-        desc: $desc:ident,
-        factory: $factory:ident$(,)?
-    ) => {
-        // TODO: It may be better to have a cache per material type.
-        // This is what Unreal does. Should obviate synchronization.
-        #[derive(Debug)]
-        crate struct $name {
-            device: Arc<Device>,
-            inner: StagedCache<$desc, Arc<$pipeline>>,
-        }
-
-        impl $name {
-            crate fn new(device: Arc<Device>) -> Self {
-                $name {
-                    device,
-                    inner: Default::default(),
-                }
-            }
-
-            crate fn commit(&mut self) {
-                self.inner.commit();
-            }
-
-            crate fn get_committed(&self, desc: &$desc) ->
-                Option<&Arc<$pipeline>>
-            {
-                self.inner.get_committed(desc)
-            }
-
-            crate unsafe fn get_or_create(&self, desc: &$desc) ->
-                Cow<Arc<$pipeline>>
-            {
-                self.inner.get_or_insert_with(desc, || {
-                    $factory(Arc::clone(&self.device), desc.clone()).unwrap()
-                })
-            }
-        }
     }
 }
 
-pipeline_cache! {
-    name: GraphicsPipelineCache,
-    pipeline: GraphicsPipeline,
-    desc: GraphicsPipelineDesc,
-    factory: create_graphics_pipeline,
+impl PipelineLayoutCache {
+    crate fn new(device: Arc<Device>) -> Self {
+        Self {
+            device,
+            inner: Default::default(),
+        }
+    }
+
+    crate fn commit(&mut self) {
+        self.inner.commit();
+    }
+
+    crate fn get_committed(&self, desc: &PipelineLayoutDesc) ->
+        Option<&Arc<PipelineLayout>>
+    {
+        self.inner.get_committed(desc)
+    }
+
+    crate unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) ->
+        Cow<Arc<PipelineLayout>>
+    {
+        self.inner.get_or_insert_with(desc, || Arc::new(PipelineLayout::new(
+            Arc::clone(&self.device),
+            desc.clone(),
+        )))
+    }
+}
+
+/// Manages the creation, destruction, and lifetime of pipelines.
+#[derive(Debug)]
+crate struct PipelineCache {
+    layouts: PipelineLayoutCache,
+    gfx: GraphicsPipelineCache,
+}
+
+impl PipelineCache {
+    crate fn new(device: &Arc<Device>) -> Self {
+        Self {
+            layouts: PipelineLayoutCache::new(Arc::clone(device)),
+            gfx: GraphicsPipelineCache::new(),
+        }
+    }
+
+    crate fn commit(&mut self) {
+        self.layouts.commit();
+        self.gfx.commit();
+    }
+
+    crate fn get_committed_layout(&self, desc: &PipelineLayoutDesc) ->
+        Option<&Arc<PipelineLayout>>
+    {
+        self.layouts.get_committed(desc)
+    }
+
+    crate fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) ->
+        Option<&Arc<GraphicsPipeline>>
+    {
+        self.gfx.get_committed(desc)
+    }
+
+    crate unsafe fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) ->
+        Cow<Arc<PipelineLayout>>
+    {
+        self.layouts.get_or_create(desc)
+    }
+
+    crate unsafe fn get_or_create_gfx(&self, desc: &GraphicsPipelineDesc) ->
+        Cow<Arc<GraphicsPipeline>>
+    {
+        let layout = self.get_or_create_layout(&desc.layout);
+        self.gfx.get_or_create(layout.into_owned(), desc)
+    }
 }
 
 #[cfg(test)]
@@ -390,36 +485,20 @@ mod tests {
     use crate::*;
     use super::*;
 
-    fn trivial_pipe_desc(
-        globals: &Globals,
-        pass: &TrivialPass,
-        trivial: &TrivialRenderer,
-    ) -> GraphicsPipelineDesc {
-        let mut desc = GraphicsPipelineDesc::new(
-            pass.subpass.clone(),
-            Arc::clone(&trivial.pipeline_layout()),
-        );
-
-        let shaders = &globals.shaders;
-        desc.stages[ShaderStage::Vertex] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_vert).into()));
-        desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.trivial_frag).into()));
-
-        desc.depth_test = false;
-
-        desc
-    }
-
     unsafe fn create_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.device());
+        let device = vars.device();
         let state = SystemState::new(Arc::clone(&device));
         let globals = Arc::new(Globals::new(&state));
         let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
-        let desc = trivial_pipe_desc(&globals, &pass, &trivial);
-        let _pipeline = create_graphics_pipeline(Arc::clone(&device), desc);
+        let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
+        trivial.init_pipe_desc(&mut desc);
+        let layout = Arc::new(PipelineLayout::new(
+            Arc::clone(&device),
+            desc.layout.clone(),
+        ));
+        let _pipeline = create_graphics_pipeline(layout, desc);
     }
 
     unsafe fn cache_test(vars: crate::testing::TestVars) {
@@ -429,17 +508,18 @@ mod tests {
         let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
-        let cache = &mut state.gfx_pipes;
+        let cache = &mut state.pipelines;
 
-        let mut desc = trivial_pipe_desc(&globals, &pass, &trivial);
-        let _pipe0 = Arc::clone(&cache.get_or_create(&desc));
+        let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
+        trivial.init_pipe_desc(&mut desc);
+        let _pipe0 = cache.get_or_create_gfx(&desc).into_owned();
 
         desc.depth_test = true;
-        let pipe1 = Arc::clone(&cache.get_or_create(&desc));
+        let pipe1 = cache.get_or_create_gfx(&desc).into_owned();
 
         cache.commit();
 
-        assert!(Arc::ptr_eq(cache.get_committed(&desc).unwrap(), &pipe1));
+        assert!(Arc::ptr_eq(cache.get_committed_gfx(&desc).unwrap(), &pipe1));
     }
 
     unit::declare_tests![

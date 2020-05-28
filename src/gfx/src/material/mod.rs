@@ -44,18 +44,11 @@ crate trait MaterialFactory: std::fmt::Debug + Send + Sync {
     fn create_descriptor_set(&self, images: &MaterialImageMap) ->
         Option<DescriptorSet>;
 
-    // FIXME: Hacked in because there's no pipeline layout cache.
-    fn pipeline_layout(&self) -> &Arc<PipelineLayout>;
-
     // TODO: Is this a sign that this abstraction is not all that good?
     fn select_shaders(&self, skinned: bool) -> ShaderStageMap;
 }
 
 impl Material {
-    crate fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
-        self.renderer.pipeline_layout()
-    }
-
     crate fn select_shaders(&self, skinned: bool) -> ShaderStageMap {
         self.renderer.select_shaders(skinned)
     }
@@ -67,9 +60,9 @@ crate struct MaterialSystem {
 }
 
 impl MaterialSystem {
-    crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
+    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
         let [checker, depth, normal] =
-            SimpleMaterialFactory::new(state, globals);
+            SimpleMaterialFactory::new(_state, globals);
         let materials = unsafe { std::mem::transmute([
              Arc::new(checker),  // Checker
              Arc::new(depth),    // FragDepth

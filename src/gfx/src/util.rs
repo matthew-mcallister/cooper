@@ -120,6 +120,18 @@ crate fn byte_hash<T, H: Hasher>(this: &T, state: &mut H) {
     std::slice::from_ref(this).as_bytes().hash(state)
 }
 
+/// Remarks on `byte_eq` apply.
+#[inline]
+crate fn slice_eq<T>(this: &impl AsRef<[T]>, other: &impl AsRef<[T]>) -> bool {
+    this.as_ref().as_bytes() == other.as_ref().as_bytes()
+}
+
+/// Remarks on `byte_hash` apply.
+#[inline]
+crate fn slice_hash<T, H: Hasher>(this: &impl AsRef<[T]>, state: &mut H) {
+    this.as_ref().as_bytes().hash(state)
+}
+
 #[inline]
 crate fn as_uninit<T>(src: &T) -> &MaybeUninit<T> {
     unsafe { &*(src as *const _ as *const _) }

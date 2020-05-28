@@ -1,4 +1,3 @@
-// TODO: rename to rloop.rs or something
 use std::sync::Arc;
 
 use log::debug;
@@ -6,15 +5,13 @@ use prelude::*;
 
 use crate::*;
 
-// TODO: Some things may not benefit from multithreading in the long run
 #[derive(Debug)]
 crate struct SystemState {
     crate device: Arc<Device>,
     crate heap: DeviceHeap,
     crate buffers: Arc<BufferHeap>,
     crate descriptors: Arc<DescriptorHeap>,
-    crate gfx_pipes: GraphicsPipelineCache,
-    //compute_pipes: ...,
+    crate pipelines: PipelineCache,
     crate samplers: SamplerCache,
     //shader_specs: ..., (maybe)
 }
@@ -41,14 +38,14 @@ impl SystemState {
         let heap = DeviceHeap::new(dev());
         let buffers = BufferHeap::new(dev());
         let descriptors = Arc::new(DescriptorHeap::new(&device));
-        let gfx_pipes = GraphicsPipelineCache::new(dev());
+        let pipelines = PipelineCache::new(&device);
         let samplers = SamplerCache::new(dev());
         SystemState {
             device,
             heap,
             buffers,
             descriptors,
-            gfx_pipes,
+            pipelines,
             samplers,
         }
     }
@@ -179,7 +176,7 @@ impl RenderLoop {
             state.buffers.clear_frame();
             state.descriptors.clear_frame();
         }
-        state.gfx_pipes.commit();
+        state.pipelines.commit();
         state.samplers.commit();
     }
 }

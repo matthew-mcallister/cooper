@@ -8,7 +8,6 @@ const VERTEX_COUNT: u32 = 3;
 crate struct TrivialRenderer {
     globals: Arc<Globals>,
     set_layouts: [Arc<SetLayout>; 2],
-    pipe_layout: Arc<PipelineLayout>,
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
     descs: [DescriptorSet; 2],
@@ -46,11 +45,6 @@ impl TrivialRenderer {
             Arc::new(SetLayout::from_bindings(Arc::clone(&device), &bindings))
         };
 
-        let pipe_layout = Arc::new(PipelineLayout::new(device, vec![
-            Arc::clone(&layout0),
-            Arc::clone(&layout1),
-        ]));
-
         let shaders = &globals.shaders;
         let vert_shader = Arc::new(Arc::clone(&shaders.trivial_vert).into());
         let frag_shader = Arc::new(Arc::clone(&shaders.trivial_frag).into());
@@ -67,7 +61,6 @@ impl TrivialRenderer {
         TrivialRenderer {
             globals,
             set_layouts: [layout0, layout1],
-            pipe_layout,
             vert_shader,
             frag_shader,
             descs,
@@ -78,24 +71,22 @@ impl TrivialRenderer {
         &self.set_layouts[..]
     }
 
-    crate fn pipeline_layout(&self) -> &Arc<PipelineLayout> {
-        &self.pipe_layout
-    }
-
     crate fn descriptors(&self) -> &[DescriptorSet] {
         &self.descs[..]
     }
 
-    crate fn render(&mut self, state: &SystemState, cmds: &mut SubpassCmds) {
-        let mut desc = GraphicsPipelineDesc::new(
-            cmds.subpass().clone(),
-            Arc::clone(&self.pipeline_layout()),
-        );
-
+    crate fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {
+        desc.layout.set_layouts = self.set_layouts.to_vec();
         desc.stages[ShaderStage::Vertex] = Some(Arc::clone(&self.vert_shader));
         desc.stages[ShaderStage::Fragment] =
             Some(Arc::clone(&self.frag_shader));
-        let pipe = unsafe { state.gfx_pipes.get_or_create(&desc) };
+    }
+
+    crate fn render(&self, state: &SystemState, cmds: &mut SubpassCmds) {
+        let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
+        self.init_pipe_desc(&mut desc);
+
+        let pipe = unsafe { state.pipelines.get_or_create_gfx(&desc) };
         cmds.bind_gfx_pipe(&pipe);
 
         cmds.bind_gfx_descs(0, &self.descs[0]);

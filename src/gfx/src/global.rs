@@ -9,7 +9,6 @@ use crate::*;
 crate struct Globals {
     crate device: Arc<Device>,
     crate shaders: GlobalShaders,
-    crate empty_pipeline_layout: Arc<PipelineLayout>,
     crate empty_uniform_buffer: Arc<BufferAlloc>,
     crate empty_storage_buffer: Arc<BufferAlloc>,
     crate empty_image_2d: Arc<ImageView>,
@@ -41,9 +40,6 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
-
-        let empty_pipeline_layout =
-            Arc::new(PipelineLayout::new(Arc::clone(&device), vec![]));
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
@@ -114,7 +110,6 @@ impl Globals {
         Globals {
             device,
             shaders,
-            empty_pipeline_layout,
             empty_uniform_buffer,
             empty_storage_buffer,
             empty_image_2d,

@@ -73,10 +73,7 @@ unsafe fn render_instances(
     state.device.set_name(&instance_desc, "instance_desc");
     instance_desc.write_buffer(0, instance_data.range());
 
-    let mut desc = GraphicsPipelineDesc::new(
-        cmds.subpass().clone(),
-        Arc::clone(&globals.empty_pipeline_layout),
-    );
+    let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
     desc.cull_mode = view.force_cull_mode
         .unwrap_or(vk::CullModeFlags::BACK_BIT);
     desc.depth_test = true;
@@ -94,8 +91,16 @@ unsafe fn render_instances(
             xform: mv.transpose(),
         });
 
-        desc.layout = Arc::clone(material.pipeline_layout());
         desc.stages = material.select_shaders(false);
+
+        let set_layouts = &mut desc.layout.set_layouts;
+        *set_layouts = vec![
+            Arc::clone(view.uniform_desc().layout()),
+            Arc::clone(instance_desc.layout()),
+        ];
+        if let Some(desc) = material.desc.as_ref() {
+            set_layouts.push(Arc::clone(desc.layout()));
+        }
 
         let vertex_shader = desc.stages[ShaderStage::Vertex]
             .as_ref().unwrap().shader();
@@ -105,7 +110,7 @@ unsafe fn render_instances(
         // TODO: Materials need to be able to set up some pipeline
         // options, e.g. tessellation.
 
-        let pipeline = state.gfx_pipes.get_or_create(&desc);
+        let pipeline = state.pipelines.get_or_create_gfx(&desc);
         cmds.bind_gfx_pipe(&pipeline);
 
         if i == 0 {

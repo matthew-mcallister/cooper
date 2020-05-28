@@ -206,9 +206,7 @@ mod tests {
         globals.write_empty_descriptors(&mut scene_unifs);
         globals.write_empty_descriptors(&mut inst_unifs);
 
-        let pipe_layout = Arc::new(PipelineLayout::new(dev(), layouts));
-        let mut desc =
-            GraphicsPipelineDesc::new(cmds.subpass().clone(), pipe_layout);
+        let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
 
         let shaders = &globals.shaders;
         desc.stages[ShaderStage::Vertex] =
@@ -216,10 +214,11 @@ mod tests {
         desc.stages[ShaderStage::Fragment] =
             Some(Arc::new(Arc::clone(&shaders.simple_frag).into()));
 
+        desc.layout.set_layouts = layouts;
         desc.vertex_layout = mesh.vertex_layout()
             .to_input_layout(desc.vertex_stage().unwrap().shader());
 
-        let pipe = state.gfx_pipes.get_or_create(&desc);
+        let pipe = state.pipelines.get_or_create_gfx(&desc);
         cmds.bind_gfx_pipe(&pipe);
 
         cmds.bind_gfx_descs(0, &scene_unifs);
