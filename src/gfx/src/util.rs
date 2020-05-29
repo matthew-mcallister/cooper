@@ -11,6 +11,7 @@ use std::ptr;
 
 use derive_more::*;
 use enum_map::{Enum, EnumMap};
+use math::vector::*;
 use prelude::*;
 
 #[macro_export]
@@ -299,60 +300,75 @@ macro_rules! set_layout_bindings {
     };
 }
 
-#[derive(Clone, Copy, Constructor, Debug, Default, Eq, From, Hash, Into,
-    PartialEq)]
+macro_rules! impl_conversion {
+    ($from:ty => $via:ty => $into:ty) => {
+        impl From<$from> for $into {
+            #[inline(always)]
+            fn from(from: $from) -> Self {
+                let tmp: $via = from.into();
+                tmp.into()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
+    MulAssign, PartialEq)]
 crate struct Extent2D {
     crate width: u32,
     crate height: u32,
 }
 
-#[derive(Clone, Copy, Constructor, Debug, Default, Eq, From, Hash, Into,
-    PartialEq)]
+#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
+    MulAssign, PartialEq)]
 crate struct Extent3D {
     crate width: u32,
     crate height: u32,
     crate depth: u32,
 }
 
-impl From<Extent3D> for Extent2D {
-    fn from(extent: Extent3D) -> Self {
-        (extent.width, extent.height).into()
-    }
-}
+impl_conversion!(Vector2<u32> => (u32, u32) => Extent2D);
+impl_conversion!(vk::Extent2D => (u32, u32) => Extent2D);
+impl_conversion!(Extent2D => (u32, u32) => Vector2<u32>);
+impl_conversion!(Extent2D => (u32, u32) => vk::Extent2D);
 
-impl From<Extent2D> for vk::Extent2D {
-    fn from(Extent2D { width, height }: Extent2D) -> Self {
-        Self { width, height }
-    }
-}
-
-impl From<vk::Extent2D> for Extent2D {
-    fn from(vk::Extent2D { width, height }: vk::Extent2D) -> Self {
-        Self { width, height }
-    }
-}
+impl_conversion!(Vector3<u32> => (u32, u32, u32) => Extent3D);
+impl_conversion!(vk::Extent3D => (u32, u32, u32) => Extent3D);
+impl_conversion!((u32, u32) => Extent2D => Extent3D);
+impl_conversion!(Extent3D => (u32, u32, u32) => Vector3<u32>);
+impl_conversion!(Extent3D => (u32, u32, u32) => vk::Extent3D);
 
 impl From<Extent2D> for Extent3D {
     fn from(extent: Extent2D) -> Self {
-        (extent.width, extent.height, 1).into()
+        Self::new(extent.width, extent.height, 1)
     }
 }
 
-impl From<(u32, u32)> for Extent3D {
-    fn from((width, height): (u32, u32)) -> Self {
-        (width, height, 1).into()
+impl AsRef<[u32; 2]> for Extent2D {
+    fn as_ref(&self) -> &[u32; 2] {
+        unsafe { &*(self as *const _ as *const _) }
     }
 }
 
-impl From<Extent3D> for vk::Extent3D {
-    fn from(Extent3D { width, height, depth }: Extent3D) -> Self {
-        Self { width, height, depth }
+impl AsRef<[u32; 3]> for Extent3D {
+    fn as_ref(&self) -> &[u32; 3] {
+        unsafe { &*(self as *const _ as *const _) }
     }
 }
 
-impl From<vk::Extent3D> for Extent3D {
-    fn from(vk::Extent3D { width, height, depth }: vk::Extent3D) -> Self {
-        Self { width, height, depth }
+impl Extent2D {
+    crate fn as_array(&self) -> &[u32; 2] {
+        self.as_ref()
+    }
+}
+
+impl Extent3D {
+    crate fn as_array(&self) -> &[u32; 3] {
+        self.as_ref()
+    }
+
+    crate fn to_2d(self) -> Extent2D {
+        Extent2D::new(self.width, self.height)
     }
 }
 

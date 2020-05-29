@@ -87,7 +87,7 @@ impl AttachmentImage {
 
     crate fn extent(&self) -> Extent2D {
         match &self {
-            Self::Image(view) => view.extent().into(),
+            Self::Image(view) => view.extent().to_2d(),
             Self::Swapchain(view) => view.extent(),
         }
     }

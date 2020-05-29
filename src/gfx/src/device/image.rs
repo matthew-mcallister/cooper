@@ -345,9 +345,7 @@ fn validate_image_creation(
     mip_levels: u32,
     layers: u32,
 ) {
-    assert!(extent.width > 0);
-    assert!(extent.height > 0);
-    assert!(extent.depth > 0);
+    assert!(extent.as_array().iter().all(|&x| x > 0));
     assert!(mip_levels > 0);
     assert!(mip_levels <= num_mip_levels(extent));
     assert!(layers > 0);
@@ -359,8 +357,7 @@ fn validate_image_creation(
         ImageType::Dim3 => limits.max_image_dimension_3d,
         ImageType::Cube => limits.max_image_dimension_cube,
     };
-    assert!((extent.width <= max_dim) & (extent.height <= max_dim) &
-            (extent.depth <= max_dim));
+    assert!(extent.as_array().iter().all(|&x| x <= max_dim));
     assert!(layers <= limits.max_image_array_layers);
 
     if ty == ImageType::Cube {

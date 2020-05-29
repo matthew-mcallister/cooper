@@ -56,22 +56,34 @@ pub fn vec<F, const N: usize>(elems: [F; N]) -> Vector<F, N> {
 }
 
 macro_rules! impl_vecn {
-    ($VectorN:ident, $vecn:ident, $($arg:ident),*) => {
+    ($vecn:ident, $N:expr, $($arg:ident),*) => {
         #[inline(always)]
-        pub fn $vecn<F>($($arg: F,)*) -> $VectorN<F> {
+        pub fn $vecn<F>($($arg: F,)*) -> Vector<F, $N> {
             Vector::new([$($arg,)*])
+        }
+
+        impl<F> From<($(konst!({F}, $arg)),*)> for Vector<F, $N> {
+            fn from(($($arg),*): ($(konst!({F}, $arg)),*)) -> Self {
+                Vector::new([$($arg),*])
+            }
+        }
+
+        impl<F> From<Vector<F, $N>> for ($(konst!({F}, $arg)),*) {
+            fn from(Vector { elems: [$($arg),*] }: Vector<F, $N>) -> Self {
+                ($($arg),*)
+            }
         }
     }
 }
 
-impl_vecn!(Vector2, vec2, a, b);
-impl_vecn!(Vector3, vec3, a, b, c);
-impl_vecn!(Vector4, vec4, a, b, c, d);
-impl_vecn!(Vector5, vec5, a, b, c, d, e);
-impl_vecn!(Vector6, vec6, a, b, c, d, e, f);
-impl_vecn!(Vector7, vec7, a, b, c, d, e, f, g);
-impl_vecn!(Vector8, vec8, a, b, c, d, e, f, g, h);
-impl_vecn!(Vector9, vec9, a, b, c, d, e, f, g, h, i);
+impl_vecn!(vec2, 2, a, b);
+impl_vecn!(vec3, 3, a, b, c);
+impl_vecn!(vec4, 4, a, b, c, d);
+impl_vecn!(vec5, 5, a, b, c, d, e);
+impl_vecn!(vec6, 6, a, b, c, d, e, f);
+impl_vecn!(vec7, 7, a, b, c, d, e, f, g);
+impl_vecn!(vec8, 8, a, b, c, d, e, f, g, h);
+impl_vecn!(vec9, 9, a, b, c, d, e, f, g, h, i);
 
 macro_rules! impl_accessors {
     ($($n:tt)*) => { $(impl_accessor!($n);)* };
@@ -113,8 +125,23 @@ impl<F, const N: usize> From<Vector<F, N>> for [F; N] {
     }
 }
 
-// TODO: impl From<&[F]>
+// TODO: impl [Try]From<&[F]>
 
+// TODO: This impl should require neither E: Default + Copy nor F: Copy
+impl<F: Copy, const N: usize> Vector<F, N> {
+    #[inline(always)]
+    pub fn map<E: Default + Copy>(self, mut f: impl FnMut(F) -> E) ->
+        Vector<E, N>
+    {
+        let mut out = Vector::default();
+        for (dst, &src) in out.iter_mut().zip(self.iter()) {
+            *dst = f(src);
+        }
+        out
+    }
+}
+
+// TODO: This impl should not require F: Copy
 impl<F: Default + Copy, const N: usize> Default for Vector<F, N> {
     #[inline(always)]
     fn default() -> Self {
@@ -349,7 +376,7 @@ mod tests {
 
     #[test]
     fn vec_ops() {
-        let v: Vector3<f32> = Vector::new([1.0, 0.0, 0.0]);
+        let v: Vector3<f32> = (1.0, 0.0, 0.0).into();
         let u: Vector3<f32> = vec([0.0, 1.0, 0.0]);
         assert_eq!(-v, vec3(-1.0, 0.0, 0.0));
         assert_eq!(u + v, vec3(1.0, 1.0, 0.0));
@@ -419,6 +446,8 @@ mod tests {
         let len = x.normalize();
         assert_eq!(x, vec2(1.0, 0.0));
         assert_eq!(len, 2.0);
+
+        assert_eq!(vec2(0i32, 1i32).map(|x| x as u32), vec2(0u32, 1u32));
     }
 
     #[test]

@@ -1,3 +1,10 @@
+#[macro_export]
+macro_rules! konst {
+    ({$($val:tt)*}, $($rest:tt)*) => {
+        $($val)*
+    }
+}
+
 // derive_more doesn't work with const generics yet...
 #[macro_export]
 macro_rules! derive_index {
