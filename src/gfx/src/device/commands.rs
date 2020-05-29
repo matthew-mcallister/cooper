@@ -51,12 +51,18 @@ crate struct RenderPassCmds {
     cur_contents: SubpassContents,
 }
 
+#[derive(Debug)]
+crate struct XferCmds {
+    inner: CmdBuffer,
+}
+
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
 #[derivative(Default)]
 crate enum CmdBufferLevel {
     #[derivative(Default)]
     Primary,
     Secondary,
+    /// Equivalent to secondary + RENDER_PASS_CONTINUE_BIT.
     SubpassContinue,
 }
 
@@ -129,6 +135,10 @@ impl CmdPool {
 
     crate fn supports_graphics(&self) -> bool {
         self.queue_family().supports_graphics()
+    }
+
+    crate fn supports_xfer(&self) -> bool {
+        self.queue_family().supports_xfer()
     }
 
     crate fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
@@ -208,6 +218,10 @@ impl CmdBuffer {
 
     crate fn supports_graphics(&self) -> bool {
         self.pool.supports_graphics()
+    }
+
+    crate fn supports_xfer(&self) -> bool {
+        self.pool.supports_xfer()
     }
 
     unsafe fn begin(
@@ -568,6 +582,8 @@ impl RenderPassCmds {
             cur_subpass: -1,
             cur_contents: Default::default(),
         };
+        // TODO: should be able to use an already begun command buffer
+        // if requisites are met
         unsafe { cmds.begin(clear_values, contents); }
         cmds
     }
@@ -683,6 +699,108 @@ impl RenderPassCmds {
     }
 }
 
+impl XferCmds {
+    crate fn new(mut cmds: CmdBuffer) -> Self {
+        assert!(cmds.supports_xfer());
+        assert_ne!(cmds.level, CmdBufferLevel::SubpassContinue);
+        unsafe { cmds.begin(None); }
+        Self { inner: cmds }
+    }
+
+    fn dt(&self) -> &vkl::DeviceTable {
+        self.inner.dt()
+    }
+
+    crate fn raw(&self) -> vk::CommandBuffer {
+        self.inner.inner()
+    }
+
+    // TODO: Could take an iterator over BufferRange pairs
+    crate unsafe fn copy_buffer(
+        &mut self,
+        src: &Arc<DeviceBuffer>,
+        dst: &Arc<DeviceBuffer>,
+        regions: &[vk::BufferCopy],
+    ) {
+        for region in regions.iter() {
+            assert!(region.src_offset + region.size <= src.size());
+            assert!(region.dst_offset + region.size <= dst.size());
+        }
+        self.dt().cmd_copy_buffer(
+            self.raw(),
+            src.inner(),
+            dst.inner(),
+            regions.len() as _,
+            regions.as_ptr(),
+        )
+    }
+
+    crate unsafe fn copy_buffer_to_image(
+        &mut self,
+        src: &Arc<DeviceBuffer>,
+        dst: &Arc<Image>,
+        layout: vk::ImageLayout,
+        regions: &[vk::BufferImageCopy],
+    ) {
+        validate_buffer_image_copy(src, dst, layout, regions);
+        self.dt().cmd_copy_buffer_to_image(
+            self.raw(),
+            src.inner(),
+            dst.inner(),
+            layout,
+            regions.len() as _,
+            regions.as_ptr(),
+        );
+    }
+
+    crate fn end_xfer(self) -> CmdBuffer {
+        self.inner
+    }
+}
+
+#[cfg(debug_assertions)]
+fn validate_buffer_image_copy(
+    src: &DeviceBuffer,
+    dst: &Image,
+    layout: vk::ImageLayout,
+    regions: &[vk::BufferImageCopy],
+) {
+    use math::vector::Vector3;
+
+    assert!([
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::SHARED_PRESENT_KHR,
+    ].contains(&layout));
+    for region in regions.iter() {
+        let off = Vector3::from(<(i32, i32, i32)>::from(region.image_offset));
+        let ext = Vector3::from(Extent3D::from(region.image_extent))
+            .map(|x| x as i32);
+        assert!(dst.extent().contains(off + ext));
+
+        let texel_size = dst.format().size();
+        let row_length = if region.buffer_row_length == 0 {
+            region.buffer_row_length
+        } else { region.image_extent.width } as usize;
+        let image_height = if region.buffer_image_height == 0 {
+            region.buffer_image_height
+        } else { region.image_extent.height } as usize;
+        let layer_texels = row_length * image_height;
+        let layer_count = region.image_subresource.layer_count as usize;
+        let size = (layer_count * layer_texels * texel_size) as vk::DeviceSize;
+        assert!(region.buffer_offset + size < src.size());
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn validate_buffer_image_copy(
+    _: &DeviceBuffer,
+    _: &Image,
+    _: vk::ImageLayout,
+    _: &[vk::BufferImageCopy],
+) {
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -762,12 +880,86 @@ mod tests {
         cmds.execute_cmds(&[vk::null()]);
     }
 
+    unsafe fn copy_common(vars: &testing::TestVars) -> (SystemState, XferCmds)
+    {
+        let device = Arc::clone(vars.device());
+        let state = SystemState::new(Arc::clone(&device));
+        let pool = Box::new(CmdPool::new(
+            vars.gfx_queue().family(),
+            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+        ));
+        let cmds = CmdBuffer::new(pool, CmdBufferLevel::Primary);
+        (state, XferCmds::new(cmds))
+    }
+
+    unsafe fn copy_buffer(vars: testing::TestVars) {
+        let (state, mut cmds) = copy_common(&vars);
+        let src = state.buffers.alloc(
+            BufferBinding::Storage,
+            Lifetime::Frame,
+            MemoryMapping::Mapped,
+            1024,
+        );
+        let dst = state.buffers.alloc(
+            BufferBinding::Storage,
+            Lifetime::Frame,
+            MemoryMapping::Unmapped,
+            1024,
+        );
+        cmds.copy_buffer(&src.buffer(), dst.buffer(), &[
+            vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: 512,
+            },
+            vk::BufferCopy {
+                src_offset: 512,
+                dst_offset: 768,
+                size: 256,
+            },
+        ]);
+        cmds.end_xfer().end();
+    }
+
+    unsafe fn copy_image(vars: testing::TestVars) {
+        let (state, mut cmds) = copy_common(&vars);
+        let format = Format::RGBA8;
+        let src = state.buffers.alloc(
+            BufferBinding::Storage,
+            Lifetime::Frame,
+            MemoryMapping::Mapped,
+            (64 * 64 * format.size()) as _,
+        );
+        let dst = Arc::new(Image::new(
+            &state.heap,
+            ImageFlags::NO_SAMPLE,
+            ImageType::Dim2,
+            format,
+            SampleCount::One,
+            Extent3D::new(64, 64, 1),
+            1,
+            1,
+        ));
+        cmds.copy_buffer_to_image(
+            src.buffer(),
+            &dst,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[vk::BufferImageCopy {
+                image_subresource: dst.all_layers(0),
+                image_extent: dst.extent().into(),
+                ..Default::default()
+            }],
+        );
+        cmds.end_xfer().end();
+    }
+
     unit::declare_tests![
         subpass_test,
         render_pass_test,
         (#[should_err] subpass_out_of_bounds),
         (#[should_err] inline_in_secondary_subpass),
         (#[should_err] exec_in_inline_subpass),
+        copy_buffer,
     ];
 }
 

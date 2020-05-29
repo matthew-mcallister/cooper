@@ -189,7 +189,7 @@ crate fn create_render_target(
     }
     unsafe {
         Arc::new(Image::new(
-            state,
+            &state.heap,
             flags,
             ImageType::Dim2,
             attch.format,

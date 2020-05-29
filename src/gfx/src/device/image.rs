@@ -83,7 +83,7 @@ impl Drop for Image {
 
 impl Image {
     crate unsafe fn new(
-        state: &SystemState,
+        heap: &DeviceHeap,
         flags: ImageFlags,
         ty: ImageType,
         format: Format,
@@ -92,7 +92,7 @@ impl Image {
         mip_levels: u32,
         layers: u32,
     ) -> Self {
-        let device: Arc<Device> = Arc::clone(state.device());
+        let device: Arc<Device> = Arc::clone(heap.device());
         let dt = &*device.table;
 
         validate_image_creation(&device, flags, ty, format, samples,
@@ -114,8 +114,8 @@ impl Image {
         dt.create_image(&create_info, ptr::null(), &mut image)
             .check().unwrap();
 
-        let alloc =
-            state.heap.alloc_image_memory(image, MemoryMapping::Unmapped);
+        // TODO: constructor should eventually be generic over allocator
+        let alloc = heap.alloc_image_memory(image, MemoryMapping::Unmapped);
         Image {
             device,
             flags,
@@ -135,6 +135,15 @@ impl Image {
             aspect_mask: self.format.aspects(),
             base_mip_level: 0,
             level_count: self.mip_levels,
+            base_array_layer: 0,
+            layer_count: self.layers,
+        }
+    }
+
+    crate fn all_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers {
+        vk::ImageSubresourceLayers {
+            aspect_mask: self.format.aspects(),
+            mip_level,
             base_array_layer: 0,
             layer_count: self.layers,
         }
@@ -447,11 +456,12 @@ mod tests {
 
         let device = Arc::clone(vars.device());
         let state = SystemState::new(Arc::clone(&device));
+        let heap = &state.heap;
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);
         let hdr = Arc::new(Image::new(
-            &state,
+            &heap,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::Dim2,
             Format::RGBA16F,
@@ -462,7 +472,7 @@ mod tests {
         ));
         let _hdr_view = hdr.create_full_view();
         let depth = Arc::new(Image::new(
-            &state,
+            &heap,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
             ImageType::Dim2,
             Format::D32F_S8,
@@ -475,7 +485,7 @@ mod tests {
 
         // HDR cube texture
         let env = Arc::new(Image::new(
-            &state,
+            &heap,
             Default::default(),
             ImageType::Cube,
             Format::RGBA16F,

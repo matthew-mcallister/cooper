@@ -39,7 +39,7 @@ crate enum QueueType {
     /// Supports compute and transfer operations.
     Compute,
     /// Supports transfer operations only.
-    Transfer,
+    Xfer,
 }
 
 #[derive(Debug)]
@@ -89,7 +89,7 @@ impl<'dev> QueueFamily<'dev> {
         } else if flags.intersects(vk::QueueFlags::COMPUTE_BIT) {
             QueueType::Compute
         } else if flags.intersects(vk::QueueFlags::TRANSFER_BIT) {
-            QueueType::Transfer
+            QueueType::Xfer
         } else {
             unreachable!();
         }
@@ -97,6 +97,10 @@ impl<'dev> QueueFamily<'dev> {
 
     crate fn supports_graphics(&self) -> bool {
         self.ty().supports(QueueType::Graphics)
+    }
+
+    crate fn supports_xfer(&self) -> bool {
+        self.ty().supports(QueueType::Xfer)
     }
 }
 
@@ -195,6 +199,9 @@ impl Queue {
 }
 
 impl QueueType {
+    // TODO: This implementation seems overly clever. In particular,
+    // graphics queues aren't *guaranteed* to support compute, though
+    // they always do in practice.
     crate fn supports(self, other: Self) -> bool {
         self <= other
     }

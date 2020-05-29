@@ -41,7 +41,6 @@ crate struct GraphicsPipeline {
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct GraphicsPipelineDesc {
-    // TODO: Just make this an Option so we can impl Default
     crate subpass: Subpass,
     crate layout: PipelineLayoutDesc,
     // TODO: This needs encapsulation so it can be auto-computed

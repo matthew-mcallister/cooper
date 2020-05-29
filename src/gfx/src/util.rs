@@ -303,7 +303,7 @@ macro_rules! set_layout_bindings {
 macro_rules! impl_conversion {
     ($from:ty => $via:ty => $into:ty) => {
         impl From<$from> for $into {
-            #[inline(always)]
+            #[inline]
             fn from(from: $from) -> Self {
                 let tmp: $via = from.into();
                 tmp.into()
@@ -339,36 +339,47 @@ impl_conversion!(Extent3D => (u32, u32, u32) => Vector3<u32>);
 impl_conversion!(Extent3D => (u32, u32, u32) => vk::Extent3D);
 
 impl From<Extent2D> for Extent3D {
+    #[inline]
     fn from(extent: Extent2D) -> Self {
         Self::new(extent.width, extent.height, 1)
     }
 }
 
 impl AsRef<[u32; 2]> for Extent2D {
+    #[inline]
     fn as_ref(&self) -> &[u32; 2] {
         unsafe { &*(self as *const _ as *const _) }
     }
 }
 
 impl AsRef<[u32; 3]> for Extent3D {
+    #[inline]
     fn as_ref(&self) -> &[u32; 3] {
         unsafe { &*(self as *const _ as *const _) }
     }
 }
 
 impl Extent2D {
+    #[inline]
     crate fn as_array(&self) -> &[u32; 2] {
         self.as_ref()
     }
 }
 
 impl Extent3D {
+    #[inline]
     crate fn as_array(&self) -> &[u32; 3] {
         self.as_ref()
     }
 
+    #[inline]
     crate fn to_2d(self) -> Extent2D {
         Extent2D::new(self.width, self.height)
+    }
+
+    crate fn contains(&self, point: Vector3<i32>) -> bool {
+        self.as_array().iter().zip(point.iter())
+            .all(|(&ext, &pos)| (0 <= pos) & (pos as u32 <= ext))
     }
 }
 

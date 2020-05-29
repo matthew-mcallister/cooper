@@ -356,7 +356,8 @@ impl MemoryMapping {
     crate fn usage(self) -> vk::BufferUsageFlags {
         match self {
             Self::Unmapped => vk::BufferUsageFlags::TRANSFER_DST_BIT,
-            Self::Mapped => Default::default(),
+            // TODO: This is occasionally convenient but not necessary.
+            Self::Mapped => vk::BufferUsageFlags::TRANSFER_SRC_BIT,
         }
     }
 

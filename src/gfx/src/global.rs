@@ -40,6 +40,7 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
+        let heap = &state.heap;
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
@@ -55,7 +56,7 @@ impl Globals {
         ));
 
         let empty_image_2d = Arc::new(Image::new(
-            &state,
+            &heap,
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,
@@ -65,7 +66,7 @@ impl Globals {
             1,
         )).create_full_view();
         let empty_storage_image_2d = Arc::new(Image::new(
-            &state,
+            &heap,
             ImageFlags::STORAGE,
             ImageType::Dim2,
             Format::RGBA8,

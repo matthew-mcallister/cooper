@@ -31,14 +31,6 @@ crate enum BufferBinding {
     Index,
 }
 
-#[derive(Debug)]
-crate struct BufferBox<T: ?Sized> {
-    alloc: BufferAlloc,
-    ptr: NonNull<T>,
-}
-unsafe impl<T: ?Sized> Send for BufferBox<T> {}
-unsafe impl<T: ?Sized> Sync for BufferBox<T> {}
-
 // A slice of a VkBuffer.
 #[derive(Clone, Copy, Debug)]
 crate struct BufferRange<'buf> {
@@ -54,6 +46,12 @@ crate struct BufferAlloc {
     offset: vk::DeviceSize,
     // N.B. the allocator might return more memory than requested.
     size: vk::DeviceSize,
+}
+
+#[derive(Debug)]
+crate struct BufferBox<T: ?Sized> {
+    alloc: BufferAlloc,
+    ptr: NonNull<T>,
 }
 
 impl Drop for DeviceBuffer {
@@ -74,6 +72,10 @@ impl DeviceBuffer {
 
     crate fn inner(&self) -> vk::Buffer {
         self.inner
+    }
+
+    crate fn size(&self) -> vk::DeviceSize {
+        self.memory.size()
     }
 
     crate fn binding(&self) -> BufferBinding {
@@ -164,15 +166,12 @@ impl BufferAlloc {
     }
 }
 
+unsafe impl<T: ?Sized> Send for BufferBox<T> {}
+unsafe impl<T: ?Sized> Sync for BufferBox<T> {}
+
 impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
     fn as_ref(&self) -> &BufferAlloc {
         &self.alloc
-    }
-}
-
-impl<T: ?Sized> From<BufferBox<T>> for BufferAlloc {
-    fn from(data: BufferBox<T>) -> Self {
-        data.into_inner()
     }
 }
 
