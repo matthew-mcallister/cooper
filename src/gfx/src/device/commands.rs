@@ -830,7 +830,7 @@ mod tests {
         (state, trivial, pass, framebuffers, pool)
     }
 
-    unsafe fn subpass_test(vars: testing::TestVars) {
+    unsafe fn record_subpass(vars: testing::TestVars) {
         let (state, trivial, pass, framebuffers, pool) = test_common(&vars);
         let mut cmds = SubpassCmds::secondary(
             Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
@@ -838,7 +838,7 @@ mod tests {
         let (_, _) = cmds.end_secondary();
     }
 
-    unsafe fn render_pass_test(vars: testing::TestVars) {
+    unsafe fn record_render_pass(vars: testing::TestVars) {
         // TODO: Test next_subpass()
         let (state, trivial, _, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
@@ -910,7 +910,7 @@ mod tests {
             MemoryMapping::Unmapped,
             1024,
         );
-        cmds.copy_buffer(&src.buffer(), dst.buffer(), &[
+        cmds.copy_buffer(src.buffer(), dst.buffer(), &[
             vk::BufferCopy {
                 src_offset: 0,
                 dst_offset: 0,
@@ -920,6 +920,29 @@ mod tests {
                 src_offset: 512,
                 dst_offset: 768,
                 size: 256,
+            },
+        ]);
+        cmds.end_xfer().end();
+    }
+
+    unsafe fn copy_intra_buffer(vars: testing::TestVars) {
+        let (state, mut cmds) = copy_common(&vars);
+        let buf = state.buffers.alloc(
+            BufferBinding::Storage,
+            Lifetime::Frame,
+            MemoryMapping::Mapped,
+            1024,
+        );
+        cmds.copy_buffer(buf.buffer(), buf.buffer(), &[
+            vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 1536,
+                size: 512,
+            },
+            vk::BufferCopy {
+                src_offset: 512,
+                dst_offset: 1024,
+                size: 512,
             },
         ]);
         cmds.end_xfer().end();
@@ -958,12 +981,14 @@ mod tests {
     }
 
     unit::declare_tests![
-        subpass_test,
-        render_pass_test,
+        record_subpass,
+        record_render_pass,
         (#[should_err] subpass_out_of_bounds),
         (#[should_err] inline_in_secondary_subpass),
         (#[should_err] exec_in_inline_subpass),
         copy_buffer,
+        (#[should_err] copy_intra_buffer),
+        copy_image,
     ];
 }
 
