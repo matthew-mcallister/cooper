@@ -214,7 +214,7 @@ impl Set {
             // N.B. Overrunning writes are actually allowed by the spec
             assert!(first_element + len <= layout_binding.descriptor_count);
             for buffer in buffers.iter() {
-                match buffer.buffer.binding() {
+                match buffer.buffer.binding().unwrap() {
                     BufferBinding::Uniform => assert!(is_uniform_buffer(ty)),
                     BufferBinding::Storage => assert!(is_storage_buffer(ty)),
                     _ => panic!("incompatible descriptor type"),

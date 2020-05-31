@@ -14,10 +14,7 @@ crate struct DeviceBuffer {
     memory: Arc<DeviceMemory>,
     inner: vk::Buffer,
     usage: vk::BufferUsageFlags,
-    binding: BufferBinding,
-    mapping: MemoryMapping,
-    // Lifetime of the contents.
-    lifetime: Lifetime,
+    binding: Option<BufferBinding>,
     heap: Weak<BufferHeap>,
 }
 
@@ -56,12 +53,72 @@ crate struct BufferBox<T: ?Sized> {
 
 impl Drop for DeviceBuffer {
     fn drop(&mut self) {
-        let dt = &*self.device().table;
+        let dt = self.device().table();
         unsafe { dt.destroy_buffer(self.inner, ptr::null()); }
     }
 }
 
+unsafe fn create_buffer(
+    device: Arc<Device>,
+    size: vk::DeviceSize,
+    usage: vk::BufferUsageFlags,
+    mapping: MemoryMapping,
+    lifetime: Lifetime,
+    chunk: Option<u32>,
+) -> DeviceBuffer {
+    trace!("create_buffer({:?}, {:?}, {:?}, {:?}, {:?}, {:?})",
+        device, size, usage, mapping, lifetime, chunk);
+
+    let dt = device.table();
+
+    let create_info = vk::BufferCreateInfo {
+        size,
+        usage,
+        ..Default::default()
+    };
+    let mut buffer = vk::null();
+    dt.create_buffer(&create_info, ptr::null(), &mut buffer)
+        .check().unwrap();
+
+    let (reqs, dedicated_reqs) = get_buffer_memory_reqs(&device, buffer);
+    let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
+        .then_some(DedicatedAllocContent::Buffer(buffer));
+    let mut memory = alloc_resource_memory(
+        device,
+        mapping,
+        &reqs,
+        content,
+        Tiling::Linear,
+    );
+    memory.lifetime = lifetime;
+    if let Some(chunk) = chunk {
+        memory.chunk = chunk;
+    }
+
+    let mut buffer = DeviceBuffer {
+        memory: Arc::new(memory),
+        inner: buffer,
+        usage,
+        binding: None,
+        heap: Weak::new(),
+    };
+    buffer.bind();
+
+    buffer
+}
+
 impl DeviceBuffer {
+    pub(in crate::device) unsafe fn new(
+        device: Arc<Device>,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+        mapping: MemoryMapping,
+        lifetime: Lifetime,
+        chunk: Option<u32>,
+    ) -> Self {
+        create_buffer(device, size, usage, mapping, lifetime, chunk)
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.memory.device
     }
@@ -78,7 +135,19 @@ impl DeviceBuffer {
         self.memory.size()
     }
 
-    crate fn binding(&self) -> BufferBinding {
+    crate fn lifetime(&self) -> Lifetime {
+        self.memory.lifetime()
+    }
+
+    crate fn mapping(&self) -> MemoryMapping {
+        self.memory.mapping()
+    }
+
+    crate fn mapped(&self) -> bool {
+        self.memory.mapped()
+    }
+
+    crate fn binding(&self) -> Option<BufferBinding> {
         self.binding
     }
 
@@ -93,6 +162,14 @@ impl DeviceBuffer {
             assert_eq!(DedicatedAllocContent::Buffer(self.inner), content);
         }
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
+    }
+}
+
+impl Debuggable for DeviceBuffer {
+    type Handle = vk::Buffer;
+
+    fn handle(&self) -> Self::Handle {
+        self.inner
     }
 }
 
@@ -296,7 +373,7 @@ impl BufferHeap {
     }
 
     fn assign_backpointers(self: &Arc<Self>) {
-        // Assign weak back-pointer
+        // Assign weak back-pointer to heap on each pool
         let mut inner = self.inner.lock();
         for entry in inner.static_pools.values_mut() {
             entry.mapped_pool.heap = Arc::downgrade(self);
@@ -313,8 +390,8 @@ impl BufferHeap {
         mapping: MemoryMapping,
         size: vk::DeviceSize,
     ) -> BufferAlloc {
-        trace!("allocating buffer memory: size: {}, {:?}, {:?}, {:?}",
-            size, mapping, lifetime, binding);
+        trace!("BufferHeap::alloc({:?}, {:?}, {:?}, {:?})",
+            binding, lifetime, mapping, size);
         match lifetime {
             Lifetime::Static => self.inner.lock()
                 .static_pools[binding]
@@ -326,11 +403,11 @@ impl BufferHeap {
     }
 
     unsafe fn free(&self, alloc: &BufferAlloc) {
+        trace!("BufferHeap::free({:?})", alloc);
         let buffer = &alloc.buffer;
-        if buffer.lifetime != Lifetime::Static { return; }
-        trace!("freeing buffer memory: size: {}, {:?}, {:?}, {:?}",
-            alloc.size, buffer.mapping, buffer.lifetime, buffer.binding);
-        self.inner.lock().static_pools[alloc.buffer.binding].free(alloc);
+        if buffer.lifetime() != Lifetime::Static { return; }
+        self.inner.lock().static_pools[alloc.buffer.binding.unwrap()]
+            .free(alloc);
     }
 
     crate fn boxed<T>(
@@ -408,7 +485,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
         unsafe { mapped_pool.add_chunk(1) };
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
         let device_local = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
-        let unmapped_pool = flags.contains(device_local)
+        let unmapped_pool = (!flags.contains(device_local))
             .then(|| BufferPool::new(
                 Arc::clone(&device),
                 binding,
@@ -440,7 +517,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
     }
 
     fn free(&mut self, alloc: &BufferAlloc) {
-        let pool = self.pool_mut(alloc.buffer.mapping);
+        let pool = self.pool_mut(alloc.buffer.mapping());
         pool.free(alloc);
     }
 
@@ -460,7 +537,7 @@ impl<A: Allocator> Drop for BufferPool<A> {
                 concat!(
                     "allocator destroyed while chunk in use: {:?};\n",
                     "make sure all resources are destroyed before the",
-                    "render loop",
+                    "render loop is destroyed",
                 ), chunk);
         }
     }
@@ -513,55 +590,39 @@ impl<A: Allocator> BufferPool<A> {
     }
 
     fn usage(&self) -> vk::BufferUsageFlags {
-        self.binding.usage() | self.mapping.usage()
+        self.binding.usage()
+            // TODO: It's probably not necessary to set *both* flags,
+            // but it is convenient to and I don't know of any
+            // implementations that even read these bits
+            | vk::BufferUsageFlags::TRANSFER_SRC_BIT
+            | vk::BufferUsageFlags::TRANSFER_DST_BIT
     }
 
     fn mapping(&self) -> MemoryMapping {
         self.mapping
     }
 
-    fn mapped(&self) -> bool {
-        self.mapping().into()
-    }
-
     unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
-        let dt = &*self.device.table;
-
         let chunk = self.chunks.len() as u32;
         let size = align(self.chunk_size(), min_size);
-
-        let create_info = vk::BufferCreateInfo {
-            size,
-            usage: self.usage(),
-            ..Default::default()
-        };
-        let mut buffer = vk::null();
-        dt.create_buffer(&create_info, ptr::null(), &mut buffer)
-            .check().unwrap();
-
-        let (reqs, dedicated_reqs) =
-            get_buffer_memory_reqs(&self.device, buffer);
-        let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
-            .then_some(DedicatedAllocContent::Buffer(buffer));
-        let mut memory = alloc_resource_memory(
+        let mut buffer = DeviceBuffer::new(
             Arc::clone(&self.device),
+            size,
+            self.usage(),
             self.mapping,
-            &reqs,
-            content,
-            Tiling::Linear,
+            self.lifetime,
+            Some(chunk),
         );
-        memory.chunk = chunk;
+        buffer.binding = Some(self.binding);
+        buffer.heap = Weak::clone(&self.heap);
 
-        let mut buffer = DeviceBuffer {
-            memory: Arc::new(memory),
-            inner: buffer,
-            usage: self.usage(),
-            lifetime: self.lifetime,
-            binding: self.binding,
-            mapping: self.mapping,
-            heap: Weak::clone(&self.heap),
-        };
-        buffer.bind();
+        self.device.set_name(&buffer, &format!(
+            "{:?}|{:?}|{:?}[{}]",
+            self.binding,
+            self.lifetime,
+            self.mapping,
+            chunk,
+        ));
 
         self.chunks.push(Arc::new(buffer));
         self.allocator.add_chunk(size);
@@ -597,10 +658,12 @@ impl<A: Allocator> BufferPool<A> {
 
     fn free(&mut self, alloc: &BufferAlloc) {
         // Make sure the allocation came from this pool
-        assert!(Arc::ptr_eq(
-            &alloc.buffer,
-            &self.chunks[alloc.chunk() as usize],
-        ));
+        let chunk = &self.chunks[alloc.chunk() as usize];
+        assert!(
+            Arc::ptr_eq(&alloc.buffer, chunk),
+            "alloc: {:?},\nself.chunks[alloc.chunk]: {:?}",
+            alloc, chunk,
+        );
         self.allocator.free(to_block(alloc));
     }
 
@@ -633,7 +696,18 @@ mod tests {
     use vk::traits::*;
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn create_buffer(vars: testing::TestVars) {
+        DeviceBuffer::new(
+            Arc::clone(vars.device()),
+            8 * (2 << 20),
+            vk::BufferUsageFlags::TRANSFER_SRC_BIT,
+            MemoryMapping::Mapped,
+            Lifetime::Static,
+            None,
+        );
+    }
+
+    unsafe fn heap_alloc(vars: testing::TestVars) {
         use BufferBinding::*;
         use Lifetime::*;
         use MemoryMapping::*;
@@ -649,7 +723,7 @@ mod tests {
         // TODO: Query used memory
     }
 
-    unsafe fn oversize_test(vars: testing::TestVars) {
+    unsafe fn oversized_alloc(vars: testing::TestVars) {
         use BufferBinding::*;
         use Lifetime::*;
 
@@ -665,8 +739,9 @@ mod tests {
     }
 
     unit::declare_tests![
-        smoke_test,
-        (#[should_err] oversize_test),
+        create_buffer,
+        heap_alloc,
+        (#[should_err] oversized_alloc),
     ];
 }
 

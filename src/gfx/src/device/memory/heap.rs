@@ -146,6 +146,7 @@ impl HeapPool {
             type_index: self.type_index,
             ptr: 0 as _,
             tiling: self.tiling,
+            lifetime: Lifetime::Static,
             dedicated_content: None,
             chunk,
         };

@@ -3,6 +3,7 @@ use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::Arc;
 
+use derivative::Derivative;
 use enum_map::Enum;
 use log::{debug, trace};
 
@@ -31,6 +32,8 @@ crate struct DeviceMemory {
     type_index: u32,
     ptr: *mut c_void,
     tiling: Tiling,
+    // Lifetime of any memory allocated from this object.
+    lifetime: Lifetime,
     dedicated_content: Option<DedicatedAllocContent>,
     chunk: u32,
 }
@@ -51,9 +54,11 @@ repr_bool! {
 }
 
 /// Tells how long memory or other resources live for.
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Derivative, Enum, Eq, Hash, PartialEq)]
+#[derivative(Default)]
 pub enum Lifetime {
     // Lives until freed or destroyed.
+    #[derivative(Default)]
     Static,
     /// Lives at least the duration of a frame.
     Frame,
@@ -122,8 +127,6 @@ unsafe fn alloc_device_memory(
     device: &Device,
     alloc_info: &vk::MemoryAllocateInfo,
 ) -> vk::DeviceMemory {
-    trace!("allocating device memory: size: {}, type: {}",
-        alloc_info.allocation_size, alloc_info.memory_type_index);
     let dt = &*device.table;
     let mut memory = vk::null();
     dt.allocate_memory(alloc_info, ptr::null(), &mut memory).check()
@@ -140,6 +143,11 @@ unsafe fn alloc_resource_memory(
     tiling: Tiling,
 ) -> DeviceMemory {
     use DedicatedAllocContent::*;
+
+    // TODO: Can't actually see fields of VkMemoryRequirements...
+    // Should really derive(Debug) on structs that support it.
+    trace!("alloc_resource_memory({:?}, {:?}, {:?}, {:?})",
+        mapping, reqs, content, tiling);
 
     let mut p_next = ptr::null_mut();
 
@@ -175,8 +183,10 @@ unsafe fn alloc_resource_memory(
         type_index,
         ptr: ptr::null_mut(),
         tiling,
+        lifetime: Default::default(),
         dedicated_content: content,
-        // Caller should fill this out
+        // Caller should fill this out.
+        // TODO: Maybe just treat this as public user data.
         chunk: !0,
     };
     memory.init();
@@ -307,6 +317,14 @@ impl DeviceMemory {
         !self.ptr.is_null()
     }
 
+    crate fn mapping(&self) -> MemoryMapping {
+        self.mapped().into()
+    }
+
+    crate fn lifetime(&self) -> Lifetime {
+        self.lifetime
+    }
+
     crate fn flags(&self) -> vk::MemoryPropertyFlags {
         self.device.mem_props.memory_types[self.type_index as usize]
             .property_flags
@@ -350,14 +368,6 @@ impl MemoryMapping {
         match self {
             Self::Mapped => visible_coherent_flags(),
             Self::Unmapped => vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
-        }
-    }
-
-    crate fn usage(self) -> vk::BufferUsageFlags {
-        match self {
-            Self::Unmapped => vk::BufferUsageFlags::TRANSFER_DST_BIT,
-            // TODO: This is occasionally convenient but not necessary.
-            Self::Mapped => vk::BufferUsageFlags::TRANSFER_SRC_BIT,
         }
     }
 

@@ -270,6 +270,10 @@ impl Device {
         Ok((device, queues))
     }
 
+    crate fn table(&self) -> &vkl::DeviceTable {
+        &self.table
+    }
+
     unsafe fn get_queues(self: &Arc<Self>) -> Vec<Vec<Arc<Queue>>> {
         let mut inner = vk::null();
         self.table.get_device_queue(0, 0, &mut inner);

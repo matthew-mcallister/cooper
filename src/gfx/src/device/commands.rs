@@ -722,6 +722,10 @@ impl XferCmds {
         dst: &Arc<DeviceBuffer>,
         regions: &[vk::BufferCopy],
     ) {
+        // This check is good for catching unnecessary copies on UMA.
+        // However, there are use cases that may need to be allowed.
+        assert!(!Arc::ptr_eq(src, dst),
+            "copy to same buffer (likely unintended)");
         for region in regions.iter() {
             assert!(region.src_offset + region.size <= src.size());
             assert!(region.dst_offset + region.size <= dst.size());
@@ -901,7 +905,7 @@ mod tests {
             1024,
         );
         let dst = state.buffers.alloc(
-            BufferBinding::Storage,
+            BufferBinding::Vertex,
             Lifetime::Frame,
             MemoryMapping::Unmapped,
             1024,
