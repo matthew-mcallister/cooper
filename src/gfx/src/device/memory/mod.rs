@@ -10,12 +10,14 @@ use log::{debug, trace};
 use crate::*;
 
 mod alloc;
-mod heap;
 mod buffer;
+mod heap;
+mod staging;
 
 pub(self) use alloc::*;
-crate use heap::*;
 crate use buffer::*;
+crate use heap::*;
+crate use staging::*;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Block {
@@ -228,14 +230,17 @@ unsafe fn get_image_memory_reqs(device: &Device, image: vk::Image) ->
 }
 
 impl Block {
+    #[inline]
     fn offset(&self) -> vk::DeviceSize {
         self.start
     }
 
+    #[inline]
     fn size(&self) -> vk::DeviceSize {
         self.end - self.start
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
         self.start == self.end
     }
@@ -243,29 +248,41 @@ impl Block {
 
 crate trait MemoryRegion {
     fn memory(&self) -> &Arc<DeviceMemory>;
+
     fn offset(&self) -> vk::DeviceSize;
+
     fn size(&self) -> vk::DeviceSize;
 
+    #[inline]
     fn end(&self) -> vk::DeviceSize {
         self.offset() + self.size()
     }
 
+    #[inline]
+    fn range(&self) -> std::ops::Range<vk::DeviceSize> {
+        self.offset()..self.end()
+    }
+
+    #[inline]
     fn as_raw(&self) -> *mut c_void {
         assert!(!self.memory().ptr.is_null());
         unsafe { self.memory().ptr.add(self.offset() as _) }
     }
 
+    #[inline]
     fn as_ptr<T>(&self) -> *mut MaybeUninit<T> {
         let ptr = self.as_raw() as *mut MaybeUninit<T>;
         assert_eq!(ptr as usize % std::mem::align_of::<T>(), 0);
         ptr
     }
 
+    #[inline]
     fn as_mut<T>(&mut self) -> &mut MaybeUninit<T> {
         assert!(std::mem::size_of::<T>() as vk::DeviceSize <= self.size());
         unsafe { &mut *self.as_ptr::<T>() }
     }
 
+    #[inline]
     fn as_mut_slice<T>(&mut self, len: usize) -> &mut [MaybeUninit<T>] {
         let ptr = self.as_ptr::<T>();
         assert!(self.size() as usize >= len * std::mem::size_of::<T>());
@@ -385,4 +402,4 @@ impl DedicatedAllocContent {
     }
 }
 
-unit::collect_tests![alloc, buffer, heap];
+unit::collect_tests![alloc, buffer, heap, staging];
