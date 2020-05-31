@@ -17,7 +17,7 @@ pub(self) use alloc::*;
 crate use heap::*;
 crate use buffer::*;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Block {
     chunk: u32,
     start: vk::DeviceSize,
@@ -385,4 +385,4 @@ impl DedicatedAllocContent {
     }
 }
 
-unit::collect_tests![heap, buffer];
+unit::collect_tests![alloc, buffer, heap];

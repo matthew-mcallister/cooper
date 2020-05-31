@@ -5,6 +5,10 @@ use prelude::*;
 use super::*;
 
 pub(super) trait Allocator: Default {
+    // TODO: Likely want to record two numbers: true memory usage and
+    // (approximate) memory usage including fragmentation.
+    //   true_usage = sum(alloc.size for each successful alloc)
+    //   frag_usage = capacity - amount available for allocation
     fn used(&self) -> vk::DeviceSize;
     fn capacity(&self) -> vk::DeviceSize;
     fn add_chunk(&mut self, size: vk::DeviceSize);
@@ -17,7 +21,6 @@ pub(super) trait Allocator: Default {
 /// Address-ordered FIFO allocation algorithm.
 #[derive(Debug, Default)]
 pub(super) struct FreeListAllocator {
-    capacity: vk::DeviceSize,
     used: vk::DeviceSize,
     // List of chunk sizes
     chunks: Vec<vk::DeviceSize>,
@@ -131,11 +134,10 @@ impl Allocator for FreeListAllocator {
     }
 
     fn capacity(&self) -> vk::DeviceSize {
-        self.capacity
+        self.chunks.iter().sum()
     }
 
     fn add_chunk(&mut self, size: vk::DeviceSize) {
-        self.capacity += size;
         self.chunks.push(size);
         self.free.push(Block {
             chunk: (self.chunks.len() - 1) as _,
@@ -176,8 +178,6 @@ impl Allocator for FreeListAllocator {
 /// memory at one time.
 #[derive(Debug, Default)]
 pub(super) struct LinearAllocator {
-    capacity: vk::DeviceSize,
-    used: vk::DeviceSize,
     // List of chunk sizes
     chunks: Vec<vk::DeviceSize>,
     // Current chunk
@@ -197,11 +197,14 @@ impl LinearAllocator {
         alignment: vk::DeviceSize,
     ) -> Option<Block> {
         let start = align(alignment, self.offset);
-        let end = self.offset + size;
-        (end <= *self.chunks.get(self.chunk)?).then_some(Block {
-            chunk: self.chunk as _,
-            start,
-            end,
+        let end = self.offset + align(alignment, size);
+        (end <= *self.chunks.get(self.chunk)?).then(|| {
+            self.offset = end;
+            Block {
+                chunk: self.chunk as _,
+                start,
+                end,
+            }
         })
     }
 
@@ -215,15 +218,15 @@ impl LinearAllocator {
 
 impl Allocator for LinearAllocator {
     fn used(&self) -> vk::DeviceSize {
-        self.used
+        // TODO: Why doesn't the LHS type resolve?
+        self.chunks[..self.chunk].iter().sum(): vk::DeviceSize + self.offset
     }
 
     fn capacity(&self) -> vk::DeviceSize {
-        self.capacity
+        self.chunks.iter().sum()
     }
 
     fn add_chunk(&mut self, size: vk::DeviceSize) {
-        self.capacity += size;
         self.chunks.push(size);
     }
 
@@ -233,6 +236,7 @@ impl Allocator for LinearAllocator {
         alignment: vk::DeviceSize,
     ) -> Option<Block> {
         self.alloc_in(size, alignment).or_else(|| {
+            // TODO: possibly refine strategy for very large requests
             self.next_chunk()?;
             self.alloc_in(size, alignment)
         })
@@ -245,3 +249,78 @@ impl Allocator for LinearAllocator {
         self.offset = 0;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use super::*;
+
+    fn linear_inner(alloc: &mut LinearAllocator) {
+        assert_eq!(alloc.used(), 0);
+        assert_eq!(alloc.capacity(), 2048);
+
+        // Alignment
+        assert_eq!(alloc.alloc(4, 8), Some(Block {
+            chunk: 0,
+            start: 0,
+            end: 8,
+        }));
+        assert_eq!(alloc.alloc(4, 8), Some(Block {
+            chunk: 0,
+            start: 8,
+            end: 16,
+        }));
+        assert_eq!(alloc.used(), 16);
+        assert_eq!(alloc.capacity(), 2048);
+
+        // Free is no-op
+        alloc.free(Block { chunk: 0, start: 0, end: 16, });
+        assert_eq!(alloc.used(), 16);
+        assert_eq!(alloc.capacity(), 2048);
+
+        // Spill over to next chunk
+        assert_eq!(alloc.alloc(1000, 8), Some(Block {
+            chunk: 0,
+            start: 16,
+            end: 1016,
+        }));
+        assert_eq!(alloc.alloc(64, 8), Some(Block {
+            chunk: 1,
+            start: 0,
+            end: 64,
+        }));
+        assert_eq!(alloc.used(), 1088);
+        assert_eq!(alloc.capacity(), 2048);
+
+        // Cannot alloc past the end of the chunk
+        assert_eq!(alloc.alloc(1000, 8), None);
+        assert_eq!(alloc.used(), 1088);
+        assert_eq!(alloc.capacity(), 2048);
+
+        // Can alloc to end of chunk
+        assert_eq!(alloc.alloc(960, 8), Some(Block {
+            chunk: 1,
+            start: 64,
+            end: 1024,
+        }));
+        assert_eq!(alloc.used(), alloc.capacity());
+
+        assert_eq!(alloc.alloc(8, 8), None);
+    }
+
+    fn linear(_: testing::TestVars) {
+        let mut alloc = LinearAllocator::new();
+
+        alloc.add_chunk(1024);
+        alloc.add_chunk(1024);
+
+        // Run test, clear, and run it again
+        linear_inner(&mut alloc);
+        alloc.clear();
+        linear_inner(&mut alloc);
+    }
+
+    unit::declare_tests![linear];
+}
+
+unit::collect_tests![tests];

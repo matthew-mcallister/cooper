@@ -108,7 +108,7 @@ unsafe fn create_buffer(
 }
 
 impl DeviceBuffer {
-    pub(in crate::device) unsafe fn new(
+    pub(super) unsafe fn new(
         device: Arc<Device>,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
@@ -629,10 +629,9 @@ impl<A: Allocator> BufferPool<A> {
     }
 
     fn alloc(&mut self, size: vk::DeviceSize) -> BufferAlloc {
-        let alignment = self.alignment();
-        let size = align(alignment, size);
-
         assert_ne!(size, 0);
+        let alignment = self.alignment();
+
         let limits = self.device.limits();
         match self.binding {
             BufferBinding::Uniform =>

@@ -161,7 +161,6 @@ impl HeapPool {
         alignment: vk::DeviceSize,
     ) -> DeviceAlloc {
         let alignment = std::cmp::max(self.min_alignment(), alignment);
-        let size = align(alignment, size);
         let mut inner = self.inner.lock();
         let block = inner.allocator.alloc(size, alignment)
             .or_else(|| {
