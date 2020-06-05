@@ -972,7 +972,7 @@ mod tests {
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             &[vk::BufferImageCopy {
                 image_subresource: dst.all_layers_for_mip_level(0)
-                    .to_base_mip_layers(),
+                    .to_mip_layers(0),
                 image_extent: dst.extent().into(),
                 ..Default::default()
             }],

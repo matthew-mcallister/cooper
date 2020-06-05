@@ -5,6 +5,7 @@
     cow_is_borrowed,
     crate_visibility_modifier,
     maybe_uninit_extra,
+    maybe_uninit_slice_assume_init,
     try_blocks,
     type_ascription,
 )]

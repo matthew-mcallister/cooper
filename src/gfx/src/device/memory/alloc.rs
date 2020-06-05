@@ -9,6 +9,8 @@ pub(super) trait Allocator: Default {
     // (approximate) memory usage including fragmentation.
     //   true_usage = sum(alloc.size for each successful alloc)
     //   frag_usage = capacity - amount available for allocation
+    // TODO: This logic shouldn't need to be reimplemented for every
+    // implementor of the Allocator trait.
     fn used(&self) -> vk::DeviceSize;
     fn capacity(&self) -> vk::DeviceSize;
     fn add_chunk(&mut self, size: vk::DeviceSize);

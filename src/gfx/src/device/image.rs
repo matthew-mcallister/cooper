@@ -385,10 +385,11 @@ impl From<ImageSubresources> for vk::ImageSubresourceRange {
 }
 
 impl ImageSubresources {
-    crate fn to_base_mip_layers(&self) -> vk::ImageSubresourceLayers {
+    crate fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers
+    {
         vk::ImageSubresourceLayers {
             aspect_mask: self.aspects,
-            mip_level: self.mip_levels[0],
+            mip_level,
             base_array_layer: self.layers[0],
             layer_count: self.layer_count(),
         }
