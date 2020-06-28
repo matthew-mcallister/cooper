@@ -1,11 +1,8 @@
 //! This module defines a trait, `FloatOps`, providing all the floating
 //! point operations and constants of the `f32` and `f64` types for
-//! writing generic code. Importing it will cause naming conflicts so
-//! you should usually only use the fully qualified name to refer to it.
+//! writing generic code.
 
-// The real reason this module exists is to work around the name
-// conflict issues caused by this trait and the associated trait
-// aliases.
+use crate::num::*;
 
 macro_rules! float_ops {
     (
@@ -106,7 +103,7 @@ float_ops! {
     const NEG_INFINITY: Self;
 }
 
-pub trait FromFloat: crate::num::FromInt {
+pub trait FromFloat: FromInt {
     fn from_f64(val: f64) -> Self;
     #[inline(always)]
     fn from_f32(val: f32) -> Self {
@@ -114,15 +111,14 @@ pub trait FromFloat: crate::num::FromInt {
     }
 }
 
-// https://github.com/rust-lang/rust/issues/72415
-//pub trait Float = crate::num::Signed + FloatOps + FromFloat;
-//pub trait PrimFloat = Float + Copy;
+pub trait Float = Signed + FloatOps + FromFloat;
+pub trait PrimFloat = Float + Copy;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn trait_test_inner<F: crate::num::Signed + FloatOps + FromFloat + Copy>()
+    fn trait_test_inner<F: Signed + FloatOps + FromFloat + Copy>()
     {
         let a = F::from_f32(1.0);
         let b = F::from_f32(2.5);
