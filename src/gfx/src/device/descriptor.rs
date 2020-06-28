@@ -5,7 +5,9 @@ use base::impl_bin_ops;
 use derive_more::*;
 use enum_map::EnumMap;
 use log::trace;
+use math::Vector;
 use parking_lot::Mutex;
+use prelude::num::Zero;
 use vk::traits::*;
 
 use crate::*;
@@ -17,7 +19,7 @@ use self::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, From, Into, PartialEq)]
-crate struct DescriptorCounts(na::VectorN<u32, na::U11>);
+crate struct DescriptorCounts(Vector<u32, 11>);
 
 // TODO: Buffers need an overhaul, as choosing between
 // uniform/storage and dynamic/static is an implementation detail
@@ -354,7 +356,7 @@ impl Debuggable for Set {
 
 impl Default for DescriptorCounts {
     fn default() -> Self {
-        Self(na::zero())
+        Self(Zero::zero())
     }
 }
 
