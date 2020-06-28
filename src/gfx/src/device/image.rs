@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use bitflags::*;
 use derivative::*;
+use more_asserts::assert_le;
 
 use crate::*;
 
@@ -196,6 +197,50 @@ impl Image {
     crate fn layers(&self) -> u32 {
         self.layers
     }
+
+    fn size_of(
+        &self,
+        aspects: vk::ImageAspectFlags,
+        levels: std::ops::Range<u32>,
+        layers: u32,
+    ) -> vk::DeviceSize {
+        assert_eq!(aspects, self.format.aspects());
+        assert_eq!(self.samples, SampleCount::One);
+        assert_le!(levels.end, self.mip_levels);
+        let lvl_size = |lvl| self.extent().mip_level(lvl).texel_count();
+        let texels: vk::DeviceSize = levels.map(lvl_size).sum();
+        texels * self.format.size() as vk::DeviceSize
+            * layers as vk::DeviceSize
+    }
+
+    crate fn subresource_size(&self, subresource: vk::ImageSubresource) ->
+        vk::DeviceSize
+    {
+        let aspects = subresource.aspect_mask;
+        let level = subresource.mip_level;
+        self.size_of(aspects, level..level + 1, 1)
+    }
+
+    crate fn subresource_range_size(
+        &self,
+        subresource: vk::ImageSubresourceRange,
+    ) -> vk::DeviceSize {
+        let aspects = subresource.aspect_mask;
+        let start = subresource.base_mip_level;
+        let len = subresource.level_count;
+        let layers = subresource.layer_count;
+        self.size_of(aspects, start..start+len, layers)
+    }
+
+    crate fn subresource_layers_size(
+        &self,
+        subresource: vk::ImageSubresourceLayers,
+    ) -> vk::DeviceSize {
+        let aspects = subresource.aspect_mask;
+        let level = subresource.mip_level;
+        let layers = subresource.layer_count;
+        self.size_of(aspects, level..level + 1, layers)
+    }
 }
 
 impl Drop for ImageView {
@@ -356,7 +401,7 @@ fn validate_image_creation(
 ) {
     assert!(extent.as_array().iter().all(|&x| x > 0));
     assert!(mip_levels > 0);
-    assert!(mip_levels <= num_mip_levels(extent));
+    assert!(mip_levels <= extent.mip_levels());
     assert!(layers > 0);
 
     let limits = device.limits();
@@ -390,15 +435,6 @@ fn validate_image_creation(
     if flags.contains(ImageFlags::DEPTH_STENCIL_ATTACHMENT) {
         assert!(format.is_depth_stencil());
     }
-}
-
-crate fn num_mip_levels(Extent3D { width, height, depth }: Extent3D) -> u32 {
-    use std::cmp::max;
-    fn log2(n: u32) -> u32 {
-        assert!(n > 0);
-        31 - n.leading_zeros()
-    }
-    max(max(log2(width), log2(height)), log2(depth)) + 1
 }
 
 // Partial validation
@@ -451,7 +487,7 @@ impl From<SampleCount> for vk::SampleCountFlags {
 mod tests {
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn creation(vars: testing::TestVars) {
         use ImageFlags as Flags;
 
         let device = Arc::clone(vars.device());
@@ -497,7 +533,54 @@ mod tests {
         let _env_view = env.create_full_view();
     }
 
-    unit::declare_tests![smoke_test];
+    unsafe fn subresource_size(vars: testing::TestVars) {
+        use ImageFlags as Flags;
+
+        let device = Arc::clone(vars.device());
+        let state = SystemState::new(Arc::clone(&device));
+        let heap = &state.heap;
+
+        let extent = Extent3D::new(128, 128, 1);
+        let img = Arc::new(Image::new(
+            &heap,
+            Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
+            ImageType::Dim2,
+            Format::RGBA8,
+            SampleCount::One,
+            extent,
+            extent.mip_levels(),
+            6,
+        ));
+
+        let tx_size = img.format().size() as vk::DeviceSize;
+        assert_eq!(img.subresource_size(vk::ImageSubresource {
+            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+            mip_level: 0,
+            array_layer: 1,
+        }), 128 * 128 * tx_size);
+        assert_eq!(img.subresource_size(vk::ImageSubresource {
+            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+            mip_level: 3,
+            array_layer: 1,
+        }), 16 * 16 * tx_size);
+        assert_eq!(img.subresource_layers_size(vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+            mip_level: 0,
+            base_array_layer: 1,
+            layer_count: 3,
+        }), 128 * 128 * tx_size * 3);
+        let tx_count = 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4
+            + 2 * 2 + 1 * 1;
+        assert_eq!(img.subresource_range_size(vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR_BIT,
+            base_mip_level: 0,
+            level_count: extent.mip_levels(),
+            base_array_layer: 0,
+            layer_count: 6,
+        }), tx_count * tx_size * 6);
+    }
+
+    unit::declare_tests![creation, subresource_size];
 }
 
 unit::collect_tests![tests];

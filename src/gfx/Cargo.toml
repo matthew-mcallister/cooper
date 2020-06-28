@@ -20,6 +20,7 @@ log = "0.4.8"
 itertools = "0.8.2"
 na = { version = "0.18", package = "nalgebra" }
 math = { path = "../math", package = "cooper-math" }
+more-asserts = "0.2.1"
 owning_ref = "0.4"
 parking_lot = { version = "0.9", features = ["owning_ref"] }
 prelude = { path = "../prelude", package = "cooper-prelude" }
