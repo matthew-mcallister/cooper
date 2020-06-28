@@ -778,9 +778,8 @@ fn validate_buffer_image_copy(
     ].contains(&layout));
     for region in regions.iter() {
         let off = Vector3::from(<(i32, i32, i32)>::from(region.image_offset));
-        let ext = Vector3::from(Extent3D::from(region.image_extent))
-            .map(|x| x as i32);
-        assert!(dst.extent().contains(off + ext));
+        let ext = Extent3D::from(region.image_extent);
+        assert!(dst.extent().contains_extent(off, ext));
 
         let texel_size = dst.format().size();
         let row_length = if region.buffer_row_length == 0 {

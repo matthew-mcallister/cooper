@@ -7,7 +7,6 @@
     maybe_uninit_extra,
     try_blocks,
     type_ascription,
-    weak_into_raw,
 )]
 
 #![allow(dead_code, incomplete_features)]
@@ -31,6 +30,7 @@ mod util;
 crate use util::*;
 
 mod device;
+mod extent;
 mod format;
 mod global;
 mod material;
@@ -42,6 +42,7 @@ mod staged_cache;
 mod world;
 
 pub use device::*;
+crate use extent::*;
 pub use format::*;
 crate use global::*;
 pub use material::*;
@@ -54,6 +55,7 @@ pub use world::*;
 
 unit::collect_tests![
     device,
+    extent,
     format,
     global,
     mesh,

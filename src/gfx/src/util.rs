@@ -9,9 +9,7 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::ptr;
 
-use derive_more::*;
 use enum_map::{Enum, EnumMap};
-use math::vector::*;
 use prelude::*;
 
 #[macro_export]
@@ -298,89 +296,6 @@ macro_rules! set_layout_bindings {
             ..Default::default()
         }
     };
-}
-
-macro_rules! impl_conversion {
-    ($from:ty => $via:ty => $into:ty) => {
-        impl From<$from> for $into {
-            #[inline]
-            fn from(from: $from) -> Self {
-                let tmp: $via = from.into();
-                tmp.into()
-            }
-        }
-    }
-}
-
-#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
-    MulAssign, PartialEq)]
-crate struct Extent2D {
-    crate width: u32,
-    crate height: u32,
-}
-
-#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
-    MulAssign, PartialEq)]
-crate struct Extent3D {
-    crate width: u32,
-    crate height: u32,
-    crate depth: u32,
-}
-
-impl_conversion!(Vector2<u32> => (u32, u32) => Extent2D);
-impl_conversion!(vk::Extent2D => (u32, u32) => Extent2D);
-impl_conversion!(Extent2D => (u32, u32) => Vector2<u32>);
-impl_conversion!(Extent2D => (u32, u32) => vk::Extent2D);
-
-impl_conversion!(Vector3<u32> => (u32, u32, u32) => Extent3D);
-impl_conversion!(vk::Extent3D => (u32, u32, u32) => Extent3D);
-impl_conversion!((u32, u32) => Extent2D => Extent3D);
-impl_conversion!(Extent3D => (u32, u32, u32) => Vector3<u32>);
-impl_conversion!(Extent3D => (u32, u32, u32) => vk::Extent3D);
-
-impl From<Extent2D> for Extent3D {
-    #[inline]
-    fn from(extent: Extent2D) -> Self {
-        Self::new(extent.width, extent.height, 1)
-    }
-}
-
-impl AsRef<[u32; 2]> for Extent2D {
-    #[inline]
-    fn as_ref(&self) -> &[u32; 2] {
-        unsafe { &*(self as *const _ as *const _) }
-    }
-}
-
-impl AsRef<[u32; 3]> for Extent3D {
-    #[inline]
-    fn as_ref(&self) -> &[u32; 3] {
-        unsafe { &*(self as *const _ as *const _) }
-    }
-}
-
-impl Extent2D {
-    #[inline]
-    crate fn as_array(&self) -> &[u32; 2] {
-        self.as_ref()
-    }
-}
-
-impl Extent3D {
-    #[inline]
-    crate fn as_array(&self) -> &[u32; 3] {
-        self.as_ref()
-    }
-
-    #[inline]
-    crate fn to_2d(self) -> Extent2D {
-        Extent2D::new(self.width, self.height)
-    }
-
-    crate fn contains(&self, point: Vector3<i32>) -> bool {
-        self.as_array().iter().zip(point.iter())
-            .all(|(&ext, &pos)| (0 <= pos) & (pos as u32 <= ext))
-    }
 }
 
 #[macro_export]
