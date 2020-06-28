@@ -1,9 +1,3 @@
-#![feature(clamp)]
-#![feature(trait_alias)]
-
-pub mod float;
-pub mod num;
-
 #[macro_export]
 macro_rules! c_str {
     ($($str:expr),*$(,)*) => {

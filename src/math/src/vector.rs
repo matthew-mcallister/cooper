@@ -1,8 +1,7 @@
 use std::ops::*;
 
 use base::impl_bin_ops;
-use prelude::num::*;
-use prelude::float::*;
+use num::*;
 
 use crate::{Cross, Dot};
 

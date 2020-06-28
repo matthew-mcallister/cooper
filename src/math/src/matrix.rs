@@ -1,7 +1,7 @@
 use std::ops::*;
 
 use base::impl_bin_ops;
-use prelude::num::*;
+use num::*;
 
 use crate::vector::*;
 

@@ -7,7 +7,7 @@ use enum_map::EnumMap;
 use log::trace;
 use math::Vector;
 use parking_lot::Mutex;
-use prelude::num::Zero;
+use num::Zero;
 use vk::traits::*;
 
 use crate::*;

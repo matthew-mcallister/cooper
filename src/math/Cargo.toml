@@ -8,4 +8,4 @@ publish = false
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
 approx = "0.3"
-prelude = { path = "../prelude", package = "cooper-prelude" }
+num = { path = "../num", package = "cooper-num" }

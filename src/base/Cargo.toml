@@ -11,4 +11,5 @@ derive_more = "0.15"
 derivative = "2.1.1"
 enum-map = "0.6"
 fnv = "1.0"
+num = { path = "../num", package = "cooper-num" }
 prelude = { path = "../prelude", package = "cooper-prelude" }

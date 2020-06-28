@@ -4,7 +4,7 @@ use derivative::*;
 use derive_more::*;
 use enum_map::{Enum, EnumMap};
 
-use prelude::num::*;
+use num::*;
 
 /// Represents the module V^K for an enum K and ring V. A.k.a. a numeric
 /// array indexed by an enum.

@@ -110,6 +110,7 @@ dependencies = [
 name = "cooper-base"
 version = "0.1.0"
 dependencies = [
+ "cooper-num 0.1.0",
  "cooper-prelude 0.1.0",
  "crossbeam-channel 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "derivative 2.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -126,6 +127,7 @@ dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cooper-base 0.1.0",
  "cooper-math 0.1.0",
+ "cooper-num 0.1.0",
  "cooper-prelude 0.1.0",
  "cooper-unit 0.1.0",
  "cooper-window 0.1.0",
@@ -154,13 +156,18 @@ version = "0.1.0"
 dependencies = [
  "approx 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "cooper-base 0.1.0",
- "cooper-prelude 0.1.0",
+ "cooper-num 0.1.0",
 ]
+
+[[package]]
+name = "cooper-num"
+version = "0.1.0"
 
 [[package]]
 name = "cooper-prelude"
 version = "0.1.0"
 dependencies = [
+ "cooper-num 0.1.0",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
