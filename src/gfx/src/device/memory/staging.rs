@@ -31,6 +31,10 @@ impl StagingBuffer {
         self.buffer.device()
     }
 
+    crate fn inner(&self) -> &DeviceBuffer {
+        &self.buffer
+    }
+
     crate fn used(&self) -> usize {
         self.allocator.used() as _
     }

@@ -715,6 +715,29 @@ impl XferCmds {
         self.inner.inner()
     }
 
+    crate unsafe fn pipeline_barrier(
+        &mut self,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        dependency_flags: vk::DependencyFlags,
+        global_barriers: &[vk::MemoryBarrier],
+        buffer_barriers: &[vk::BufferMemoryBarrier],
+        image_barriers: &[vk::ImageMemoryBarrier],
+    ) {
+        self.dt().cmd_pipeline_barrier(
+            self.raw(),
+            src_stage_mask,
+            dst_stage_mask,
+            dependency_flags,
+            global_barriers.len() as _,
+            global_barriers.as_ptr(),
+            buffer_barriers.len() as _,
+            buffer_barriers.as_ptr(),
+            image_barriers.len() as _,
+            image_barriers.as_ptr(),
+        );
+    }
+
     // TODO: Could take an iterator over BufferRange pairs
     crate unsafe fn copy_buffer(
         &mut self,
@@ -741,7 +764,7 @@ impl XferCmds {
 
     crate unsafe fn copy_buffer_to_image(
         &mut self,
-        src: &Arc<DeviceBuffer>,
+        src: &DeviceBuffer,
         dst: &Arc<Image>,
         layout: vk::ImageLayout,
         regions: &[vk::BufferImageCopy],

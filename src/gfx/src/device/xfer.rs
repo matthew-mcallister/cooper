@@ -106,8 +106,35 @@ impl XferStage {
         }
     }
 
-    crate unsafe fn record_cmds(&self, _cmds: &mut XferCmds) {
-        todo!()
+    crate unsafe fn record_cmds(&self, cmds: &mut XferCmds) {
+        cmds.pipeline_barrier(
+            vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
+            vk::PipelineStageFlags::TRANSFER_BIT,
+            Default::default(),
+            &[],
+            &[],
+            &self.pre_barriers,
+        );
+
+        for copy in self.image_copies.iter() {
+            cmds.copy_buffer_to_image(
+                self.staging.inner(),
+                &copy.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                std::slice::from_ref(&copy.region),
+            );
+        }
+
+        // TODO: dstStageMask is incorrect for images sampled in vertex
+        // or compute shaders
+        cmds.pipeline_barrier(
+            vk::PipelineStageFlags::TRANSFER_BIT,
+            vk::PipelineStageFlags::FRAGMENT_SHADER_BIT,
+            Default::default(),
+            &[],
+            &[],
+            &self.post_barriers,
+        );
     }
 
     crate fn clear(&mut self) {
@@ -123,7 +150,23 @@ mod tests {
     use crate::*;
     use super::*;
 
-    unsafe fn staging_inner(heap: &DeviceHeap, staging: &mut XferStage) {
+    unsafe fn staging_inner(
+        heap: &DeviceHeap,
+        staging: &mut XferStage,
+        pool: Box<CmdPool>,
+    ) -> (vk::CommandBuffer, Box<CmdPool>) {
+        staging_inner_with_fail(heap, staging, pool, false)
+    }
+
+    unsafe fn staging_inner_with_fail(
+        heap: &DeviceHeap,
+        staging: &mut XferStage,
+        pool: Box<CmdPool>,
+        should_fail: bool,
+    ) -> (vk::CommandBuffer, Box<CmdPool>) {
+        let mut cmds =
+            XferCmds::new(CmdBuffer::new(pool, CmdBufferLevel::Primary));
+
         let extent = Extent3D::new(128, 128, 1);
         let img = Arc::new(Image::new(
             &heap,
@@ -139,7 +182,8 @@ mod tests {
         let subresource = ImageSubresources {
             aspects: img.format().aspects(),
             mip_levels: [0, extent.mip_levels()],
-            layers: [0, 6],
+            // Give the validation code a change to do its job
+            layers: if should_fail { [1, 7] } else { [0, 6] },
         };
         let buf = staging.stage_image(
             &img,
@@ -153,6 +197,9 @@ mod tests {
         assert_eq!(staging.pre_barriers.len(), 1);
         assert_eq!(staging.post_barriers.len(), 1);
         assert_eq!(staging.image_copies.len(), extent.mip_levels() as usize);
+
+        staging.record_cmds(&mut cmds);
+        cmds.end_xfer().end()
     }
 
     unsafe fn stage(vars: testing::TestVars) {
@@ -160,14 +207,35 @@ mod tests {
         let mut staging = XferStage::new(Arc::clone(&device), 0x10_0000);
 
         let state = SystemState::new(Arc::clone(&device));
+        let pool = Box::new(CmdPool::new(
+            vars.gfx_queue().family(),
+            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+        ));
 
         // Run test, clear, and run it again
-        staging_inner(&state.heap, &mut staging);
+        let (_, mut pool) = staging_inner(&state.heap, &mut staging, pool);
         staging.clear();
-        staging_inner(&state.heap, &mut staging);
+        pool.reset();
+        let (_, _) = staging_inner(&state.heap, &mut staging, pool);
     }
 
-    unit::declare_tests![stage];
+    unsafe fn stage_validation_error(vars: testing::TestVars) {
+        let device = vars.device();
+        let mut staging = XferStage::new(Arc::clone(&device), 0x10_0000);
+
+        let state = SystemState::new(Arc::clone(&device));
+        let pool = Box::new(CmdPool::new(
+            vars.gfx_queue().family(),
+            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+        ));
+
+        staging_inner_with_fail(&state.heap, &mut staging, pool, true);
+    }
+
+    unit::declare_tests![
+        stage,
+        (#[should_err] stage_validation_error),
+    ];
 }
 
 unit::collect_tests![tests];
