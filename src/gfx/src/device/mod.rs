@@ -14,7 +14,6 @@ mod sampler;
 mod shader;
 mod swapchain;
 mod sync;
-mod xfer;
 mod vertex;
 
 crate use commands::*;
@@ -31,7 +30,6 @@ crate use sampler::*;
 crate use shader::*;
 crate use swapchain::*;
 crate use sync::*;
-crate use xfer::*;
 pub use vertex::*;
 
 #[cfg(test)]
@@ -69,5 +67,4 @@ unit::collect_tests![
     swapchain,
     tests,
     vertex,
-    xfer,
 ];

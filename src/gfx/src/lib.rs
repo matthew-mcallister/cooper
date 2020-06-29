@@ -37,6 +37,7 @@ mod global;
 mod material;
 mod mesh;
 mod render;
+mod resource;
 mod rloop;
 mod scheduler;
 mod staged_cache;
@@ -49,6 +50,7 @@ crate use global::*;
 pub use material::*;
 pub use mesh::*;
 pub use render::*;
+crate use resource::*;
 pub use rloop::*;
 crate use scheduler::*;
 crate use staged_cache::*;
@@ -61,6 +63,7 @@ unit::collect_tests![
     global,
     mesh,
     render,
+    resource,
     scheduler,
     staged_cache,
     world,
