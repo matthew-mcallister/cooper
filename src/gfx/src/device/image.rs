@@ -22,6 +22,8 @@ bitflags! {
         const DEPTH_STENCIL_ATTACHMENT = bit!(3);
         /// Image may be used as an input attachment.
         const INPUT_ATTACHMENT = bit!(4);
+        // TODO: Image may be sampled in a vertex shader.
+        //const SAMPLE_VERTEX = bit!(_);
     }
 }
 

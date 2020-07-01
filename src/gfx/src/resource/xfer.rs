@@ -2,6 +2,7 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use derive_more::Display;
+use more_asserts::assert_le;
 
 use crate::*;
 
@@ -62,13 +63,14 @@ impl XferStage {
         assert_eq!(image.samples(), SampleCount::One);
 
         let size = image.subresource_size(&sub) as usize;
+        assert_le!(size, self.staging.capacity());
         let mut alloc = self.staging.alloc(size).ok_or(StagingOutOfMemory)?;
 
         let extent = image.extent();
         for mip_level in subresources.mip_level_range() {
             let mip_extent = extent.mip_level(mip_level);
             self.image_copies.push(ImageCopy {
-                // TODO: Duplicated ref counts? Yuck.
+                // TODO: This clone is yucky.
                 image: Arc::clone(image),
                 region: vk::BufferImageCopy {
                     buffer_offset: alloc.offset,
@@ -137,7 +139,7 @@ impl XferStage {
         );
     }
 
-    crate fn clear(&mut self) {
+    crate unsafe fn clear(&mut self) {
         self.staging.clear();
         self.pre_barriers.clear();
         self.post_barriers.clear();

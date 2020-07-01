@@ -52,7 +52,7 @@ impl StagingBuffer {
         })
     }
 
-    crate fn clear(&mut self) {
+    crate unsafe fn clear(&mut self) {
         self.allocator.clear();
     }
 }
@@ -97,7 +97,7 @@ mod tests {
 
         // Run test, clear, and run it again
         staging_inner(&mut staging);
-        staging.clear();
+        unsafe { staging.clear(); }
         staging_inner(&mut staging);
     }
 

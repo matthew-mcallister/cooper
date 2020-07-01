@@ -23,6 +23,7 @@ pub struct RenderLoop {
     swapchain: Swapchain,
     globals: Arc<Globals>,
     renderer: WorldRenderer,
+    // TODO: All this stuff belongs under render/
     frame_num: u64,
     frame_in_flight: u64,
     swapchain_sem: Semaphore,
