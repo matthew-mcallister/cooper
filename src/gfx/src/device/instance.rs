@@ -4,7 +4,8 @@ use std::ptr;
 use std::sync::Arc;
 
 use derivative::Derivative;
-use log::info;
+use log::{debug, info};
+use more_asserts::assert_ge;
 use prelude::*;
 
 use crate::*;
@@ -43,12 +44,18 @@ impl Instance {
         let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
+        let mut version = 0;
+        entry.enumerate_instance_version(&mut version).check().unwrap();
+        let version = unpack_version(version);
+        assert_ge!(version, [1, 2, 0]);
+        debug!("Vulkan version: {:?}", version);
+
         let name = CString::new(app_info.name.clone()).unwrap();
         let [major, minor, patch] = app_info.version;
         let vk_app_info = vk::ApplicationInfo {
             p_application_name: name.as_ptr(),
             application_version: vk::make_version!(major, minor, patch),
-            api_version: vk::API_VERSION_1_1,
+            api_version: vk::API_VERSION_1_2,
             p_engine_name: c_str!("cooper"),
             engine_version: vk::make_version!(0, 1, 0),
             ..Default::default()
@@ -155,4 +162,12 @@ impl Instance {
     crate fn debug_message_count(&self) -> u32 {
         self.debug_handler.message_count()
     }
+}
+
+fn unpack_version(version: u32) -> [u32; 3] {
+    [
+        vk::version_major!(version),
+        vk::version_minor!(version),
+        vk::version_patch!(version),
+    ]
 }

@@ -835,12 +835,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "vulkan-headers"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#0ad6683a949f4bf53f0f01742346ae3f963d0049"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#38d414248c53e6ced2c61ee5f4acd3bb7a090032"
 
 [[package]]
 name = "vulkan-loader"
 version = "0.1.0"
-source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#0ad6683a949f4bf53f0f01742346ae3f963d0049"
+source = "git+https://gitlab.com/matthew-mcallister/vk-ffi#38d414248c53e6ced2c61ee5f4acd3bb7a090032"
 dependencies = [
  "vulkan-headers 0.1.0 (git+https://gitlab.com/matthew-mcallister/vk-ffi)",
 ]

@@ -22,9 +22,15 @@ crate struct Semaphore {
     inner: vk::Semaphore,
 }
 
+#[derive(Debug)]
+crate struct TimelineSemaphore {
+    device: Arc<Device>,
+    inner: vk::Semaphore,
+}
+
 impl Drop for Fence {
     fn drop(&mut self) {
-        let dt = &*self.device.table;
+        let dt = self.device.table();
         unsafe {
             dt.destroy_fence(self.inner, ptr::null());
         }
@@ -33,7 +39,7 @@ impl Drop for Fence {
 
 impl Fence {
     crate fn new(device: Arc<Device>, signaled: bool) -> Self {
-        let dt = &*device.table;
+        let dt = device.table();
         let mut create_info = vk::FenceCreateInfo::default();
         if signaled {
             create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
@@ -50,7 +56,7 @@ impl Fence {
     }
 
     fn dt(&self) -> &vkl::DeviceTable {
-        &self.device.table
+        self.device.table()
     }
 
     crate fn inner(&self) -> vk::Fence {
@@ -86,7 +92,7 @@ impl Fence {
     }
 
     // TODO: This function hangs randomly---driver bug?
-    crate fn reset(&mut self) {
+    crate fn reset(&self) {
         unsafe {
             let fences = [self.inner];
             self.dt().reset_fences(fences.len() as _, fences.as_ptr());
@@ -96,7 +102,7 @@ impl Fence {
 
 impl Drop for Semaphore {
     fn drop(&mut self) {
-        let dt = &*self.device.table;
+        let dt = self.device.table();
         unsafe {
             dt.destroy_semaphore(self.inner, ptr::null());
         }
@@ -105,7 +111,7 @@ impl Drop for Semaphore {
 
 impl Semaphore {
     crate fn new(device: Arc<Device>) -> Self {
-        let dt = &*device.table;
+        let dt = device.table();
         let create_info = vk::SemaphoreCreateInfo::default();
         let mut inner = vk::null();
         unsafe {
@@ -123,6 +129,75 @@ impl Semaphore {
     }
 }
 
+impl Drop for TimelineSemaphore {
+    fn drop(&mut self) {
+        let dt = self.device.table();
+        unsafe {
+            dt.destroy_semaphore(self.inner, ptr::null());
+        }
+    }
+}
+
+impl TimelineSemaphore {
+    crate fn new(device: Arc<Device>, value: u64) -> Self {
+        let dt = device.table();
+        let ty_create_info = vk::SemaphoreTypeCreateInfo {
+            semaphore_type: vk::SemaphoreType::TIMELINE,
+            initial_value: value,
+            ..Default::default()
+        };
+        let create_info = vk::SemaphoreCreateInfo {
+            p_next: &ty_create_info as *const _ as _,
+            ..Default::default()
+        };
+        let mut inner = vk::null();
+        unsafe {
+            dt.create_semaphore(&create_info, ptr::null(), &mut inner)
+                .check().unwrap();
+        }
+        Self {
+            device,
+            inner,
+        }
+    }
+
+    fn dt(&self) -> &vkl::DeviceTable {
+        self.device.table()
+    }
+
+    crate unsafe fn signal(&self, value: u64) {
+        self.dt().signal_semaphore(&vk::SemaphoreSignalInfo {
+            semaphore: self.inner,
+            value,
+            ..Default::default()
+        });
+    }
+
+    crate fn wait(&self, value: u64, timeout: u64) -> WaitResult {
+        unsafe {
+            self.dt().wait_semaphores(&vk::SemaphoreWaitInfo {
+                semaphore_count: 1,
+                p_semaphores: &self.inner,
+                p_values: &value,
+                ..Default::default()
+            }, timeout).try_into().unwrap()
+        }
+    }
+
+    crate fn get_value(&self) -> u64 {
+        let mut value = 0;
+        unsafe {
+            self.dt().get_semaphore_counter_value(self.inner(), &mut value)
+                .check().unwrap();
+        }
+        value
+    }
+
+    crate fn inner(&self) -> vk::Semaphore {
+        self.inner
+    }
+}
+
 impl TryFrom<vk::Result> for WaitResult {
     type Error = vk::Result;
     fn try_from(res: vk::Result) -> Result<Self, Self::Error> {
@@ -133,3 +208,37 @@ impl TryFrom<vk::Result> for WaitResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use crate::*;
+    use super::*;
+
+    unsafe fn timeline_semaphore_host_ops(vars: testing::TestVars) {
+        let device = Arc::clone(vars.device());
+
+        let sem = Arc::new(TimelineSemaphore::new(device, 42));
+        assert_eq!(sem.get_value(), 42);
+
+        sem.signal(43);
+        assert_eq!(sem.get_value(), 43);
+        sem.signal(45);
+        assert_eq!(sem.get_value(), 45);
+        assert_eq!(sem.wait(0, 1), WaitResult::Success);
+        assert_eq!(sem.wait(45, 1), WaitResult::Success);
+
+        let sem2 = Arc::clone(&sem);
+        std::thread::spawn(move || {
+            sem2.signal(80);
+        });
+
+        assert_eq!(sem.wait(80, 2_000_000), WaitResult::Success);
+    }
+
+    unit::declare_tests![
+        timeline_semaphore_host_ops,
+    ];
+}
+
+unit::collect_tests![tests];

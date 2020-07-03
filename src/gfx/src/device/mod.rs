@@ -64,6 +64,7 @@ unit::collect_tests![
     pipeline,
     render_pass,
     sampler,
+    sync,
     swapchain,
     tests,
     vertex,

@@ -214,15 +214,23 @@ impl Device {
         let it = &instance.table;
         let app_info = Arc::clone(&instance.app_info);
 
+        let mut p_next = ptr::null_mut();
+
         // TODO: check that extensions are actually supported
         let exts = [
             vk::KHR_SWAPCHAIN_EXTENSION_NAME,
         ];
 
         let features = vk::PhysicalDeviceFeatures {
+            image_cube_array: vk::TRUE, // Currently only used in tests
             sampler_anisotropy: vk::TRUE,
             ..Default::default()
         };
+        let mut features12 = vk::PhysicalDeviceVulkan12Features {
+            timeline_semaphore: vk::TRUE,
+            ..Default::default()
+        };
+        add_to_pnext!(p_next, features12);
 
         let queue_infos = [vk::DeviceQueueCreateInfo {
             queue_family_index: 0,
@@ -232,6 +240,7 @@ impl Device {
         }];
 
         let create_info = vk::DeviceCreateInfo {
+            p_next,
             queue_create_info_count: queue_infos.len() as _,
             p_queue_create_infos: queue_infos.as_ptr(),
             enabled_extension_count: exts.len() as _,
