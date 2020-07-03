@@ -1,7 +1,14 @@
+use std::convert::{TryFrom, TryInto};
 use std::ptr;
 use std::sync::Arc;
 
 use crate::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+crate enum WaitResult {
+    Success,
+    Timeout,
+}
 
 #[derive(Debug)]
 crate struct Fence {
@@ -42,6 +49,10 @@ impl Fence {
         }
     }
 
+    fn dt(&self) -> &vkl::DeviceTable {
+        &self.device.table
+    }
+
     crate fn inner(&self) -> vk::Fence {
         self.inner
     }
@@ -50,25 +61,35 @@ impl Fence {
         self.wait_with_timeout(u64::max_value());
     }
 
-    crate fn wait_with_timeout(&self, timeout: u64) {
-        let dt = &*self.device.table;
+    crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
         unsafe {
             let fences = [self.inner];
-            dt.wait_for_fences(
+            self.dt().wait_for_fences(
                 fences.len() as _,
                 fences.as_ptr(),
                 bool32(false),
                 timeout,
-            );
+            ).try_into().unwrap()
+        }
+    }
+
+    crate fn check_signaled(&self) -> bool {
+        unsafe {
+            let res = self.dt().get_fence_status(self.inner);
+            if res == vk::Result::SUCCESS {
+                true
+            } else {
+                assert_eq!(res, vk::Result::NOT_READY);
+                false
+            }
         }
     }
 
     // TODO: This function hangs randomly---driver bug?
     crate fn reset(&mut self) {
-        let dt = &*self.device.table;
         unsafe {
             let fences = [self.inner];
-            dt.reset_fences(fences.len() as _, fences.as_ptr());
+            self.dt().reset_fences(fences.len() as _, fences.as_ptr());
         }
     }
 }
@@ -99,5 +120,16 @@ impl Semaphore {
 
     crate fn inner(&self) -> vk::Semaphore {
         self.inner
+    }
+}
+
+impl TryFrom<vk::Result> for WaitResult {
+    type Error = vk::Result;
+    fn try_from(res: vk::Result) -> Result<Self, Self::Error> {
+        match res {
+            vk::Result::SUCCESS => Ok(Self::Success),
+            vk::Result::TIMEOUT => Ok(Self::Timeout),
+            _ => Err(res),
+        }
     }
 }

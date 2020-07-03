@@ -7,7 +7,8 @@ use crate::{Cross, Dot};
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
-// TODO: An explicit SIMD variant with proper alignment would be great.
+// TODO: Explicit/guaranteed SIMD
+// TODO: Aligned variants. But how to implement? A macro or wrappers?
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct Vector<F, const N: usize> {

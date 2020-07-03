@@ -6,10 +6,9 @@ use crate::*;
 
 #[derive(Debug)]
 crate struct UploadScheduler {
-    //processor: TaskProcessor,
-    //queue: Arc<Queue>,
-    //fence: Fence,
-    //semaphore: Semaphore,
+    tasks: TaskProcessor,
+    // TODO: Replace with timeline semaphore
+    fence: Fence,
 }
 
 /// Schedules the execution of GPU transfer commands.
@@ -46,9 +45,12 @@ impl TaskProcessor {
         self.tasks.push(task.into());
     }
 
-    fn process_tasks(&mut self, cmds: &mut XferCmds) {
-        if self.tasks.is_empty() { return; }
+    fn is_empty(&self) -> bool {
+        self.tasks.is_empty()
+    }
 
+    fn process_tasks(&mut self, cmds: &mut XferCmds) {
+        assert!(!self.tasks.is_empty());
         unsafe { self.staging.clear(); }
 
         // NB: Staging uploads is basically a bin-packing problem, but
@@ -88,9 +90,40 @@ fn upload_image(staging: &mut XferStage, task: &ImageUploadTask) ->
 }
 
 impl UploadScheduler {
-    crate fn schedule_tasks(&mut self, _cmd_pool: Box<CmdPool>) -> Box<CmdPool>
+    crate fn new(device: Arc<Device>) -> Self {
+        Self {
+            fence: Fence::new(Arc::clone(&device), true),
+            tasks: TaskProcessor::new(device),
+        }
+    }
+
+    crate fn add_task(&mut self, task: impl Into<UploadTask>) {
+        self.tasks.add_task(task);
+    }
+
+    crate fn schedule(&mut self, queue: &Queue, pool: Box<CmdPool>) ->
+        Box<CmdPool>
     {
-        todo!()
+        if !self.fence.check_signaled() | self.tasks.is_empty() {
+            return pool;
+        }
+
+        let mut cmds = XferCmds::new(CmdBuffer::new_primary(pool));
+        self.tasks.process_tasks(&mut cmds);
+        let (cmds, pool) = cmds.end();
+
+        let submissions = [SubmitInfo {
+            cmds: &[cmds],
+            ..Default::default()
+        }];
+        self.fence.reset();
+        unsafe { queue.submit(&submissions, Some(&mut self.fence)); }
+
+        pool
+    }
+
+    crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
+        self.fence.wait_with_timeout(timeout)
     }
 }
 
@@ -115,46 +148,39 @@ mod tests {
         ))
     }
 
-    unsafe fn task_processor(vars: testing::TestVars) {
+    unsafe fn upload(vars: testing::TestVars) {
         let device = vars.device();
-        let mut proc = TaskProcessor::new(Arc::clone(device));
+        let mut uploads = UploadScheduler::new(Arc::clone(device));
 
         let state = SystemState::new(Arc::clone(&device));
         let images = [
             test_image(&state, 64, 64),
             test_image(&state, 128, 128),
         ];
-        let mut pool = Some(Box::new(CmdPool::new(
+        let mut pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-        )));
+        ));
 
         let mut data = Vec::new();
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
         for _ in 0..2 {
-            let pl = pool.take().unwrap();
-            let cmds = CmdBuffer::new(pl, CmdBufferLevel::Primary);
-            let mut cmds = XferCmds::new(cmds);
-
             for image in images.iter() {
-                proc.add_task(ImageUploadTask {
+                uploads.add_task(ImageUploadTask {
                     src: Arc::clone(&data),
                     src_offset: 0x1000,
                     image: Arc::clone(&image),
                     subresources: image.all_subresources(),
                 });
             }
-
-            proc.process_tasks(&mut cmds);
-
-            let (_, pl) = cmds.end_xfer().end();
-            pool = Some(pl);
+            pool = uploads.schedule(vars.gfx_queue(), pool);
+            uploads.wait_with_timeout(2_000_000);
         }
     }
 
-    unit::declare_tests![task_processor];
+    unit::declare_tests![upload];
 }
 
 unit::collect_tests![tests];

@@ -192,6 +192,10 @@ impl CmdBuffer {
         }
     }
 
+    crate fn new_primary(pool: Box<CmdPool>) -> Self {
+        Self::new(pool, CmdBufferLevel::Primary)
+    }
+
     fn ensure_recording(&self) {
         assert_eq!(self.state, CmdBufferState::Recording);
     }
@@ -782,6 +786,10 @@ impl XferCmds {
 
     crate fn end_xfer(self) -> CmdBuffer {
         self.inner
+    }
+
+    crate fn end(self) -> (vk::CommandBuffer, Box<CmdPool>) {
+        self.inner.end()
     }
 }
 
