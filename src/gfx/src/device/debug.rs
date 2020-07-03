@@ -89,8 +89,6 @@ impl_debug_marker_name! {
     DisplayKHR = DISPLAY_KHR;
     DisplayModeKHR = DISPLAY_MODE_KHR;
     DebugReportCallbackEXT = DEBUG_REPORT_CALLBACK_EXT;
-    ObjectTableNVX = OBJECT_TABLE_NVX;
-    IndirectCommandsLayoutNVX = INDIRECT_COMMANDS_LAYOUT_NVX;
     DebugUtilsMessengerEXT = DEBUG_UTILS_MESSENGER_EXT;
     ValidationCacheEXT = VALIDATION_CACHE_EXT;
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
