@@ -40,7 +40,6 @@ mod mesh;
 mod render;
 mod resource;
 mod rloop;
-mod scheduler;
 mod staged_cache;
 mod world;
 
@@ -54,7 +53,6 @@ pub use mesh::*;
 pub use render::*;
 crate use resource::*;
 pub use rloop::*;
-crate use scheduler::*;
 crate use staged_cache::*;
 pub use world::*;
 
@@ -66,7 +64,6 @@ unit::collect_tests![
     mesh,
     render,
     resource,
-    scheduler,
     staged_cache,
     world,
 ];

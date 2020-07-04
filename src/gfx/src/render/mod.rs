@@ -1,8 +1,10 @@
 mod instance;
+mod scheduler;
 mod view;
 mod world_render;
 
 pub use instance::*;
+crate use scheduler::*;
 pub use view::*;
 crate use world_render::*;
 
@@ -12,5 +14,6 @@ mod trivial;
 crate use trivial::*;
 
 unit::collect_tests![
+    scheduler,
     trivial,
 ];
