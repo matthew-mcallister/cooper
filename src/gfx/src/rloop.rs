@@ -164,7 +164,7 @@ impl RenderLoop {
 
         unsafe {
             self.gfx_queue.present(
-                &[&self.render_sem],
+                &[&mut self.render_sem],
                 &mut self.swapchain,
                 image_idx,
             ).check().unwrap();

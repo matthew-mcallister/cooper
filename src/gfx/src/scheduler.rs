@@ -75,9 +75,12 @@ impl Scheduler {
     crate fn schedule_pass(
         &mut self,
         pass: RenderPassNode,
-        wait_sems: &[&Semaphore],
+        // TODO: Ought to abstract over these arguments
+        wait_sems: &[SemaphoreInner<'_>],
+        wait_values: &[u64],
         wait_stages: &[vk::PipelineStageFlags],
-        sig_sems: &[&Semaphore],
+        sig_sems: &[SemaphoreInner<'_>],
+        sig_values: &[u64],
         fence: Option<&mut Fence>,
     ) {
         let pool = self.pool.take().unwrap();
@@ -109,8 +112,10 @@ impl Scheduler {
         unsafe {
             self.gfx_queue.submit(&[SubmitInfo {
                 wait_sems,
+                wait_values,
                 wait_stages,
                 sig_sems,
+                sig_values,
                 cmds: &[cmds],
             }], fence);
         }
@@ -159,7 +164,7 @@ mod tests {
         pass.add_task(0, Box::new(move |cmds| trivial.render(&state_, cmds)));
 
         let mut scheduler = Scheduler::new(Arc::clone(&vars.gfx_queue));
-        scheduler.schedule_pass(pass, &[], &[], &[], None);
+        scheduler.schedule_pass(pass, &[], &[], &[], &[], &[], None);
 
         device.wait_idle();
     }

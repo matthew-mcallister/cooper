@@ -221,7 +221,7 @@ impl Swapchain {
             dt.acquire_next_image_khr(
                 self.inner,
                 timeout,
-                sem.inner(),
+                sem.raw(),
                 vk::null(),
                 &mut idx,
             ).check()?;

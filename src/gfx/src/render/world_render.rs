@@ -153,9 +153,11 @@ impl WorldRenderer {
 
         self.scheduler.schedule_pass(
             pass,
-            &[present_sem],
+            &[present_sem.inner()],
+            &[0],
             &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT],
-            &[render_sem],
+            &[render_sem.inner()],
+            &[0],
             Some(render_fence),
         );
 

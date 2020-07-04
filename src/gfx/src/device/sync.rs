@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
 use std::ptr;
 use std::sync::Arc;
 
@@ -26,6 +27,15 @@ crate struct Semaphore {
 crate struct TimelineSemaphore {
     device: Arc<Device>,
     inner: vk::Semaphore,
+}
+
+// Basically a raw VkSemaphore but it borrows the owning object, thus
+// ensuring that the user has unique access to the underlying semaphore.
+#[derive(Debug)]
+#[repr(transparent)]
+crate struct SemaphoreInner<'sem> {
+    raw: vk::Semaphore,
+    _ph: PhantomData<&'sem mut Semaphore>,
 }
 
 impl Drop for Fence {
@@ -124,8 +134,12 @@ impl Semaphore {
         }
     }
 
-    crate fn inner(&self) -> vk::Semaphore {
+    crate fn raw(&self) -> vk::Semaphore {
         self.inner
+    }
+
+    crate fn inner(&mut self) -> SemaphoreInner<'_> {
+        SemaphoreInner { raw: self.inner, _ph: PhantomData }
     }
 }
 
@@ -187,14 +201,30 @@ impl TimelineSemaphore {
     crate fn get_value(&self) -> u64 {
         let mut value = 0;
         unsafe {
-            self.dt().get_semaphore_counter_value(self.inner(), &mut value)
+            self.dt().get_semaphore_counter_value(self.inner, &mut value)
                 .check().unwrap();
         }
         value
     }
 
-    crate fn inner(&self) -> vk::Semaphore {
+    crate fn raw(&self) -> vk::Semaphore {
         self.inner
+    }
+
+    crate fn inner(&mut self) -> SemaphoreInner<'_> {
+        SemaphoreInner { raw: self.inner, _ph: PhantomData }
+    }
+}
+
+impl<'sem> From<SemaphoreInner<'sem>> for vk::Semaphore {
+    fn from(inner: SemaphoreInner<'sem>) -> Self {
+        inner.raw
+    }
+}
+
+impl<'sem> SemaphoreInner<'sem> {
+    crate fn slice_as_raw(slice: &[Self]) -> &[vk::Semaphore] {
+        unsafe { std::mem::transmute(slice) }
     }
 }
 

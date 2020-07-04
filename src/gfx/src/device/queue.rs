@@ -33,9 +33,11 @@ crate struct Queue {
 
 #[derive(Clone, Copy, Debug, Default)]
 crate struct SubmitInfo<'a> {
-    crate wait_sems: &'a [&'a Semaphore],
+    crate wait_sems: &'a [SemaphoreInner<'a>],
+    crate wait_values: &'a [u64],
     crate wait_stages: &'a [vk::PipelineStageFlags],
-    crate sig_sems: &'a [&'a Semaphore],
+    crate sig_sems: &'a [SemaphoreInner<'a>],
+    crate sig_values: &'a [u64],
     crate cmds: &'a [vk::CommandBuffer],
 }
 
@@ -120,19 +122,32 @@ impl Queue {
         fence: Option<&mut Fence>,
     ) {
         trace!(
-            "submitting commands: queue: {:?}, submissions: {:?}, fence: {:?}",
+            "Queue::submit(self: {:?}, submissions: {:?}, fence: {:?})",
             self, submissions, fence,
         );
 
         let _lock = self.mutex.lock();
 
-        let mut sems = Vec::with_capacity(submissions.len());
-        let submissions: Vec<_> = submissions.iter().map(|info| {
-            let wait_sems: Vec<_> = info.wait_sems.iter()
-                .map(|sem| sem.inner()).collect();
-            let sig_sems: Vec<_> = info.sig_sems.iter()
-                .map(|sem| sem.inner()).collect();
+        let mut timelines = Vec::with_capacity(submissions.len());
+        let mut infos = Vec::with_capacity(submissions.len());
+        for info in submissions.iter() {
+            // The lengths don't have to be equal but it doens't hurt to
+            // enforce that they are.
+            assert_eq!(info.wait_sems.len(), info.wait_values.len());
+            assert_eq!(info.sig_sems.len(), info.sig_values.len());
+            let wait_sems = SemaphoreInner::slice_as_raw(info.wait_sems);
+            let sig_sems = SemaphoreInner::slice_as_raw(info.sig_sems);
+            let timeline_info = vk::TimelineSemaphoreSubmitInfo {
+                wait_semaphore_value_count: info.wait_values.len() as _,
+                p_wait_semaphore_values: info.wait_values.as_ptr(),
+                signal_semaphore_value_count: info.sig_values.len() as _,
+                p_signal_semaphore_values: info.sig_values.as_ptr(),
+                ..Default::default()
+            };
+            timelines.push(timeline_info);
+
             let info = vk::SubmitInfo {
+                p_next: timelines.last().unwrap() as *const _ as _,
                 wait_semaphore_count: wait_sems.len() as _,
                 p_wait_semaphores: wait_sems.as_ptr(),
                 p_wait_dst_stage_mask: info.wait_stages.as_ptr(),
@@ -142,34 +157,33 @@ impl Queue {
                 p_signal_semaphores: sig_sems.as_ptr(),
                 ..Default::default()
             };
-            sems.push((wait_sems, sig_sems));
-            info
-        }).collect();
+            infos.push(info);
+        }
 
         self.device.table.queue_submit(
             self.inner,
-            submissions.len() as _,
-            submissions.as_ptr(),
+            infos.len() as _,
+            infos.as_ptr(),
             try_opt!(fence?.inner()).unwrap_or(vk::null()),
         ).check().unwrap();
     }
 
     crate unsafe fn present(
         &self,
-        wait_sems: &[&Semaphore],
+        wait_sems: &[&mut Semaphore],
         swapchain: &mut Swapchain,
         image: u32,
     ) -> vk::Result {
         trace!(
             concat!(
-                "presenting to queue: queue: {:?}, wait_sems: {:?}, ",
-                "swapchain: {:?}, image: {}",
+                "Queue::present(self: {:?}, wait_sems: {:?}, ",
+                "swapchain: {:?}, image: {})",
             ),
             self, wait_sems, swapchain, image,
         );
 
         let _lock = self.mutex.lock();
-        let wait_sems: Vec<_> = wait_sems.iter().map(|sem| sem.inner())
+        let wait_sems: Vec<_> = wait_sems.iter().map(|sem| sem.raw())
             .collect();
         let swapchains = [swapchain.inner];
         let images = [image];
