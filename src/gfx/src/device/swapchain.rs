@@ -84,6 +84,10 @@ impl Swapchain {
         Ok(result)
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     crate fn extent(&self) -> Extent2D {
         self.extent
     }

@@ -129,11 +129,11 @@ impl WorldRenderer {
         &mut self,
         state: Arc<Box<SystemState>>,
         world: RenderWorldData,
-        _frame_num: u64,
+        frame_num: u64,
         swapchain_image: u32,
+        acquire_sem: &mut BinarySemaphore,
         present_sem: &mut BinarySemaphore,
-        render_fence: &mut Fence,
-        render_sem: &mut BinarySemaphore,
+        render_sem: &mut TimelineSemaphore,
     ) {
         unsafe { self.scheduler.clear(); }
 
@@ -153,12 +153,12 @@ impl WorldRenderer {
 
         self.scheduler.schedule_pass(
             pass,
-            &[present_sem.inner()],
+            &[acquire_sem.inner()],
             &[0],
             &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT],
-            &[render_sem.inner()],
-            &[0],
-            Some(render_fence),
+            &[present_sem.inner(), render_sem.inner()],
+            &[0, frame_num],
+            None,
         );
 
         self.inst_renderer = Some(inst_return.take().unwrap());

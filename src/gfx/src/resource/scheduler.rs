@@ -176,7 +176,7 @@ mod tests {
                 });
             }
             pool = uploads.schedule(vars.gfx_queue(), pool);
-            uploads.wait_with_timeout(2_000_000);
+            let _ = uploads.wait_with_timeout(2_000_000);
         }
     }
 

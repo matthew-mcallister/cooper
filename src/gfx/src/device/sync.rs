@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
 crate enum WaitResult {
     Success,
     Timeout,
@@ -74,7 +75,7 @@ impl Fence {
     }
 
     crate fn wait(&self) {
-        self.wait_with_timeout(u64::max_value());
+        let _ = self.wait_with_timeout(u64::MAX);
     }
 
     crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
