@@ -18,7 +18,7 @@ crate struct Fence {
 }
 
 #[derive(Debug)]
-crate struct Semaphore {
+crate struct BinarySemaphore {
     device: Arc<Device>,
     inner: vk::Semaphore,
 }
@@ -35,7 +35,7 @@ crate struct TimelineSemaphore {
 #[repr(transparent)]
 crate struct SemaphoreInner<'sem> {
     raw: vk::Semaphore,
-    _ph: PhantomData<&'sem mut Semaphore>,
+    _ph: PhantomData<&'sem mut BinarySemaphore>,
 }
 
 impl Drop for Fence {
@@ -110,7 +110,7 @@ impl Fence {
     }
 }
 
-impl Drop for Semaphore {
+impl Drop for BinarySemaphore {
     fn drop(&mut self) {
         let dt = self.device.table();
         unsafe {
@@ -119,7 +119,7 @@ impl Drop for Semaphore {
     }
 }
 
-impl Semaphore {
+impl BinarySemaphore {
     crate fn new(device: Arc<Device>) -> Self {
         let dt = device.table();
         let create_info = vk::SemaphoreCreateInfo::default();

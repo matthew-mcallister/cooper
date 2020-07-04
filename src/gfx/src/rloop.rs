@@ -26,8 +26,8 @@ pub struct RenderLoop {
     // TODO: All this stuff belongs under render/
     frame_num: u64,
     frame_in_flight: u64,
-    swapchain_sem: Semaphore,
-    render_sem: Semaphore,
+    swapchain_sem: BinarySemaphore,
+    render_sem: BinarySemaphore,
     render_fence: Fence,
     // This is declared last so that it will be dropped last
     state: Option<Box<SystemState>>,
@@ -83,9 +83,9 @@ impl RenderLoop {
             scheduler,
         );
 
-        let swapchain_sem = Semaphore::new(Arc::clone(&device));
+        let swapchain_sem = BinarySemaphore::new(Arc::clone(&device));
         let render_fence = Fence::new(Arc::clone(&device), false);
-        let render_sem = Semaphore::new(Arc::clone(&device));
+        let render_sem = BinarySemaphore::new(Arc::clone(&device));
 
         Ok(Self {
             device,

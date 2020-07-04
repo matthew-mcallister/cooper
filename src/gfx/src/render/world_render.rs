@@ -131,9 +131,9 @@ impl WorldRenderer {
         world: RenderWorldData,
         _frame_num: u64,
         swapchain_image: u32,
-        present_sem: &mut Semaphore,
+        present_sem: &mut BinarySemaphore,
         render_fence: &mut Fence,
-        render_sem: &mut Semaphore,
+        render_sem: &mut BinarySemaphore,
     ) {
         unsafe { self.scheduler.clear(); }
 

@@ -203,7 +203,7 @@ impl Swapchain {
     /// Note: A suboptimal swapchain will just return an error with no
     /// swapchain index.
     // TODO: Use case for synchronizing with a fence?
-    crate fn acquire_next_image(&mut self, sem: &mut Semaphore) ->
+    crate fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) ->
         Result<u32, vk::Result>
     {
         self.acquire_next_image_with_timeout(sem, u64::max_value())
@@ -211,7 +211,7 @@ impl Swapchain {
 
     crate fn acquire_next_image_with_timeout(
         &mut self,
-        sem: &mut Semaphore,
+        sem: &mut BinarySemaphore,
         timeout: u64,
     ) -> Result<u32, vk::Result> {
         trace!("acquiring swapchain image");

@@ -170,7 +170,7 @@ impl Queue {
 
     crate unsafe fn present(
         &self,
-        wait_sems: &[&mut Semaphore],
+        wait_sems: &[&mut BinarySemaphore],
         swapchain: &mut Swapchain,
         image: u32,
     ) -> vk::Result {
