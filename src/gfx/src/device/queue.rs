@@ -128,8 +128,10 @@ impl Queue {
 
         let _lock = self.mutex.lock();
 
-        let mut timelines = Vec::with_capacity(submissions.len());
-        let mut infos = Vec::with_capacity(submissions.len());
+        let mut timelines: SmallVec<_, 8> =
+            SmallVec::with_capacity(submissions.len());
+        let mut infos: SmallVec<_, 8> =
+            SmallVec::with_capacity(submissions.len());
         for info in submissions.iter() {
             // The lengths don't have to be equal but it doens't hurt to
             // enforce that they are.
@@ -183,7 +185,7 @@ impl Queue {
         );
 
         let _lock = self.mutex.lock();
-        let wait_sems: Vec<_> = wait_sems.iter().map(|sem| sem.raw())
+        let wait_sems: SmallVec<_, 8> = wait_sems.iter().map(|sem| sem.raw())
             .collect();
         let swapchains = [swapchain.inner];
         let images = [image];

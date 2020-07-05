@@ -24,6 +24,7 @@ owning_ref = "0.4"
 parking_lot = { version = "0.9", features = ["owning_ref"] }
 num = { path = "../num", package = "cooper-num" }
 prelude = { path = "../prelude", package = "cooper-prelude" }
+smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
 spirv_headers = "1.4.2"
 spirv-reflect = "0.2.3"
 unit = { path = "../unit", package = "cooper-unit" }

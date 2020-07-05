@@ -1,3 +1,5 @@
+// TODO: Most/all items in this module should not be exported crate-wide
+
 #![allow(deprecated)]
 #![allow(unused_macros)]
 
@@ -11,6 +13,8 @@ use std::ptr;
 
 use enum_map::{Enum, EnumMap};
 use prelude::*;
+
+crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
 #[macro_export]
 macro_rules! try_opt {
