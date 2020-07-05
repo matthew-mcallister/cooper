@@ -12,12 +12,14 @@ mod macros;
 #[macro_use]
 pub mod bitfield;
 
+mod by_ptr;
 mod name;
 mod sentinel;
 pub mod node;
 pub mod pool;
 pub mod request;
 
+pub use by_ptr::*;
 pub use enum_vec::*;
 pub use name::*;
 pub use sentinel::*;

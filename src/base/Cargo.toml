@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 crossbeam-channel = "0.4.2"
-derive_more = "0.15"
+derive_more = "0.99.9"
 derivative = "2.1.1"
 enum-map = "0.6"
 fnv = "1.0"
