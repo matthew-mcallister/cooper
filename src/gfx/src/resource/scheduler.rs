@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use derive_more::From;
+use more_asserts::assert_lt;
 
 use crate::*;
 
 #[derive(Debug)]
 crate struct UploadScheduler {
     tasks: TaskProcessor,
-    // TODO: Replace with timeline semaphore
-    fence: Fence,
+    sem: TimelineSemaphore,
+    pending_batch: u64,
 }
 
 /// Schedules the execution of GPU transfer commands.
@@ -92,8 +93,9 @@ fn upload_image(staging: &mut UploadStage, task: &ImageUploadTask) ->
 impl UploadScheduler {
     crate fn new(device: Arc<Device>) -> Self {
         Self {
-            fence: Fence::new(Arc::clone(&device), true),
-            tasks: TaskProcessor::new(device),
+            tasks: TaskProcessor::new(Arc::clone(&device)),
+            sem: TimelineSemaphore::new(device, 0),
+            pending_batch: 0,
         }
     }
 
@@ -101,12 +103,23 @@ impl UploadScheduler {
         self.tasks.add_task(task);
     }
 
-    crate fn schedule(&mut self, queue: &Queue, pool: Box<CmdPool>) ->
-        Box<CmdPool>
-    {
-        if !self.fence.check_signaled() | self.tasks.is_empty() {
+    crate fn avail_batch(&self) -> u64 {
+        self.sem.get_value()
+    }
+
+    crate fn schedule(
+        &mut self,
+        frame_num: u64,
+        queue: &Queue,
+        pool: Box<CmdPool>,
+    ) -> Box<CmdPool> {
+        assert_lt!(self.pending_batch, frame_num);
+        if (self.avail_batch() < self.pending_batch) | self.tasks.is_empty() {
             return pool;
         }
+
+        // TODO: Maybe this should should just inc by 1 each time?
+        self.pending_batch = frame_num;
 
         let mut cmds = XferCmds::new(CmdBuffer::new_primary(pool));
         self.tasks.process_tasks(&mut cmds);
@@ -114,16 +127,17 @@ impl UploadScheduler {
 
         let submissions = [SubmitInfo {
             cmds: &[cmds],
+            sig_sems: &[self.sem.inner()],
+            sig_values: &[self.pending_batch],
             ..Default::default()
         }];
-        self.fence.reset();
-        unsafe { queue.submit(&submissions, Some(&mut self.fence)); }
+        unsafe { queue.submit(&submissions, None); }
 
         pool
     }
 
     crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
-        self.fence.wait_with_timeout(timeout)
+        self.sem.wait(self.pending_batch, timeout)
     }
 }
 
@@ -166,7 +180,7 @@ mod tests {
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
-        for _ in 0..2 {
+        for frame in 1..3 {
             for image in images.iter() {
                 uploads.add_task(ImageUploadTask {
                     src: Arc::clone(&data),
@@ -175,7 +189,7 @@ mod tests {
                     subresources: image.all_subresources(),
                 });
             }
-            pool = uploads.schedule(vars.gfx_queue(), pool);
+            pool = uploads.schedule(frame, vars.gfx_queue(), pool);
             let _ = uploads.wait_with_timeout(2_000_000);
         }
     }

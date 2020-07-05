@@ -24,12 +24,13 @@ impl Drop for FrameControl {
 
 impl FrameControl {
     crate fn new(swapchain: Swapchain) -> Self {
-        let device = swapchain.device();
-        let acquire_sem = BinarySemaphore::new(Arc::clone(&device));
-        let present_sem = BinarySemaphore::new(Arc::clone(&device));
-        let master_sem = TimelineSemaphore::new(Arc::clone(&device), 0);
+        let device = || Arc::clone(swapchain.device());
+        let frame_num = 1;
+        let acquire_sem = BinarySemaphore::new(device());
+        let present_sem = BinarySemaphore::new(device());
+        let master_sem = TimelineSemaphore::new(device(), frame_num);
         Self {
-            frame_num: 0,
+            frame_num: 1,
             swapchain,
             image_idx: 0,
             acquire_sem,
