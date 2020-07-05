@@ -14,7 +14,7 @@ crate struct UploadScheduler {
 /// Schedules the execution of GPU transfer commands.
 #[derive(Debug)]
 struct TaskProcessor {
-    staging: XferStage,
+    staging: UploadStage,
     tasks: Vec<UploadTask>,
 }
 
@@ -34,7 +34,7 @@ crate enum UploadTask {
 impl TaskProcessor {
     fn new(device: Arc<Device>) -> Self {
         let staging_buffer_size = 0x40_0000;
-        let staging = XferStage::new(device, staging_buffer_size);
+        let staging = UploadStage::new(device, staging_buffer_size);
         Self {
             staging,
             tasks: Vec::new(),
@@ -72,7 +72,7 @@ impl TaskProcessor {
 
 // TODO: If a large subresource can't be uploaded at once, then
 // upload just part of it.
-fn upload_image(staging: &mut XferStage, task: &ImageUploadTask) ->
+fn upload_image(staging: &mut UploadStage, task: &ImageUploadTask) ->
     Result<(), StagingOutOfMemory>
 {
     assert!(!task.image.flags().contains(ImageFlags::NO_SAMPLE));

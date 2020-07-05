@@ -1,10 +1,10 @@
 mod scheduler;
-mod xfer;
+mod staging;
 
 crate use scheduler::*;
-crate use xfer::*;
+crate use staging::*;
 
 unit::collect_tests![
     scheduler,
-    xfer,
+    staging,
 ];

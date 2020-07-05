@@ -15,7 +15,7 @@ impl std::error::Error for StagingOutOfMemory {}
 // TODO: Need a scheduler, preferably one that makes it easy to specify
 // complex transfer operations and makes efficient use of the buffer.
 #[derive(Debug)]
-crate struct XferStage {
+crate struct UploadStage {
     staging: StagingBuffer,
     pre_barriers: Vec<vk::ImageMemoryBarrier>,
     post_barriers: Vec<vk::ImageMemoryBarrier>,
@@ -31,9 +31,9 @@ struct ImageCopy {
     region: vk::BufferImageCopy,
 }
 
-impl XferStage {
+impl UploadStage {
     crate fn new(device: Arc<Device>, capacity: usize) -> Self {
-        XferStage {
+        UploadStage {
             staging: StagingBuffer::new(device, capacity),
             pre_barriers: Vec::new(),
             post_barriers: Vec::new(),
@@ -154,7 +154,7 @@ mod tests {
 
     unsafe fn staging_inner(
         heap: &DeviceHeap,
-        staging: &mut XferStage,
+        staging: &mut UploadStage,
         pool: Box<CmdPool>,
     ) -> (vk::CommandBuffer, Box<CmdPool>) {
         staging_inner_with_fail(heap, staging, pool, false)
@@ -162,7 +162,7 @@ mod tests {
 
     unsafe fn staging_inner_with_fail(
         heap: &DeviceHeap,
-        staging: &mut XferStage,
+        staging: &mut UploadStage,
         pool: Box<CmdPool>,
         should_fail: bool,
     ) -> (vk::CommandBuffer, Box<CmdPool>) {
@@ -206,7 +206,7 @@ mod tests {
 
     unsafe fn stage(vars: testing::TestVars) {
         let device = vars.device();
-        let mut staging = XferStage::new(Arc::clone(&device), 0x10_0000);
+        let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 
         let state = SystemState::new(Arc::clone(&device));
         let pool = Box::new(CmdPool::new(
@@ -223,7 +223,7 @@ mod tests {
 
     unsafe fn stage_validation_error(vars: testing::TestVars) {
         let device = vars.device();
-        let mut staging = XferStage::new(Arc::clone(&device), 0x10_0000);
+        let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 
         let state = SystemState::new(Arc::clone(&device));
         let pool = Box::new(CmdPool::new(
