@@ -162,6 +162,7 @@ fn validate_framebuffer_creation(
         assert_eq!(attch.extent(), extent);
 
         if let AttachmentImage::Image(view) = &attch {
+            assert!(view.image().alloc().is_some());
             assert_eq!(view.layers(), 1);
             assert_eq!(view.mip_levels(), 1);
         }
@@ -180,15 +181,15 @@ crate fn create_render_target(
     let mut flags = Default::default();
     if sampled { flags |= ImageFlags::NO_SAMPLE };
     if attch.format.is_depth_stencil() {
-        flags |= ImageFlags::DEPTH_STENCIL_ATTACHMENT
+        flags |= ImageFlags::DEPTH_STENCIL_ATTACHMENT;
     } else {
-        flags |= ImageFlags::COLOR_ATTACHMENT
+        flags |= ImageFlags::COLOR_ATTACHMENT;
     }
     if render_pass.is_input_attachment(index) {
-        flags |= ImageFlags::INPUT_ATTACHMENT
+        flags |= ImageFlags::INPUT_ATTACHMENT;
     }
     unsafe {
-        Arc::new(Image::new(
+        Arc::new(Image::new_bound(
             &state.heap,
             flags,
             ImageType::Dim2,
@@ -231,11 +232,11 @@ mod tests {
     use crate::*;
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    unsafe fn create(vars: testing::TestVars) {
         let _fb = create_test_framebuffer(&vars.swapchain);
     }
 
-    unit::declare_tests![smoke_test];
+    unit::declare_tests![create];
 }
 
 unit::collect_tests![tests];

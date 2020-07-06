@@ -55,8 +55,8 @@ impl Globals {
             256,
         ));
 
-        let empty_image_2d = Arc::new(Image::new(
-            &heap,
+        let empty_image_2d = Arc::new(Image::new_bound(
+            heap,
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,
@@ -65,8 +65,8 @@ impl Globals {
             1,
             1,
         )).create_full_view();
-        let empty_storage_image_2d = Arc::new(Image::new(
-            &heap,
+        let empty_storage_image_2d = Arc::new(Image::new_bound(
+            heap,
             ImageFlags::STORAGE,
             ImageType::Dim2,
             Format::RGBA8,

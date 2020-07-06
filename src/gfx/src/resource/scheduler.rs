@@ -99,6 +99,10 @@ impl UploadScheduler {
         }
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        self.sem.device()
+    }
+
     crate fn add_task(&mut self, task: impl Into<UploadTask>) {
         self.tasks.add_task(task);
     }
@@ -150,7 +154,7 @@ mod tests {
         Arc<Image>
     {
         let extent = Extent3D::new(width, height, 1);
-        Arc::new(Image::new(
+        Arc::new(Image::new_bound(
             &state.heap,
             Default::default(),
             ImageType::Dim2,

@@ -73,7 +73,7 @@ crate struct Image {
     mip_levels: u32,
     layers: u32,
     inner: vk::Image,
-    alloc: DeviceAlloc,
+    alloc: Option<DeviceAlloc>,
 }
 
 #[derive(Debug)]
@@ -97,7 +97,7 @@ impl Drop for Image {
 
 impl Image {
     crate unsafe fn new(
-        heap: &DeviceHeap,
+        device: Arc<Device>,
         flags: ImageFlags,
         ty: ImageType,
         format: Format,
@@ -106,11 +106,10 @@ impl Image {
         mip_levels: u32,
         layers: u32,
     ) -> Self {
-        let device: Arc<Device> = Arc::clone(heap.device());
         let dt = &*device.table;
 
-        validate_image_creation(&device, flags, ty, format, samples,
-            extent, mip_levels, layers);
+        validate_image_creation(&device, flags, ty, format, samples, extent,
+            mip_levels, layers);
 
         let create_info = vk::ImageCreateInfo {
             flags: ty.flags(),
@@ -128,8 +127,6 @@ impl Image {
         dt.create_image(&create_info, ptr::null(), &mut image)
             .check().unwrap();
 
-        // TODO: constructor should eventually be generic over allocator
-        let alloc = heap.alloc_image_memory(image, MemoryMapping::Unmapped);
         Image {
             device,
             flags,
@@ -140,50 +137,32 @@ impl Image {
             mip_levels,
             layers,
             inner: image,
-            alloc,
+            alloc: None,
         }
     }
 
-    crate fn all_subresources(&self) -> ImageSubresources {
-        ImageSubresources {
-            aspects: self.format.aspects(),
-            mip_levels: [0, self.mip_levels],
-            layers: [0, self.layers],
-        }
-    }
-
-    crate fn all_layers_for_mip_level(&self, mip_level: u32) ->
-        ImageSubresources
-    {
-        ImageSubresources {
-            aspects: self.format.aspects(),
-            mip_levels: [mip_level, mip_level + 1],
-            layers: [0, self.layers],
-        }
-    }
-
-    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
-        use ImageType::*;
-        use vk::ImageViewType as T;
-        let ty = match self.ty {
-            Dim1 if self.layers == 0 => T::_1D,
-            Dim1 => T::_1D_ARRAY,
-            Dim2 if self.layers == 0 => T::_2D,
-            Dim2 => T::_2D_ARRAY,
-            Dim3 => T::_3D,
-            Cube if self.layers == 0 => T::CUBE,
-            Cube => T::CUBE_ARRAY,
-        };
-        // This ought to be safe if it isn't
-        unsafe {
-            Arc::new(ImageView::new(
-                Arc::clone(self),
-                ty,
-                self.format,
-                Default::default(),
-                self.all_subresources(),
-            ))
-        }
+    crate unsafe fn new_bound(
+        heap: &DeviceHeap,
+        flags: ImageFlags,
+        ty: ImageType,
+        format: Format,
+        samples: SampleCount,
+        extent: Extent3D,
+        mip_levels: u32,
+        layers: u32,
+    ) -> Self {
+        let mut img = Self::new(
+            Arc::clone(heap.device()),
+            flags,
+            ty,
+            format,
+            samples,
+            extent,
+            mip_levels,
+            layers,
+        );
+        img.bind(heap);
+        img
     }
 
     crate fn inner(&self) -> vk::Image {
@@ -210,6 +189,10 @@ impl Image {
         self.layers
     }
 
+    crate fn alloc(&self) -> Option<&DeviceAlloc> {
+        self.alloc.as_ref()
+    }
+
     crate fn validate_subresources(&self, sub: &ImageSubresources) {
         assert!(sub.aspects.contains(sub.aspects));
         assert_le!(sub.mip_levels[1], self.mip_levels);
@@ -226,6 +209,55 @@ impl Image {
         let layers = sub.layer_count();
         texels * self.format.size() as vk::DeviceSize
             * layers as vk::DeviceSize
+    }
+
+    crate fn all_subresources(&self) -> ImageSubresources {
+        ImageSubresources {
+            aspects: self.format.aspects(),
+            mip_levels: [0, self.mip_levels],
+            layers: [0, self.layers],
+        }
+    }
+
+    crate fn all_layers_for_mip_level(&self, mip_level: u32) ->
+        ImageSubresources
+    {
+        ImageSubresources {
+            aspects: self.format.aspects(),
+            mip_levels: [mip_level, mip_level + 1],
+            layers: [0, self.layers],
+        }
+    }
+
+    crate fn bind(&mut self, heap: &DeviceHeap) {
+        unsafe {
+            let mapping = MemoryMapping::Unmapped;
+            self.alloc = Some(heap.alloc_image_memory(self.inner, mapping));
+        }
+    }
+
+    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
+        use ImageType::*;
+        use vk::ImageViewType as T;
+        let ty = match self.ty {
+            Dim1 if self.layers == 0 => T::_1D,
+            Dim1 => T::_1D_ARRAY,
+            Dim2 if self.layers == 0 => T::_2D,
+            Dim2 => T::_2D_ARRAY,
+            Dim3 => T::_3D,
+            Cube if self.layers == 0 => T::CUBE,
+            Cube => T::CUBE_ARRAY,
+        };
+        // This ought to be safe if it isn't
+        unsafe {
+            Arc::new(ImageView::new(
+                Arc::clone(self),
+                ty,
+                self.format,
+                Default::default(),
+                self.all_subresources(),
+            ))
+        }
     }
 }
 
@@ -505,14 +537,13 @@ mod tests {
     unsafe fn creation(vars: testing::TestVars) {
         use ImageFlags as Flags;
 
-        let device = Arc::clone(vars.device());
-        let state = SystemState::new(Arc::clone(&device));
+        let state = SystemState::new(Arc::clone(vars.device()));
         let heap = &state.heap;
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);
-        let hdr = Arc::new(Image::new(
-            &heap,
+        let hdr = Arc::new(Image::new_bound(
+            heap,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::Dim2,
             Format::RGBA16F,
@@ -522,8 +553,8 @@ mod tests {
             1,
         ));
         let _hdr_view = hdr.create_full_view();
-        let depth = Arc::new(Image::new(
-            &heap,
+        let depth = Arc::new(Image::new_bound(
+            heap,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
             ImageType::Dim2,
             Format::D32F_S8,
@@ -535,8 +566,8 @@ mod tests {
         let _depth_view = depth.create_full_view();
 
         // HDR cube texture
-        let env = Arc::new(Image::new(
-            &heap,
+        let env = Arc::new(Image::new_bound(
+            heap,
             Default::default(),
             ImageType::Cube,
             Format::RGBA16F,
@@ -551,13 +582,11 @@ mod tests {
     unsafe fn subresource_size(vars: testing::TestVars) {
         use ImageSubresources as Sub;
 
-        let device = Arc::clone(vars.device());
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = &state.heap;
+        let device = vars.device();
 
         let extent = Extent3D::new(128, 128, 1);
         let img = Arc::new(Image::new(
-            &heap,
+            Arc::clone(&device),
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,

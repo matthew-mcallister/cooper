@@ -62,6 +62,7 @@ struct HeapPoolInner {
     chunks: Vec<Arc<DeviceMemory>>,
 }
 
+// TODO: Rename this to ImageHeap, modify appropriately.
 #[derive(Debug)]
 crate struct DeviceHeap {
     device: Arc<Device>,
@@ -291,6 +292,9 @@ impl DeviceHeap {
     crate unsafe fn alloc_image_memory(
         &self,
         image: vk::Image,
+        // TODO: I think you would want to host map an image if and only if
+        // that image is linear. In which case you can't collocate it
+        // with nonlinear images anyways.
         mapping: MemoryMapping,
     ) -> DeviceAlloc {
         let (reqs, dedicated_reqs) =

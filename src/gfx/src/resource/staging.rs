@@ -12,8 +12,6 @@ crate struct StagingOutOfMemory;
 impl std::error::Error for StagingOutOfMemory {}
 
 /// Staging type for uploading images and buffers
-// TODO: Need a scheduler, preferably one that makes it easy to specify
-// complex transfer operations and makes efficient use of the buffer.
 #[derive(Debug)]
 crate struct UploadStage {
     staging: StagingBuffer,
@@ -170,8 +168,8 @@ mod tests {
             XferCmds::new(CmdBuffer::new(pool, CmdBufferLevel::Primary));
 
         let extent = Extent3D::new(128, 128, 1);
-        let img = Arc::new(Image::new(
-            &heap,
+        let img = Arc::new(Image::new_bound(
+            heap,
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,
@@ -184,7 +182,7 @@ mod tests {
         let subresource = ImageSubresources {
             aspects: img.format().aspects(),
             mip_levels: [0, extent.mip_levels()],
-            // Give the validation code a change to do its job
+            // Give the validation code a chance to do its job
             layers: if should_fail { [1, 7] } else { [0, 6] },
         };
         let buf = staging.stage_image(

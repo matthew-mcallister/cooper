@@ -176,8 +176,16 @@ impl TimelineSemaphore {
         }
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     fn dt(&self) -> &vkl::DeviceTable {
         self.device.table()
+    }
+
+    crate fn raw(&self) -> vk::Semaphore {
+        self.inner
     }
 
     crate unsafe fn signal(&self, value: u64) {
@@ -206,10 +214,6 @@ impl TimelineSemaphore {
                 .check().unwrap();
         }
         value
-    }
-
-    crate fn raw(&self) -> vk::Semaphore {
-        self.inner
     }
 
     crate fn inner(&mut self) -> SemaphoreInner<'_> {
