@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use enum_map::EnumMap;
 use parking_lot::Mutex;
 use prelude::*;
 
@@ -49,10 +48,9 @@ impl DeviceAlloc {
 }
 
 #[derive(Debug)]
-pub(super) struct HeapPool {
+struct HeapPool {
     device: Arc<Device>,
     type_index: u32,
-    tiling: Tiling,
     inner: Mutex<HeapPoolInner>,
 }
 
@@ -62,12 +60,11 @@ struct HeapPoolInner {
     chunks: Vec<Arc<DeviceMemory>>,
 }
 
-// TODO: Rename this to ImageHeap, modify appropriately.
 #[derive(Debug)]
-crate struct DeviceHeap {
+crate struct ImageHeap {
     device: Arc<Device>,
-    // One pool per memory type per tiling
-    pools: Vec<EnumMap<Tiling, Arc<HeapPool>>>,
+    // One pool per memory type
+    pools: Vec<Arc<HeapPool>>,
 }
 
 impl Drop for HeapPoolInner {
@@ -80,11 +77,10 @@ impl Drop for HeapPoolInner {
 }
 
 impl HeapPool {
-    fn new(device: Arc<Device>, type_index: u32, tiling: Tiling) -> Self {
+    fn new(device: Arc<Device>, type_index: u32) -> Self {
         HeapPool {
             device,
             type_index,
-            tiling,
             inner: Mutex::new(HeapPoolInner {
                 allocator: Default::default(),
                 chunks: Vec::new(),
@@ -133,7 +129,7 @@ impl HeapPool {
         min_size: vk::DeviceSize,
     ) {
         let chunk = inner.chunks.len() as u32;
-        // TODO: Possibly size should be a power-of-two of chunk size
+        // TODO: Possibly size should be a power of two times chunk size
         let size = align(self.chunk_size(), min_size);
         let mem = alloc_device_memory(&self.device, &vk::MemoryAllocateInfo {
             allocation_size: size,
@@ -146,7 +142,7 @@ impl HeapPool {
             size,
             type_index: self.type_index,
             ptr: 0 as _,
-            tiling: self.tiling,
+            tiling: Tiling::Nonlinear,
             lifetime: Lifetime::Static,
             dedicated_content: None,
             chunk,
@@ -200,15 +196,13 @@ impl HeapPool {
     }
 }
 
-impl DeviceHeap {
+impl ImageHeap {
     crate fn new(device: Arc<Device>) -> Self {
-        let pools: Vec<EnumMap<_, _>> = iter_memory_types(&device)
+        let pools: Vec<_> = iter_memory_types(&device)
             .enumerate()
-            .map(|(idx, _)| (|tiling| Arc::new(HeapPool::new(
-                Arc::clone(&device),
-                idx as _,
-                tiling,
-            ))).into())
+            .map(|(idx, _)| {
+                Arc::new(HeapPool::new(Arc::clone(&device), idx as _))
+            })
             .collect();
         Self {
             device,
@@ -228,15 +222,15 @@ impl DeviceHeap {
         &*self.device.table
     }
 
-    fn pool(&self, type_idx: u32, tiling: Tiling) -> &Arc<HeapPool> {
-        &self.pools[type_idx as usize][tiling]
+    fn pool(&self, type_idx: u32) -> &Arc<HeapPool> {
+        &self.pools[type_idx as usize]
     }
 
     // N.B. This races with other threads.
     crate fn heaps(&self) -> Vec<HeapInfo> {
         let heap_count = self.device.mem_props.memory_heap_count as usize;
         let mut heaps = vec![HeapInfo::default(); heap_count];
-        for pool in self.pools.iter().flat_map(|x| x.values()) {
+        for pool in self.pools.iter() {
             let heap = &mut heaps[pool.heap_index() as usize];
             let (used, reserved) = pool.usage();
             heap.used += used;
@@ -246,70 +240,31 @@ impl DeviceHeap {
     }
 
     /// Suballocates device memory.
-    crate unsafe fn alloc(
-        &self,
-        reqs: vk::MemoryRequirements,
-        tiling: Tiling,
-        mapping: MemoryMapping,
-    ) -> DeviceAlloc {
+    unsafe fn alloc(&self, reqs: vk::MemoryRequirements) -> DeviceAlloc {
         // TODO: fall back to incoherent memory on failure
         let type_idx = find_memory_type(
             &*self.device,
-            mapping.memory_property_flags(),
+            MemoryMapping::Unmapped.memory_property_flags(),
             reqs.memory_type_bits,
         ).unwrap();
-        self.pool(type_idx, tiling).alloc(reqs.size, reqs.alignment)
-    }
-
-    /// Binds a buffer to newly allocated memory.
-    crate unsafe fn alloc_buffer_memory(
-        &self,
-        buffer: vk::Buffer,
-        mapping: MemoryMapping,
-    ) -> DeviceAlloc {
-        let (reqs, dedicated_reqs) =
-            get_buffer_memory_reqs(&self.device, buffer);
-
-        let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE
-        {
-            DeviceAlloc::whole_range(Arc::new(alloc_resource_memory(
-                Arc::clone(&self.device),
-                mapping,
-                &reqs,
-                Some(DedicatedAllocContent::Buffer(buffer)),
-                Tiling::Linear,
-            )))
-        } else { self.alloc(reqs, Tiling::Linear, mapping) };
-
-        let memory = alloc.memory().inner();
-        let offset = alloc.offset();
-        self.dt().bind_buffer_memory(buffer, memory, offset).check().unwrap();
-
-        alloc
+        self.pool(type_idx).alloc(reqs.size, reqs.alignment)
     }
 
     /// Binds an image to newly allocated memory.
-    crate unsafe fn alloc_image_memory(
-        &self,
-        image: vk::Image,
-        // TODO: I think you would want to host map an image if and only if
-        // that image is linear. In which case you can't collocate it
-        // with nonlinear images anyways.
-        mapping: MemoryMapping,
-    ) -> DeviceAlloc {
-        let (reqs, dedicated_reqs) =
-            get_image_memory_reqs(&self.device, image);
+    crate unsafe fn bind(&self, image: vk::Image) -> DeviceAlloc {
+        let device = &self.device;
+        let (reqs, dedicated_reqs) = get_image_memory_reqs(device, image);
 
         let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE
         {
             DeviceAlloc::whole_range(Arc::new(alloc_resource_memory(
-                Arc::clone(&self.device),
-                mapping,
+                Arc::clone(&device),
+                MemoryMapping::Unmapped,
                 &reqs,
                 Some(DedicatedAllocContent::Image(image)),
                 Tiling::Nonlinear,
             )))
-        } else { self.alloc(reqs, Tiling::Nonlinear, mapping) };
+        } else { self.alloc(reqs) };
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
@@ -325,24 +280,21 @@ mod tests {
     use vk::traits::*;
     use crate::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
-        use Tiling::*;
-        use MemoryMapping::*;
-
+    unsafe fn alloc(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
-        let heap = DeviceHeap::new(Arc::clone(&device));
+        let heap = ImageHeap::new(Arc::clone(&device));
 
         let reqs = vk::MemoryRequirements {
             size: 4096,
             alignment: 256,
             memory_type_bits: !0,
         };
-        let _alloc0 = heap.alloc(reqs, Linear, Mapped);
-        let _alloc1 = heap.alloc(reqs, Nonlinear, Unmapped);
+        let _alloc0 = heap.alloc(reqs);
+        let _alloc1 = heap.alloc(reqs);
         assert_ne!(_alloc0.as_raw(), 0 as _);
     }
 
-    unit::declare_tests![smoke_test];
+    unit::declare_tests![alloc];
 }
 
 unit::collect_tests![tests];

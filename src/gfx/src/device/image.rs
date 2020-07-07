@@ -142,7 +142,7 @@ impl Image {
     }
 
     crate unsafe fn new_bound(
-        heap: &DeviceHeap,
+        heap: &ImageHeap,
         flags: ImageFlags,
         ty: ImageType,
         format: Format,
@@ -229,11 +229,8 @@ impl Image {
         }
     }
 
-    crate fn bind(&mut self, heap: &DeviceHeap) {
-        unsafe {
-            let mapping = MemoryMapping::Unmapped;
-            self.alloc = Some(heap.alloc_image_memory(self.inner, mapping));
-        }
+    crate fn bind(&mut self, heap: &ImageHeap) {
+        unsafe { self.alloc = Some(heap.bind(self.inner)); }
     }
 
     crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {

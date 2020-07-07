@@ -11,12 +11,12 @@ use crate::*;
 
 mod alloc;
 mod buffer;
-mod heap;
+mod image;
 mod staging;
 
 pub(self) use alloc::*;
 crate use buffer::*;
-crate use heap::*;
+crate use image::*;
 crate use staging::*;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -49,8 +49,9 @@ crate enum Tiling {
 }
 
 repr_bool! {
+    // TODO: Rename to MemoryKind? MemoryFlags?
     crate enum MemoryMapping {
-        Unmapped = false,
+        Unmapped = false,   // TODO: Rename to DeviceLocal
         Mapped = true,
     }
 }
@@ -402,4 +403,4 @@ impl DedicatedAllocContent {
     }
 }
 
-unit::collect_tests![alloc, buffer, heap, staging];
+unit::collect_tests![alloc, buffer, image, staging];

@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     unsafe fn staging_inner(
-        heap: &DeviceHeap,
+        heap: &ImageHeap,
         staging: &mut UploadStage,
         pool: Box<CmdPool>,
     ) -> (vk::CommandBuffer, Box<CmdPool>) {
@@ -159,7 +159,7 @@ mod tests {
     }
 
     unsafe fn staging_inner_with_fail(
-        heap: &DeviceHeap,
+        heap: &ImageHeap,
         staging: &mut UploadStage,
         pool: Box<CmdPool>,
         should_fail: bool,

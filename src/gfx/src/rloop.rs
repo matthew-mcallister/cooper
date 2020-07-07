@@ -102,7 +102,7 @@ impl RenderLoop {
 #[derive(Debug)]
 crate struct SystemState {
     crate device: Arc<Device>,
-    crate heap: DeviceHeap,
+    crate heap: ImageHeap,
     crate buffers: Arc<BufferHeap>,
     crate descriptors: Arc<DescriptorHeap>,
     crate pipelines: PipelineCache,
@@ -113,7 +113,7 @@ crate struct SystemState {
 impl SystemState {
     crate fn new(device: Arc<Device>) -> Self {
         let dev = || Arc::clone(&device);
-        let heap = DeviceHeap::new(dev());
+        let heap = ImageHeap::new(dev());
         let buffers = BufferHeap::new(dev());
         let descriptors = Arc::new(DescriptorHeap::new(&device));
         let pipelines = PipelineCache::new(&device);
