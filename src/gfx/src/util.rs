@@ -22,44 +22,6 @@ macro_rules! try_opt {
 }
 
 #[macro_export]
-macro_rules! repr_bool {
-    (
-        $(#[$($meta:meta)*])*
-        $vis:vis enum $name:ident {
-            $(#[$($meta_f:meta)*])*
-            $falsey:ident = false,
-            $(#[$($meta_t:meta)*])*
-            $truthy:ident = true$(,)?
-        }
-    ) => {
-        $(#[$($meta)*])*
-        #[derive(
-            Clone, Copy, Debug, enum_map::Enum, Eq, Hash, Ord, PartialEq,
-            PartialOrd,
-        )]
-        #[repr(u8)]
-        $vis enum $name {
-            $(#[$($meta_f)*])*
-            $falsey = 0,
-            $(#[$($meta_t)*])*
-            $truthy = 1,
-        }
-
-        impl From<bool> for $name {
-            fn from(b: bool) -> Self {
-                unsafe { std::mem::transmute(b) }
-            }
-        }
-
-        impl From<$name> for bool {
-            fn from(x: $name) -> Self {
-                unsafe { std::mem::transmute(x) }
-            }
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! bit {
     ($bit:expr) => {
         (1 << $bit)

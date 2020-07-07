@@ -48,12 +48,10 @@ crate enum Tiling {
     Nonlinear,
 }
 
-repr_bool! {
-    // TODO: Rename to MemoryKind? MemoryFlags?
-    crate enum MemoryMapping {
-        Unmapped = false,   // TODO: Rename to DeviceLocal
-        Mapped = true,
-    }
+#[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
+crate enum MemoryMapping {
+    DeviceLocal,
+    Mapped,
 }
 
 /// Tells how long memory or other resources live for.
@@ -335,10 +333,6 @@ impl DeviceMemory {
         !self.ptr.is_null()
     }
 
-    crate fn mapping(&self) -> MemoryMapping {
-        self.mapped().into()
-    }
-
     crate fn lifetime(&self) -> Lifetime {
         self.lifetime
     }
@@ -385,12 +379,8 @@ impl MemoryMapping {
     crate fn memory_property_flags(self) -> vk::MemoryPropertyFlags {
         match self {
             Self::Mapped => visible_coherent_flags(),
-            Self::Unmapped => vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
+            Self::DeviceLocal => vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,
         }
-    }
-
-    crate fn mapped(self) -> bool {
-        self.into()
     }
 }
 

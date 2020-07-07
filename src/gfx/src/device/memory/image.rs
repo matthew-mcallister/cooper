@@ -244,7 +244,7 @@ impl ImageHeap {
         // TODO: fall back to incoherent memory on failure
         let type_idx = find_memory_type(
             &*self.device,
-            MemoryMapping::Unmapped.memory_property_flags(),
+            MemoryMapping::DeviceLocal.memory_property_flags(),
             reqs.memory_type_bits,
         ).unwrap();
         self.pool(type_idx).alloc(reqs.size, reqs.alignment)
@@ -259,7 +259,7 @@ impl ImageHeap {
         {
             DeviceAlloc::whole_range(Arc::new(alloc_resource_memory(
                 Arc::clone(&device),
-                MemoryMapping::Unmapped,
+                MemoryMapping::DeviceLocal,
                 &reqs,
                 Some(DedicatedAllocContent::Image(image)),
                 Tiling::Nonlinear,

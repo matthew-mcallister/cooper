@@ -937,7 +937,7 @@ mod tests {
         let dst = state.buffers.alloc(
             BufferBinding::Vertex,
             Lifetime::Frame,
-            MemoryMapping::Unmapped,
+            MemoryMapping::DeviceLocal,
             1024,
         );
         cmds.copy_buffer(src.buffer(), dst.buffer(), &[

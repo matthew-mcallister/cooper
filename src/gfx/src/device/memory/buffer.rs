@@ -139,10 +139,6 @@ impl DeviceBuffer {
         self.memory.lifetime()
     }
 
-    crate fn mapping(&self) -> MemoryMapping {
-        self.memory.mapping()
-    }
-
     crate fn mapped(&self) -> bool {
         self.memory.mapped()
     }
@@ -337,9 +333,10 @@ crate struct BufferHeapInner {
 #[derive(Debug)]
 struct BufferHeapEntry<A: Allocator> {
     binding: BufferBinding,
-    // Memory mapped pool and the only pool on UMA.
+    // Memory mapped pool. The only pool on UMA.
     mapped_pool: BufferPool<A>,
-    // Unmapped, non-host-visible pool on discrete systems.
+    // Unmapped, device-local, non-host-visible pool. Only present on
+    // discrete systems.
     unmapped_pool: Option<BufferPool<A>>,
 }
 
@@ -490,7 +487,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
                 Arc::clone(&device),
                 binding,
                 lifetime,
-                MemoryMapping::Unmapped,
+                MemoryMapping::DeviceLocal,
             ));
 
         BufferHeapEntry {
@@ -500,10 +497,9 @@ impl<A: Allocator> BufferHeapEntry<A> {
         }
     }
 
-    fn pool_mut(&mut self, mapping: MemoryMapping) -> &mut BufferPool<A> {
-        // FTR the outer branch should always be predicted correctly
+    fn pick_pool(&mut self, mapping: MemoryMapping) -> &mut BufferPool<A> {
         if let Some(ref mut pool) = self.unmapped_pool {
-            if mapping == MemoryMapping::Unmapped {
+            if mapping == MemoryMapping::DeviceLocal {
                 return pool;
             }
         }
@@ -513,12 +509,19 @@ impl<A: Allocator> BufferHeapEntry<A> {
     fn alloc(&mut self, mapping: MemoryMapping, size: vk::DeviceSize) ->
         BufferAlloc
     {
-        self.pool_mut(mapping).alloc(size)
+        self.pick_pool(mapping).alloc(size)
+    }
+
+    fn get_pool(&mut self, mapped: bool) -> &mut BufferPool<A> {
+        if mapped {
+            &mut self.mapped_pool
+        } else {
+            self.unmapped_pool.as_mut().unwrap()
+        }
     }
 
     fn free(&mut self, alloc: &BufferAlloc) {
-        let pool = self.pool_mut(alloc.buffer.mapping());
-        pool.free(alloc);
+        self.get_pool(alloc.buffer().mapped()).free(alloc);
     }
 
     unsafe fn clear(&mut self) {
@@ -717,7 +720,7 @@ mod tests {
         let x = heap.boxed(Uniform, Static, [0.0f32, 0.5, 0.5, 1.0]);
         assert_eq!(x[1], 0.5);
 
-        heap.alloc(Uniform, Frame, Unmapped, 256);
+        heap.alloc(Uniform, Frame, DeviceLocal, 256);
         heap.clear_frame();
         // TODO: Query used memory
     }
