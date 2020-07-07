@@ -22,9 +22,6 @@ crate struct UploadStage {
 
 #[derive(Debug)]
 struct ImageCopy {
-    // TODO: Shouldn't use a reference count here.
-    // Ed: The solution to this is garbage collection. Then you can just
-    // mark an image as "live" and be done with it.
     image: Arc<Image>,
     region: vk::BufferImageCopy,
 }
@@ -68,7 +65,6 @@ impl UploadStage {
         for mip_level in subresources.mip_level_range() {
             let mip_extent = extent.mip_level(mip_level);
             self.image_copies.push(ImageCopy {
-                // TODO: This clone is yucky.
                 image: Arc::clone(image),
                 region: vk::BufferImageCopy {
                     buffer_offset: alloc.offset,

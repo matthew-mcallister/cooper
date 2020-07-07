@@ -189,6 +189,10 @@ impl Image {
         self.layers
     }
 
+    crate fn mip_levels(&self) -> u32 {
+        self.mip_levels
+    }
+
     crate fn alloc(&self) -> Option<&DeviceAlloc> {
         self.alloc.as_ref()
     }
@@ -229,6 +233,8 @@ impl Image {
         }
     }
 
+    // TODO; This name is confusing because `image.bind(heap)` is
+    // slightly different from `heap.bind(image)`.
     crate fn bind(&mut self, heap: &ImageHeap) {
         unsafe { self.alloc = Some(heap.bind(self.inner)); }
     }
