@@ -3,7 +3,11 @@ use std::sync::Arc;
 use derive_more::From;
 use more_asserts::assert_lt;
 
-use crate::*;
+use crate::{
+    CmdBuffer, CmdPool, Device, Image, ImageFlags, ImageSubresources, Queue,
+    SubmitInfo, TimelineSemaphore, WaitResult, XferCmds,
+};
+use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 
 #[derive(Debug)]
 crate struct UploadScheduler {
