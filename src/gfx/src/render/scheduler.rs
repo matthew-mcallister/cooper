@@ -8,7 +8,7 @@ use crate::*;
 crate type SubpassTask = Box<dyn FnOnce(&mut SubpassCmds) + Send>;
 
 #[derive(Debug)]
-crate struct Scheduler {
+crate struct RenderScheduler {
     pool: Option<Box<CmdPool>>,
     // List of buffers to free each frame.
     buffers: Vec<vk::CommandBuffer>,
@@ -60,7 +60,7 @@ impl RenderPassNode {
     }
 }
 
-impl Scheduler {
+impl RenderScheduler {
     crate fn new(gfx_queue: Arc<Queue>) -> Self {
         assert!(gfx_queue.family().supports_graphics());
         let flags = vk::CommandPoolCreateFlags::TRANSIENT_BIT;
@@ -163,7 +163,7 @@ mod tests {
         let state_ = Arc::clone(&state);
         pass.add_task(0, Box::new(move |cmds| trivial.render(&state_, cmds)));
 
-        let mut scheduler = Scheduler::new(Arc::clone(&vars.gfx_queue));
+        let mut scheduler = RenderScheduler::new(Arc::clone(&vars.gfx_queue));
         scheduler.schedule_pass(pass, &[], &[], &[], &[], &[], None);
 
         device.wait_idle();

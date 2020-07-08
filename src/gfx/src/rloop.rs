@@ -4,8 +4,7 @@ use prelude::*;
 
 use crate::{
     AppInfo, Device, FrameControl, Globals, Material, MaterialImageMap,
-    MaterialProgram, Queue, Scheduler, RenderWorldData, SystemState,
-    WorldRenderer,
+    MaterialProgram, Queue, RenderWorldData, SystemState, WorldRenderer,
 };
 use crate::init_swapchain;
 
@@ -38,12 +37,11 @@ impl RenderLoop {
         let state = Box::new(SystemState::new(Arc::clone(&device)));
         let globals = Arc::new(Globals::new(&state));
 
-        let scheduler = Scheduler::new(Arc::clone(&gfx_queue));
         let renderer = WorldRenderer::new(
             &state,
             Arc::clone(&globals),
             &swapchain,
-            scheduler,
+            Arc::clone(&gfx_queue),
         );
 
         let frame = FrameControl::new(swapchain);

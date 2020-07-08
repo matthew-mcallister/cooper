@@ -85,7 +85,7 @@ unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
 #[derive(Debug)]
 crate struct WorldRenderer {
     globals: Arc<Globals>,
-    scheduler: Scheduler,
+    scheduler: RenderScheduler,
     basic_pass: BasicPass,
     framebuffers: Vec<Arc<Framebuffer>>,
     clear_values: [vk::ClearValue; 2],
@@ -98,8 +98,9 @@ impl WorldRenderer {
         state: &SystemState,
         globals: Arc<Globals>,
         swapchain: &Swapchain,
-        scheduler: Scheduler,
+        gfx_queue: Arc<Queue>,
     ) -> Self {
+        let scheduler = RenderScheduler::new(gfx_queue);
         let basic_pass = BasicPass::new(Arc::clone(&state.device));
         let framebuffers = basic_pass.create_framebuffers(state, &swapchain);
         let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
@@ -117,7 +118,7 @@ impl WorldRenderer {
     }
 
     /// Used when recreating the swapchain
-    crate fn into_inner(self) -> Scheduler {
+    crate fn into_inner(self) -> RenderScheduler {
         self.scheduler
     }
 
