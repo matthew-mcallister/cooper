@@ -1,7 +1,10 @@
-#![feature(crate_visibility_modifier)]
-#![feature(trait_alias)]
-#![feature(try_blocks)]
-#![feature(untagged_unions)]
+#![feature(
+    crate_visibility_modifier,
+    hash_raw_entry,
+    trait_alias,
+    try_blocks,
+    untagged_unions,
+)]
 
 #[macro_use]
 mod enum_vec;

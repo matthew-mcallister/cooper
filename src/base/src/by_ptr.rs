@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
+use std::collections::hash_map::{HashMap, RawEntryMut};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 
 use derive_more::{AsRef, AsMut, Constructor, Deref, DerefMut, From};
@@ -81,6 +82,40 @@ impl<P: Deref> ByPtr<P> {
     pub fn as_ptr(this: &Self) -> *const P::Target {
         this.deref() as *const _
     }
+
+    /// Sadly we cannot *quite* use Borrow to look up a HashMap entry by
+    /// raw pointer, but we can circumvent this using the raw entry API.
+    pub fn hash_by_ptr<V, S: BuildHasher>(
+        ptr: *const P::Target,
+        map: &HashMap<ByPtr<P>, V, S>,
+    ) -> Option<(&P, &V)> {
+        let mut hasher = map.hasher().build_hasher();
+        ptr.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let eq = |key: &ByPtr<_>| ByPtr::as_ptr(key) == ptr;
+        let (key, val) = map.raw_entry().from_hash(hash, eq)?;
+        Some((ByPtr::by_value(key), val))
+    }
+
+    pub fn hash_by_ptr_mut<V, S: BuildHasher>(
+        ptr: *const P::Target,
+        map: &mut HashMap<ByPtr<P>, V, S>,
+    ) -> Option<(&P, &mut V)> {
+        let mut hasher = map.hasher().build_hasher();
+        ptr.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let eq = |key: &ByPtr<_>| ByPtr::as_ptr(key) == ptr;
+        let entry = map.raw_entry_mut().from_hash(hash, eq);
+        match entry {
+            RawEntryMut::Occupied(entry) => {
+                let (key, val) = entry.into_key_value();
+                Some((ByPtr::by_value(key), val))
+            },
+            _ => None,
+        }
+    }
 }
 
 impl<P: DerefMut> ByPtr<P> {
@@ -152,4 +187,23 @@ fn ops() {
     assert!(set.contains(&p));
     assert!(set.contains(&q));
     assert!(set.contains(&r));
+}
+
+#[test]
+fn hash_by_ptr() {
+    use std::sync::Arc;
+
+    let x = Arc::new(1i32);
+    let ptr = &*x as *const i32;
+
+    let mut map: HashMap<ByPtr<Arc<i32>>, i32> = HashMap::new();
+    map.insert(Arc::clone(&x).into(), 42i32);
+
+    let (key, val) = ByPtr::hash_by_ptr(ptr, &map).unwrap();
+    assert!(Arc::ptr_eq(key, &x));
+    assert_eq!(*val, 42i32);
+
+    let (_, val) = ByPtr::hash_by_ptr_mut(ptr, &mut map).unwrap();
+    *val = 43i32;
+    assert_eq!(map[ByPtr::by_ptr(&x)], 43i32);
 }
