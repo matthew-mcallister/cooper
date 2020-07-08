@@ -4,13 +4,14 @@ use derive_more::From;
 use more_asserts::assert_lt;
 
 use crate::{
-    CmdBuffer, CmdPool, Device, Image, ImageFlags, ImageSubresources, Queue,
-    SubmitInfo, TimelineSemaphore, WaitResult, XferCmds,
+    CmdBuffer, CmdPool, Device, Image, ImageFlags, ImageHeap,
+    ImageSubresources, Queue, SubmitInfo, TimelineSemaphore, WaitResult,
+    XferCmds,
 };
 use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 
 #[derive(Debug)]
-crate struct UploadScheduler {
+pub(super) struct UploadScheduler {
     tasks: TaskProcessor,
     sem: TimelineSemaphore,
     pending_batch: u64,
@@ -56,7 +57,9 @@ impl TaskProcessor {
 
     fn process_tasks(
         &mut self,
+        batch_num: u64,
         resources: &mut ResourceStateTable,
+        heap: &ImageHeap,
         cmds: &mut XferCmds,
     ) {
         assert!(!self.tasks.is_empty());
@@ -65,11 +68,11 @@ impl TaskProcessor {
         // NB: Staging uploads is basically a bin-packing problem, but
         // we just use the most basic greedy algorithm possible.
         for i in (0..self.tasks.len()).rev() {
-            let res = process_task(
-                &mut self.staging,
-                resources,
-                &self.tasks[i],
-            );
+            let res = match &self.tasks[i] {
+                UploadTask::Image(task) => upload_image(
+                    batch_num, &mut self.staging, resources, heap, &task,
+                ),
+            };
             if res.is_ok() {
                 self.tasks.remove(i);
             }
@@ -79,25 +82,17 @@ impl TaskProcessor {
     }
 }
 
-fn process_task(
-    staging: &mut UploadStage,
-    resources: &mut ResourceStateTable,
-    task: &UploadTask,
-) -> Result<(), StagingOutOfMemory> {
-    match task {
-        UploadTask::Image(task) => {
-            resources.touch(&task.image);
-            upload_image(staging, &task)
-        },
-    }
-}
-
 // TODO: If a large subresource can't be uploaded at once, then
 // upload just part of it.
-fn upload_image(staging: &mut UploadStage, task: &ImageUploadTask) ->
-    Result<(), StagingOutOfMemory>
-{
+fn upload_image(
+    batch_num: u64,
+    staging: &mut UploadStage,
+    resources: &mut ResourceStateTable,
+    heap: &ImageHeap,
+    task: &ImageUploadTask,
+) -> Result<(), StagingOutOfMemory> {
     assert!(!task.image.flags().contains(ImageFlags::NO_SAMPLE));
+    resources.prepare_for_upload(&task.image, batch_num, &heap);
     let buf = staging.stage_image(
         &task.image,
         true,
@@ -137,6 +132,7 @@ impl UploadScheduler {
         frame_num: u64,
         queue: &Queue,
         resources: &mut ResourceStateTable,
+        heap: &ImageHeap,
         pool: Box<CmdPool>,
     ) -> Box<CmdPool> {
         assert_lt!(self.pending_batch, frame_num);
@@ -148,7 +144,12 @@ impl UploadScheduler {
         self.pending_batch = frame_num;
 
         let mut cmds = XferCmds::new(CmdBuffer::new_primary(pool));
-        self.tasks.process_tasks(resources, &mut cmds);
+        self.tasks.process_tasks(
+            self.pending_batch,
+            resources,
+            heap,
+            &mut cmds,
+        );
         let (cmds, pool) = cmds.end();
 
         let submissions = [SubmitInfo {

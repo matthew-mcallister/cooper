@@ -40,28 +40,24 @@ impl ResourceStateTable {
 
     crate fn register(&mut self, image: Arc<Image>) {
         assert!(image.alloc().is_none());
-        self.images.insert(image.into(), ResourceInfo {
+        self.images.entry(image.into()).or_insert(ResourceInfo {
             alloc: None,
             batch: 0,
         });
     }
 
-    crate unsafe fn alloc(
+    crate fn prepare_for_upload(
         &mut self,
         image: &Arc<Image>,
         batch: u64,
         heap: &ImageHeap,
     ) {
-        let state = self.images.get_mut(ByPtr::by_ptr(image)).unwrap();
+        let info = self.images.get_mut(ByPtr::by_ptr(image)).unwrap();
 
-        state.batch = batch;
+        info.batch = batch;
 
-        let alloc = heap.bind(image.inner());
-        state.alloc = Some(alloc);
-    }
-
-    crate fn touch(&mut self, image: &Arc<Image>) {
-        let image = &self.images[ByPtr::by_ptr(image)];
-        assert!(image.alloc.is_some());
+        if info.alloc.is_none() {
+            info.alloc = unsafe { Some(heap.bind(image.inner())) };
+        }
     }
 }

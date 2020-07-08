@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use prelude::*;
 
-use crate::{
-    AppInfo, Device, FrameControl, Globals, Material, MaterialImageMap,
-    MaterialProgram, Queue, RenderWorldData, SystemState, WorldRenderer,
-};
+use crate::*;
 use crate::init_swapchain;
 
 #[derive(Debug)]

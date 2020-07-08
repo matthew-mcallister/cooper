@@ -21,18 +21,18 @@ impl ResourceManager {
         self.sched.device()
     }
 
+    crate fn register_image(&mut self, image: Arc<Image>) {
+        self.state.register(image);
+    }
+
     crate fn load_image(
         &mut self,
-        heap: &ImageHeap,
         image: &Arc<Image>,
         src: Arc<Vec<u8>>,
         src_offset: usize,
     ) {
         // Mipmap generation not available yet
         assert_eq!(image.mip_levels(), 1);
-
-        self.state.register(Arc::clone(image));
-        unsafe { self.state.alloc(image, 0, &heap); }
         self.sched.add_task(ImageUploadTask {
             src,
             src_offset,
@@ -45,9 +45,10 @@ impl ResourceManager {
         &mut self,
         frame_num: u64,
         queue: &Queue,
+        heap: &ImageHeap,
         pool: Box<CmdPool>,
     ) -> Box<CmdPool> {
-        self.sched.schedule(frame_num, queue, &mut self.state, pool)
+        self.sched.schedule(frame_num, queue, &mut self.state, heap, pool)
     }
 
     crate fn wait(&self, timeout: u64) -> WaitResult {
@@ -98,13 +99,10 @@ mod tests {
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
         for frame in 1..images.len() + 1 {
-            resources.load_image(
-                &state.heap,
-                &images[frame % images.len()],
-                Arc::clone(&data),
-                0x1000,
-            );
-            pool = resources.schedule(frame as _, queue, pool);
+            let image = &images[frame % images.len()];
+            resources.register_image(Arc::clone(image));
+            resources.load_image(image, Arc::clone(&data), 0x1000);
+            pool = resources.schedule(frame as _, queue, &state.heap, pool);
             let _ = resources.wait(2_000_000);
         }
     }
