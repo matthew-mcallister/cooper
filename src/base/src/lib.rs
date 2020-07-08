@@ -17,6 +17,7 @@ pub mod bitfield;
 
 mod by_ptr;
 mod name;
+mod partial_enum_map;
 mod sentinel;
 pub mod node;
 pub mod pool;
@@ -25,4 +26,5 @@ pub mod request;
 pub use by_ptr::*;
 pub use enum_vec::*;
 pub use name::*;
+pub use partial_enum_map::*;
 pub use sentinel::*;
