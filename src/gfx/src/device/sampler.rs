@@ -7,7 +7,7 @@ use derivative::*;
 use crate::*;
 
 #[derive(Debug)]
-crate struct Sampler {
+pub struct Sampler {
     device: Arc<Device>,
     desc: SamplerDesc,
     inner: vk::Sampler,
@@ -15,20 +15,20 @@ crate struct Sampler {
 
 #[derive(Clone, Copy, Debug, Default, Derivative)]
 #[derivative(Hash, PartialEq)]
-crate struct SamplerDesc {
-    crate mag_filter: Filter,
-    crate min_filter: Filter,
-    crate mipmap_mode: SamplerMipmapMode,
-    crate address_mode_u: SamplerAddressMode,
-    crate address_mode_v: SamplerAddressMode,
-    crate address_mode_w: SamplerAddressMode,
-    crate anisotropy_level: AnisotropyLevel,
+pub struct SamplerDesc {
+    pub mag_filter: Filter,
+    pub min_filter: Filter,
+    pub mipmap_mode: SamplerMipmapMode,
+    pub address_mode_u: SamplerAddressMode,
+    pub address_mode_v: SamplerAddressMode,
+    pub address_mode_w: SamplerAddressMode,
+    pub anisotropy_level: AnisotropyLevel,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
     // TODO: Ideally replace with non-floating-point value
-    crate mip_lod_bias: f32,
-    crate border_color: BorderColor,
-    crate unnormalized_coordinates: bool,
+    pub mip_lod_bias: f32,
+    pub border_color: BorderColor,
+    pub unnormalized_coordinates: bool,
 }
 
 impl Eq for SamplerDesc {}
@@ -36,7 +36,7 @@ impl Eq for SamplerDesc {}
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum Filter {
+    pub enum Filter {
         #[derivative(Default)]
         Nearest = NEAREST,
         Linear = LINEAR,
@@ -46,7 +46,7 @@ wrap_vk_enum! {
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum SamplerMipmapMode {
+    pub enum SamplerMipmapMode {
         #[derivative(Default)]
         Nearest = NEAREST,
         Linear = LINEAR,
@@ -56,7 +56,7 @@ wrap_vk_enum! {
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum SamplerAddressMode {
+    pub enum SamplerAddressMode {
         #[derivative(Default)]
         Repeat = REPEAT,
         MirroredRepeat = MIRRORED_REPEAT,
@@ -68,7 +68,7 @@ wrap_vk_enum! {
 
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
 #[derivative(Default)]
-crate enum AnisotropyLevel {
+pub enum AnisotropyLevel {
     #[derivative(Default)]
     One,
     Two,
@@ -80,7 +80,7 @@ crate enum AnisotropyLevel {
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum BorderColor {
+    pub enum BorderColor {
         #[derivative(Default)]
         TransparentBlack = FLOAT_TRANSPARENT_BLACK,
         OpaqueBlack = FLOAT_OPAQUE_BLACK,
@@ -141,7 +141,7 @@ impl Sampler {
         self.inner
     }
 
-    crate fn desc(&self) -> &SamplerDesc {
+    pub fn desc(&self) -> &SamplerDesc {
         &self.desc
     }
 }

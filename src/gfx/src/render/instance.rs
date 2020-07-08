@@ -91,7 +91,7 @@ unsafe fn render_instances(
             xform: mv.transpose(),
         });
 
-        desc.stages = material.select_shaders(false);
+        desc.stages = material.select_shaders();
 
         let set_layouts = &mut desc.layout.set_layouts;
         *set_layouts = vec![

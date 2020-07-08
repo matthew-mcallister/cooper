@@ -59,13 +59,14 @@ impl SimpleMaterialFactory {
 impl MaterialFactory for SimpleMaterialFactory {
     fn create_descriptor_set(
         &self,
-        _images: &MaterialImageMap,
+        _state: &SystemState,
+        _globals: &Globals,
+        _images: &MaterialImageState,
     ) -> Option<DescriptorSet> {
         None
     }
 
-    fn select_shaders(&self, skinned: bool) -> ShaderStageMap {
-        assert!(!skinned);
+    fn select_shaders(&self) -> ShaderStageMap {
         partial_map! {
             ShaderStage::Vertex => Arc::clone(&self.vert_shader),
             ShaderStage::Fragment => Arc::clone(&self.frag_shader),

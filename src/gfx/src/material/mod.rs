@@ -1,13 +1,19 @@
 use std::sync::Arc;
 
 use base::PartialEnumMap;
+use bitflags::*;
 use enum_map::{Enum, EnumMap};
 
-use crate::*;
+use crate::{
+    DescriptorSet, Globals, Image, ImageSubresources, ImageType, ImageView,
+    Sampler, ShaderStageMap, SystemState,
+};
 
 mod simple;
+mod system;
 
-crate use simple::*;
+use simple::*;
+crate use system::*;
 
 /// An identifier of a particular material rendering technique.
 // TODO: Should be serializable to/from a string.
@@ -29,64 +35,68 @@ pub enum MaterialImage {
     // etc.
 }
 
-pub type MaterialImageMap = PartialEnumMap<MaterialImage, Arc<ImageView>>;
+bitflags! {
+    /// Flags that control how an image is bound to a shader variable.
+    #[derive(Default)]
+    pub struct ImageBindingFlags: u32 {
+        /// The image will be used as a cube map.
+        const CUBE = bit!(0);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageBindingDesc {
+    // TODO: Maybe should create an "ImageViewDesc" type.
+    pub image: Arc<Image>,
+    pub flags: ImageBindingFlags,
+    pub subresources: ImageSubresources,
+    pub sampler: Arc<Sampler>,
+}
+
+pub type MaterialImageBindings =
+    PartialEnumMap<MaterialImage, ImageBindingDesc>;
+
+#[derive(Clone, Debug)]
+crate struct ImageBindingState {
+    crate view: Arc<ImageView>,
+    crate sampler: Arc<Sampler>,
+}
+
+crate type MaterialImageState =
+    PartialEnumMap<MaterialImage, ImageBindingState>;
 
 // TODO: Maybe make this a trait
+// TODO: Bake VkPipeline object(s) into the material itself
 #[derive(Debug)]
 pub struct Material {
     crate renderer: Arc<dyn MaterialFactory>,
     crate program: MaterialProgram,
-    crate images: MaterialImageMap,
-    // Some material types
+    crate images: PartialEnumMap<MaterialImage, ImageBindingState>,
     crate desc: Option<DescriptorSet>,
 }
 
 crate trait MaterialFactory: std::fmt::Debug + Send + Sync {
-    fn create_descriptor_set(&self, images: &MaterialImageMap) ->
-        Option<DescriptorSet>;
+    fn create_descriptor_set(
+        &self,
+        state: &SystemState,
+        globals: &Globals,
+        images: &MaterialImageState,
+    ) -> Option<DescriptorSet>;
 
-    // TODO: Is this a sign that this abstraction is not all that good?
-    fn select_shaders(&self, skinned: bool) -> ShaderStageMap;
+    // TODO: Not necessary.
+    fn select_shaders(&self) -> ShaderStageMap;
 }
 
 impl Material {
-    crate fn select_shaders(&self, skinned: bool) -> ShaderStageMap {
-        self.renderer.select_shaders(skinned)
+    crate fn select_shaders(&self) -> ShaderStageMap {
+        self.renderer.select_shaders()
     }
 }
 
-#[derive(Debug)]
-crate struct MaterialSystem {
-    materials: EnumMap<MaterialProgram, Arc<dyn MaterialFactory>>,
-}
-
-impl MaterialSystem {
-    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
-        let [checker, depth, normal] =
-            SimpleMaterialFactory::new(_state, globals);
-        let materials = unsafe { std::mem::transmute([
-             Arc::new(checker),  // Checker
-             Arc::new(depth),    // FragDepth
-             Arc::new(normal),   // FragNormal
-        ]: [Arc<dyn MaterialFactory>; 3]) };
-        Self {
-            materials,
-        }
-    }
-
-    crate fn create_material(
-        &self,
-        program: MaterialProgram,
-        images: MaterialImageMap,
-    ) -> Arc<Material> {
-        let renderer = Arc::clone(&self.materials[program]);
-        let desc = renderer.create_descriptor_set(&images);
-        Arc::new(Material {
-            renderer,
-            program,
-            images,
-            desc,
-        })
+impl MaterialImage {
+    crate fn values() -> impl ExactSizeIterator<Item = Self> {
+        (0..<Self as Enum<()>>::POSSIBLE_VALUES)
+            .map(<Self as Enum<()>>::from_usize)
     }
 }
 
@@ -101,7 +111,9 @@ mod tests {
         let globals = Arc::new(Globals::new(&state));
         let materials = MaterialSystem::new(&state, &globals);
         let _mat = materials.create_material(
-            MaterialProgram::Checker, Default::default());
+            &state, &globals,
+            MaterialProgram::Checker, Default::default(),
+        );
     }
 
     unit::declare_tests![

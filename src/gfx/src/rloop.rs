@@ -110,9 +110,10 @@ impl RenderLoop {
     pub fn create_material(
         &self,
         program: MaterialProgram,
-        images: MaterialImageMap,
+        images: MaterialImageBindings,
     ) -> Arc<Material> {
-        self.renderer.materials().create_material(program, images)
+        self.renderer.materials()
+            .create_material(self.state(), &self.globals, program, images)
     }
 
     crate fn new_frame(&mut self) {

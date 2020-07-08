@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bitflags::*;
 use derivative::Derivative;
 use derive_more::Constructor;
-use more_asserts::{assert_le, assert_lt};
+use more_asserts::{assert_gt, assert_le, assert_lt};
 
 use crate::*;
 
@@ -56,12 +56,16 @@ pub enum SampleCount {
 crate type ResourceRange = [u32; 2];
 
 #[derive(Clone, Constructor, Copy, Debug)]
-crate struct ImageSubresources {
-    crate aspects: vk::ImageAspectFlags,
-    crate mip_levels: ResourceRange,
-    crate layers: ResourceRange,
+pub struct ImageSubresources {
+    pub aspects: vk::ImageAspectFlags,
+    pub mip_levels: ResourceRange,
+    pub layers: ResourceRange,
 }
 
+// TODO: You can't actually unbind image memory once bound, so there
+// practically needs to be an ImageDesc type which describes the image
+// and one or more types which own the vk::Image object and backing
+// allocation.
 #[derive(Debug)]
 pub struct Image {
     device: Arc<Device>,
@@ -173,6 +177,10 @@ impl Image {
         self.flags
     }
 
+    pub fn ty(&self) -> ImageType {
+        self.ty
+    }
+
     pub fn format(&self) -> Format {
         self.format
     }
@@ -199,8 +207,10 @@ impl Image {
 
     crate fn validate_subresources(&self, sub: &ImageSubresources) {
         assert!(sub.aspects.contains(sub.aspects));
+        assert_gt!(sub.mip_level_count(), 0);
         assert_le!(sub.mip_levels[1], self.mip_levels);
         assert_lt!(sub.mip_levels[0], sub.mip_levels[1]);
+        assert_gt!(sub.layer_count(), 0);
         assert_le!(sub.layers[1], self.layers);
         assert_lt!(sub.layers[0], sub.layers[1]);
     }
@@ -215,7 +225,7 @@ impl Image {
             * layers as vk::DeviceSize
     }
 
-    crate fn all_subresources(&self) -> ImageSubresources {
+    pub fn all_subresources(&self) -> ImageSubresources {
         ImageSubresources {
             aspects: self.format.aspects(),
             mip_levels: [0, self.mip_levels],
@@ -243,15 +253,14 @@ impl Image {
         use ImageType::*;
         use vk::ImageViewType as T;
         let ty = match self.ty {
-            Dim1 if self.layers == 0 => T::_1D,
+            Dim1 if self.layers == 1 => T::_1D,
             Dim1 => T::_1D_ARRAY,
-            Dim2 if self.layers == 0 => T::_2D,
+            Dim2 if self.layers == 1 => T::_2D,
             Dim2 => T::_2D_ARRAY,
             Dim3 => T::_3D,
-            Cube if self.layers == 0 => T::CUBE,
+            Cube if self.layers == 6 => T::CUBE,
             Cube => T::CUBE_ARRAY,
         };
-        // This ought to be safe if it isn't
         unsafe {
             Arc::new(ImageView::new(
                 Arc::clone(self),
@@ -508,6 +517,10 @@ fn validate_image_view_creation(
         assert_eq!(sub.layer_count(), 6);
     } else if ty == vk::ImageViewType::CUBE_ARRAY {
         assert_eq!(sub.layer_count() % 6, 0);
+    }
+
+    if ty == vk::ImageViewType::_3D {
+        assert_eq!(sub.layers, [0, 1]);
     }
 
     // MUTABLE_FORMAT_BIT not yet supported
