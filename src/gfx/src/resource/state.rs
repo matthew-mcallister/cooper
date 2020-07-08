@@ -5,20 +5,31 @@ use fnv::FnvHashMap as HashMap;
 
 use crate::{DeviceAlloc, ImageHeap, Image};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+crate enum ResourceState {
+    Available,
+    Pending,
+    Unavailable,
+}
+
 #[derive(Debug)]
 crate struct ResourceStateTable {
-    images: HashMap<ByPtr<Arc<Image>>, ResourceState>,
+    images: HashMap<ByPtr<Arc<Image>>, ResourceInfo>,
 }
 
 #[derive(Debug)]
-crate struct ResourceState {
-    crate alloc: Option<DeviceAlloc>,
-    crate batch: u64,
+struct ResourceInfo {
+    alloc: Option<DeviceAlloc>,
+    batch: u64,
 }
 
-impl ResourceState {
-    crate fn available(&self, avail_batch: u64) -> bool {
-        self.alloc.is_some() & (self.batch <= avail_batch)
+impl ResourceInfo {
+    fn state(&self, avail_batch: u64) -> ResourceState {
+        match (self.alloc.is_some(), self.batch <= avail_batch) {
+            (true, true) => ResourceState::Available,
+            (true, false) => ResourceState::Pending,
+            (false, _) => ResourceState::Unavailable,
+        }
     }
 }
 
@@ -29,7 +40,7 @@ impl ResourceStateTable {
 
     crate fn register(&mut self, image: Arc<Image>) {
         assert!(image.alloc().is_none());
-        self.images.insert(image.into(), ResourceState {
+        self.images.insert(image.into(), ResourceInfo {
             alloc: None,
             batch: 0,
         });
