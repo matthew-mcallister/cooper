@@ -45,7 +45,7 @@ mod state;
 mod world;
 
 pub use device::*;
-crate use extent::*;
+pub use extent::*;
 pub use format::*;
 crate use frame::*;
 crate use global::*;

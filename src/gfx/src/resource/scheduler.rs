@@ -14,6 +14,7 @@ use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 pub(super) struct UploadScheduler {
     tasks: TaskProcessor,
     sem: TimelineSemaphore,
+    avail_batch: u64,
     pending_batch: u64,
 }
 
@@ -111,6 +112,7 @@ impl UploadScheduler {
         Self {
             tasks: TaskProcessor::new(Arc::clone(&device)),
             sem: TimelineSemaphore::new(device, 0),
+            avail_batch: 0,
             pending_batch: 0,
         }
     }
@@ -124,7 +126,11 @@ impl UploadScheduler {
     }
 
     crate fn avail_batch(&self) -> u64 {
-        self.sem.get_value()
+        self.avail_batch
+    }
+
+    crate fn new_frame(&mut self) {
+        self.avail_batch = self.sem.get_value();
     }
 
     crate fn schedule(

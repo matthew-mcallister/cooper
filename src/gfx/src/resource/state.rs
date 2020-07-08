@@ -2,15 +2,9 @@ use std::sync::Arc;
 
 use base::ByPtr;
 use fnv::FnvHashMap as HashMap;
+use log::trace;
 
-use crate::{DeviceAlloc, ImageHeap, Image};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-crate enum ResourceState {
-    Available,
-    Pending,
-    Unavailable,
-}
+use crate::{DeviceAlloc, ImageHeap, Image, ResourceState};
 
 #[derive(Debug)]
 crate struct ResourceStateTable {
@@ -38,12 +32,19 @@ impl ResourceStateTable {
         Self { images: Default::default() }
     }
 
-    crate fn register(&mut self, image: Arc<Image>) {
+    crate fn register(&mut self, image: &Arc<Image>) {
         assert!(image.alloc().is_none());
-        self.images.entry(image.into()).or_insert(ResourceInfo {
+        self.images.entry(Arc::clone(image).into()).or_insert(ResourceInfo {
             alloc: None,
             batch: 0,
         });
+    }
+
+    crate fn get_state(&self, image: &Arc<Image>, avail_batch: u64) ->
+        ResourceState
+    {
+        try_opt!(self.images.get(ByPtr::by_ptr(image))?.state(avail_batch))
+            .unwrap_or(ResourceState::Unavailable)
     }
 
     crate fn prepare_for_upload(
@@ -52,6 +53,11 @@ impl ResourceStateTable {
         batch: u64,
         heap: &ImageHeap,
     ) {
+        trace!(
+            "ResourceStateTable::prepare_for_upload(image: {:?}, batch: {:?})",
+            image, batch,
+        );
+
         let info = self.images.get_mut(ByPtr::by_ptr(image)).unwrap();
 
         info.batch = batch;

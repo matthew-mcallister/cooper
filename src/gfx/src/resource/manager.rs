@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::{CmdPool, Device, Image, ImageHeap, Queue, WaitResult};
-use super::{ImageUploadTask, ResourceStateTable, UploadScheduler};
+use super::{
+    ImageUploadTask, ResourceState, ResourceStateTable, UploadScheduler,
+};
 
 #[derive(Debug)]
 crate struct ResourceManager {
@@ -21,11 +23,15 @@ impl ResourceManager {
         self.sched.device()
     }
 
-    crate fn register_image(&mut self, image: Arc<Image>) {
-        self.state.register(image);
+    crate fn new_frame(&mut self) {
+        self.sched.new_frame();
     }
 
-    crate fn load_image(
+    crate fn get_image_state(&self, image: &Arc<Image>) -> ResourceState {
+        self.state.get_state(image, self.sched.avail_batch())
+    }
+
+    crate fn upload_image(
         &mut self,
         image: &Arc<Image>,
         src: Arc<Vec<u8>>,
@@ -33,6 +39,7 @@ impl ResourceManager {
     ) {
         // Mipmap generation not available yet
         assert_eq!(image.mip_levels(), 1);
+        self.state.register(image);
         self.sched.add_task(ImageUploadTask {
             src,
             src_offset,
@@ -90,6 +97,13 @@ mod tests {
             .collect();
         let mut resources = ResourceManager::new(Arc::clone(device));
 
+        for image in images.iter() {
+            assert_eq!(
+                resources.get_image_state(image),
+                ResourceState::Unavailable,
+            );
+        }
+
         let mut data = Vec::new();
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
@@ -98,12 +112,36 @@ mod tests {
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
-        for frame in 1..images.len() + 1 {
-            let image = &images[frame % images.len()];
-            resources.register_image(Arc::clone(image));
-            resources.load_image(image, Arc::clone(&data), 0x1000);
-            pool = resources.schedule(frame as _, queue, &state.heap, pool);
-            let _ = resources.wait(2_000_000);
+
+        // Simulate uploading N images, one at a time, and waiting on
+        // them in a loop.
+        let mut frame = 1;
+        for image in images.iter() {
+            resources.upload_image(image, Arc::clone(&data), 0x1000);
+
+            loop {
+                frame += 1;
+                resources.new_frame();
+
+                pool = resources.schedule(
+                    frame as _, queue, &state.heap, pool);
+
+                let state = resources.get_image_state(image);
+                if state == ResourceState::Available {
+                    break;
+                } else {
+                    assert_eq!(state, ResourceState::Pending);
+                }
+
+                let _ = resources.wait(1_000_000);
+            }
+        }
+
+        for image in images.iter() {
+            assert_eq!(
+                resources.get_image_state(image),
+                ResourceState::Available,
+            );
         }
     }
 

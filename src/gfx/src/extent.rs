@@ -15,17 +15,17 @@ macro_rules! impl_conversion {
 
 #[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
     MulAssign, PartialEq)]
-crate struct Extent2D {
-    crate width: u32,
-    crate height: u32,
+pub struct Extent2D {
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
     MulAssign, PartialEq)]
-crate struct Extent3D {
-    crate width: u32,
-    crate height: u32,
-    crate depth: u32,
+pub struct Extent3D {
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
 }
 
 impl_conversion!(Vector2<u32> => (u32, u32) => Extent2D);
@@ -62,24 +62,24 @@ impl AsRef<[u32; 3]> for Extent3D {
 
 impl Extent2D {
     #[inline]
-    crate fn to_vec(self) -> Vector2<u32> {
+    pub fn to_vec(self) -> Vector2<u32> {
         self.into()
     }
 
     #[inline]
-    crate fn as_array(&self) -> &[u32; 2] {
+    pub fn as_array(&self) -> &[u32; 2] {
         self.as_ref()
     }
 }
 
 impl Extent3D {
     #[inline]
-    crate fn to_vec(self) -> Vector3<u32> {
+    pub fn to_vec(self) -> Vector3<u32> {
         self.into()
     }
 
     #[inline]
-    crate fn as_array(&self) -> &[u32; 3] {
+    pub fn as_array(&self) -> &[u32; 3] {
         self.as_ref()
     }
 
@@ -89,7 +89,7 @@ impl Extent3D {
     }
 
     #[inline]
-    crate fn to_2d(self) -> Extent2D {
+    pub fn to_2d(self) -> Extent2D {
         Extent2D::new(self.width, self.height)
     }
 
@@ -112,12 +112,12 @@ impl Extent3D {
     }
 
     #[inline]
-    crate fn mip_level(&self, level: u32) -> Self {
+    pub fn mip_level(&self, level: u32) -> Self {
         self.to_vec().map(|x| std::cmp::max(1, x >> level)).into()
     }
 
     #[inline]
-    crate fn mip_levels(&self) -> u32 {
+    pub fn mip_levels(&self) -> u32 {
         let max_dim = self.iter().max().unwrap();
         32 - max_dim.leading_zeros()
     }

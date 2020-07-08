@@ -10,7 +10,7 @@ use crate::*;
 
 bitflags! {
     #[derive(Default)]
-    pub(crate) struct ImageFlags: u32 {
+    pub struct ImageFlags: u32 {
         /// Image will not be sampled by shaders.
         const NO_SAMPLE = bit!(0);
         /// Image may be used as a shader storage image.
@@ -28,7 +28,7 @@ bitflags! {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum ImageType {
+pub enum ImageType {
     /// One-dimensional image or image array.
     Dim1,
     /// Two-dimensional image or image array other than a cube map.
@@ -41,7 +41,7 @@ crate enum ImageType {
 
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
 #[derivative(Default)]
-crate enum SampleCount {
+pub enum SampleCount {
     #[derivative(Default)]
     One,
     Two,
@@ -63,7 +63,7 @@ crate struct ImageSubresources {
 }
 
 #[derive(Debug)]
-crate struct Image {
+pub struct Image {
     device: Arc<Device>,
     flags: ImageFlags,
     ty: ImageType,
@@ -169,27 +169,27 @@ impl Image {
         self.inner
     }
 
-    crate fn flags(&self) -> ImageFlags {
+    pub fn flags(&self) -> ImageFlags {
         self.flags
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         self.format
     }
 
-    crate fn samples(&self) -> SampleCount {
+    pub fn samples(&self) -> SampleCount {
         self.samples
     }
 
-    crate fn extent(&self) -> Extent3D {
+    pub fn extent(&self) -> Extent3D {
         self.extent
     }
 
-    crate fn layers(&self) -> u32 {
+    pub fn layers(&self) -> u32 {
         self.layers
     }
 
-    crate fn mip_levels(&self) -> u32 {
+    pub fn mip_levels(&self) -> u32 {
         self.mip_levels
     }
 

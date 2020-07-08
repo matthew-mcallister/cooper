@@ -4,9 +4,16 @@ mod staging;
 mod state;
 
 crate use manager::*;
-crate use scheduler::*;
-crate use staging::*;
+use scheduler::*;
+use staging::*;
 crate use state::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResourceState {
+    Available,
+    Pending,
+    Unavailable,
+}
 
 unit::collect_tests![
     manager,

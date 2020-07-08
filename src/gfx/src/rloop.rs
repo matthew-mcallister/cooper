@@ -3,15 +3,15 @@ use std::sync::Arc;
 use prelude::*;
 
 use crate::*;
-use crate::init_swapchain;
 
 #[derive(Debug)]
 pub struct RenderLoop {
     device: Arc<Device>,
     gfx_queue: Arc<Queue>,
     globals: Arc<Globals>,
-    renderer: WorldRenderer,
     frame: FrameControl,
+    renderer: WorldRenderer,
+    resources: ResourceManager,
     // This is declared last so that it will be dropped last
     state: Option<Box<SystemState>>,
 }
@@ -40,6 +40,7 @@ impl RenderLoop {
             &swapchain,
             Arc::clone(&gfx_queue),
         );
+        let resources = ResourceManager::new(Arc::clone(&device));
 
         let frame = FrameControl::new(swapchain);
 
@@ -48,6 +49,7 @@ impl RenderLoop {
             gfx_queue,
             globals,
             renderer,
+            resources,
             frame,
             state: Some(state),
         })
@@ -69,6 +71,42 @@ impl RenderLoop {
         self.frame.frame_num()
     }
 
+    pub fn create_image(
+        &self,
+        flags: ImageFlags,
+        ty: ImageType,
+        format: Format,
+        extent: Extent3D,
+        mip_levels: u32,
+        layers: u32,
+    ) -> Arc<Image> {
+        unsafe {
+            Arc::new(Image::new(
+                Arc::clone(&self.device),
+                flags,
+                ty,
+                format,
+                SampleCount::One,
+                extent,
+                mip_levels,
+                layers,
+            ))
+        }
+    }
+
+    pub fn get_image_state(&self, image: &Arc<Image>) -> ResourceState {
+        self.resources.get_image_state(image)
+    }
+
+    pub fn upload_image(
+        &mut self,
+        image: &Arc<Image>,
+        src: Arc<Vec<u8>>,
+        src_offset: usize,
+    ) {
+        self.resources.upload_image(image, src, src_offset)
+    }
+
     pub fn create_material(
         &self,
         program: MaterialProgram,
@@ -77,9 +115,13 @@ impl RenderLoop {
         self.renderer.materials().create_material(program, images)
     }
 
+    crate fn new_frame(&mut self) {
+        self.state_mut().frame_over();
+        self.resources.new_frame();
+    }
+
     crate fn render(&mut self, world: RenderWorldData) {
         self.frame.wait();
-        self.state_mut().frame_over();
         self.frame.acquire();
 
         let state = Arc::new(self.state.take().unwrap());

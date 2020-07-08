@@ -22,7 +22,7 @@ crate use debug::*;
 crate use descriptor::*;
 crate use device::*;
 crate use framebuffer::*;
-crate use image::*;
+pub use image::*;
 crate use instance::*;
 pub use memory::*;
 crate use pipeline::*;
