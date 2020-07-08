@@ -41,6 +41,7 @@ mod render;
 mod resource;
 mod rloop;
 mod staged_cache;
+mod state;
 mod world;
 
 pub use device::*;
@@ -54,6 +55,7 @@ pub use render::*;
 crate use resource::*;
 pub use rloop::*;
 crate use staged_cache::*;
+crate use state::*;
 pub use world::*;
 
 unit::collect_tests![
