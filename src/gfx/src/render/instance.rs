@@ -102,8 +102,7 @@ unsafe fn render_instances(
             set_layouts.push(Arc::clone(desc.layout()));
         }
 
-        let vertex_shader = desc.stages[ShaderStage::Vertex]
-            .as_ref().unwrap().shader();
+        let vertex_shader = desc.vertex_stage().shader();
         desc.vertex_layout =
             VertexInputLayout::new(&mesh.vertex_layout(), &vertex_shader);
 

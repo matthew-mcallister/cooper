@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use enum_map::EnumMap;
+use base::partial_map;
 
 use crate::*;
 
@@ -65,10 +65,10 @@ impl MaterialFactory for SimpleMaterialFactory {
     }
 
     fn select_shaders(&self, skinned: bool) -> ShaderStageMap {
-        let mut map = EnumMap::default();
         assert!(!skinned);
-        map[ShaderStage::Vertex] = Some(Arc::clone(&self.vert_shader));
-        map[ShaderStage::Fragment] = Some(Arc::clone(&self.frag_shader));
-        map
+        partial_map! {
+            ShaderStage::Vertex => Arc::clone(&self.vert_shader),
+            ShaderStage::Fragment => Arc::clone(&self.frag_shader),
+        }
     }
 }

@@ -4,8 +4,8 @@ use std::fmt::Debug;
 use std::ptr;
 use std::sync::Arc;
 
+use base::PartialEnumMap;
 use derivative::Derivative;
-use enum_map::EnumMap;
 use log::trace;
 
 use crate::*;
@@ -27,7 +27,7 @@ crate struct PipelineLayoutDesc {
 }
 impl Eq for PipelineLayoutDesc {}
 
-crate type ShaderStageMap = EnumMap<ShaderStage, Option<Arc<ShaderSpec>>>;
+crate type ShaderStageMap = PartialEnumMap<ShaderStage, Arc<ShaderSpec>>;
 
 #[derive(Debug)]
 crate struct GraphicsPipeline {
@@ -208,7 +208,7 @@ impl GraphicsPipeline {
     }
 
     crate fn vertex_stage(&self) -> &Arc<ShaderSpec> {
-        self.desc.vertex_stage().unwrap()
+        self.desc.vertex_stage()
     }
 }
 
@@ -240,8 +240,8 @@ impl GraphicsPipelineDesc {
         }
     }
 
-    crate fn vertex_stage(&self) -> Option<&Arc<ShaderSpec>> {
-        self.stages[ShaderStage::Vertex].as_ref()
+    crate fn vertex_stage(&self) -> &Arc<ShaderSpec> {
+        &self.stages[ShaderStage::Vertex]
     }
 }
 
@@ -261,12 +261,12 @@ unsafe fn create_graphics_pipeline(
         layout.set_layouts, desc.layout.set_layouts,
     );
 
-    let have = |stage| desc.stages[stage].is_some();
+    let have = |stage| desc.stages.contains_key(stage);
     assert!(have(ShaderStage::Vertex));
     assert_eq!(have(ShaderStage::TessControl), have(ShaderStage::TessEval));
     // TODO: Tessellation
     assert!(!have(ShaderStage::TessControl));
-    let mut stages = desc.stages.values().filter_map(|stage| stage.as_ref());
+    let mut stages = desc.stages.values();
     let mut stage0 = stages.next().unwrap();
     for stage1 in stages {
         assert_eq!(
@@ -276,25 +276,24 @@ unsafe fn create_graphics_pipeline(
         );
         stage0 = stage1;
     }
-    let stages: Vec<_> = desc.stages.iter().filter_map(|(stage, spec)| {
-        let spec = spec.as_ref()?;
+    let stages: Vec<_> = desc.stages.iter().map(|(stage, spec)| {
         let shader = spec.shader();
         assert_eq!(stage, shader.stage());
-        Some(vk::PipelineShaderStageCreateInfo {
+        vk::PipelineShaderStageCreateInfo {
             module: shader.module(),
             stage: stage.into(),
             p_name: shader.entry_cstr().as_ptr(),
             p_specialization_info: spec.spec_info(),
             ..Default::default()
-        })
+        }
     }).collect();
 
-    let vertex_shader = desc.vertex_stage().unwrap().shader();
-    let vertex_layout = desc.vertex_layout;
+    let vertex_shader = desc.vertex_stage().shader();
+    let vertex_layout = &desc.vertex_layout;
 
     for &input in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty
-        let _attr = vertex_layout.attrs[input.try_into().unwrap()].unwrap();
+        assert!(vertex_layout.attrs.contains_key(input.try_into().unwrap()));
     }
 
     let bindings = vertex_layout.vk_bindings();
@@ -313,8 +312,8 @@ unsafe fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    assert!(desc.stages[ShaderStage::TessControl].is_none());
-    assert!(desc.stages[ShaderStage::TessEval].is_none());
+    assert!(!desc.stages.contains_key(ShaderStage::TessControl));
+    assert!(!desc.stages.contains_key(ShaderStage::TessEval));
 
     let viewport = vk::PipelineViewportStateCreateInfo {
         viewport_count: 1,

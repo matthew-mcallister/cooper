@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use base::PartialEnumMap;
 use enum_map::{Enum, EnumMap};
 
 use crate::*;
@@ -28,7 +29,7 @@ pub enum MaterialImage {
     // etc.
 }
 
-pub type MaterialImageMap = EnumMap<MaterialImage, Option<Arc<ImageView>>>;
+pub type MaterialImageMap = PartialEnumMap<MaterialImage, Arc<ImageView>>;
 
 // TODO: Maybe make this a trait
 #[derive(Debug)]

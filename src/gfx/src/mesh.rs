@@ -1,4 +1,4 @@
-use enum_map::EnumMap;
+use base::PartialEnumMap;
 use itertools::Itertools;
 
 use crate::*;
@@ -8,7 +8,7 @@ use crate::*;
 pub struct RenderMesh {
     vertex_count: u32,
     index: Option<IndexBuffer>,
-    bindings: EnumMap<VertexAttr, Option<AttrBuffer>>,
+    bindings: PartialEnumMap<VertexAttr, AttrBuffer>,
 }
 
 #[derive(Debug)]
@@ -41,26 +41,28 @@ impl RenderMesh {
         self.index.as_ref()
     }
 
-    crate fn bindings(&self) -> &EnumMap<VertexAttr, Option<AttrBuffer>> {
+    crate fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer> {
         &self.bindings
     }
 
     crate fn vertex_layout(&self) -> VertexLayout {
-        let attrs = |name| Some(VertexLayoutAttr {
-            format: self.bindings[name].as_ref()?.format,
-        });
         VertexLayout {
             topology: PrimitiveTopology::TriangleList,
             packing: VertexPacking::Unpacked,
-            attrs: attrs.into(),
+            attrs: self.bindings.iter()
+                .map(|(name, binding)| {
+                    (name, VertexLayoutAttr { format: binding.format })
+                })
+                .collect(),
         }
     }
 
     crate fn data(&self) -> VertexData<'_> {
-        let bindings = |name| Some({
-            self.bindings[name].as_ref()?.alloc.range()
-        });
-        VertexData::Unpacked(bindings.into())
+        VertexData::Unpacked(
+            self.bindings.iter()
+                .map(|(name, binding)| (name, binding.alloc.range()))
+                .collect()
+        )
     }
 }
 
@@ -96,22 +98,22 @@ impl<'a> RenderMeshBuilder<'a> {
         self
     }
 
-    pub fn attr(&mut self, attr: VertexAttr, format: Format, data: &[u8])
-        -> &mut Self
+    pub fn attr(&mut self, attr: VertexAttr, format: Format, data: &[u8]) ->
+        &mut Self
     {
         assert_eq!(data.len() % format.size(), 0);
         let binding = BufferBinding::Vertex;
         let lifetime = self.lifetime;
         let alloc = self.state.buffers.box_slice(binding, lifetime, data)
             .into_inner();
-        self.mesh.bindings[attr] = Some(AttrBuffer { alloc, format });
+        self.mesh.bindings.insert(attr, AttrBuffer { alloc, format });
         self
     }
 
     fn set_vertex_count(&mut self) {
         // TODO: Why doesn't enum_map::Values implement Clone!
         let (min, max) = self.mesh.bindings.values()
-            .filter_map(|attr| Some(attr.as_ref()?.count()))
+            .map(|attr| attr.count())
             .minmax().into_option()
             .unwrap();
         assert_eq!(min, max);
@@ -209,14 +211,14 @@ mod tests {
         let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
 
         let shaders = &globals.shaders;
-        desc.stages[ShaderStage::Vertex] =
-            Some(Arc::new(Arc::clone(&shaders.static_vert).into()));
-        desc.stages[ShaderStage::Fragment] =
-            Some(Arc::new(Arc::clone(&shaders.simple_frag).into()));
+        let vertex_stage = Arc::new(Arc::clone(&shaders.static_vert).into());
+        desc.stages.insert(ShaderStage::Vertex, vertex_stage);
+        let fragment_stage = Arc::new(Arc::clone(&shaders.simple_frag).into());
+        desc.stages.insert(ShaderStage::Fragment, fragment_stage);
 
         desc.layout.set_layouts = layouts;
         desc.vertex_layout = mesh.vertex_layout()
-            .to_input_layout(desc.vertex_stage().unwrap().shader());
+            .to_input_layout(desc.vertex_stage().shader());
 
         let pipe = state.pipelines.get_or_create_gfx(&desc);
         cmds.bind_gfx_pipe(&pipe);

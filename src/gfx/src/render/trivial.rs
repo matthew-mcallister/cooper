@@ -77,9 +77,8 @@ impl TrivialRenderer {
 
     crate fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {
         desc.layout.set_layouts = self.set_layouts.to_vec();
-        desc.stages[ShaderStage::Vertex] = Some(Arc::clone(&self.vert_shader));
-        desc.stages[ShaderStage::Fragment] =
-            Some(Arc::clone(&self.frag_shader));
+        desc.stages.insert(ShaderStage::Vertex, Arc::clone(&self.vert_shader));
+        desc.stages.insert(ShaderStage::Fragment, Arc::clone(&self.frag_shader));
     }
 
     crate fn render(&self, state: &SystemState, cmds: &mut SubpassCmds) {

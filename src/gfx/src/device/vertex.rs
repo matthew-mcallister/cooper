@@ -1,7 +1,8 @@
 use std::convert::TryInto;
 
+use base::PartialEnumMap;
 use derivative::Derivative;
-use enum_map::{Enum, EnumMap};
+use enum_map::Enum;
 
 use crate::*;
 
@@ -9,7 +10,7 @@ use crate::*;
 crate struct VertexLayout {
     crate topology: PrimitiveTopology,
     crate packing: VertexPacking,
-    crate attrs: EnumMap<VertexAttr, Option<VertexLayoutAttr>>,
+    crate attrs: PartialEnumMap<VertexAttr, VertexLayoutAttr>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -54,7 +55,7 @@ wrap_vk_enum! {
 crate struct VertexInputLayout {
     pub(super) topology: PrimitiveTopology,
     pub(super) packing: VertexPacking,
-    pub(super) attrs: EnumMap<VertexAttr, Option<VertexInputAttr>>,
+    pub(super) attrs: PartialEnumMap<VertexAttr, VertexInputAttr>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -85,7 +86,7 @@ primitive_enum! {
 // TODO: Index buffer!
 #[derive(Clone, Copy, Debug)]
 crate enum VertexData<'a> {
-    Unpacked(EnumMap<VertexAttr, Option<BufferRange<'a>>>),
+    Unpacked(PartialEnumMap<VertexAttr, BufferRange<'a>>),
 }
 
 wrap_vk_enum! {
@@ -116,12 +117,12 @@ impl VertexLayout {
 impl VertexInputLayout {
     crate fn new(layout: &VertexLayout, shader: &Shader) -> Self {
         assert_eq!(shader.stage(), ShaderStage::Vertex);
-        let mut attrs = EnumMap::<_, Option<VertexInputAttr>>::default();
+        let mut attrs = PartialEnumMap::new();
         for &location in shader.inputs().iter() {
             let name = location.try_into().unwrap();
-            let attr = layout.attrs[name].unwrap();
-            assert!(attrs[name].is_none());
-            attrs[name] = Some(VertexInputAttr {
+            let attr = &layout.attrs[name];
+            assert!(!attrs.contains_key(name));
+            attrs.insert(name, VertexInputAttr {
                 location,
                 format: attr.format,
             });
@@ -141,7 +142,6 @@ impl VertexInputLayout {
     {
         match self.packing {
             VertexPacking::Unpacked => self.attrs.values()
-                .filter_map(|&x| x)
                 .enumerate()
                 .map(|(i, attr)| vk::VertexInputBindingDescription {
                     binding: i as _,
@@ -155,7 +155,6 @@ impl VertexInputLayout {
     pub(super) fn vk_attrs(&self) -> Vec<vk::VertexInputAttributeDescription> {
         match self.packing {
             VertexPacking::Unpacked => self.attrs.values()
-                .filter_map(|&x| x)
                 .enumerate()
                 .map(|(i, attr)| vk::VertexInputAttributeDescription {
                     location: attr.location,
@@ -173,9 +172,7 @@ impl<'a> VertexData<'a> {
         impl Iterator<Item = BufferRange<'a>> + 'b
     {
         match self {
-            Self::Unpacked(data) => layout.attrs.values()
-                .zip(data.values())
-                .filter_map(|(&attr, buf)| { attr?; Some(buf.unwrap()) })
+            Self::Unpacked(data) => layout.attrs.keys().map(move |k| data[k])
         }
     }
 }
@@ -183,25 +180,25 @@ impl<'a> VertexData<'a> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use base::partial_map;
     use crate::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         use VertexAttr as Attr;
-        let attr = |format| Some(VertexLayoutAttr { format });
 
         let state = SystemState::new(Arc::clone(vars.device()));
         let globals = Globals::new(&state);
 
+        let attr = |format| VertexLayoutAttr { format };
         let layout = VertexLayout {
-            attrs: enum_map! {
-                Attr::Position =>   attr(Format::RGB32F),
-                Attr::Normal =>     attr(Format::RGB32F),
-                Attr::Texcoord0 =>  attr(Format::RG16),
-                Attr::Color =>      attr(Format::RGB8),
-                Attr::Joints =>     attr(Format::RGBA8U),
-                Attr::Weights =>    attr(Format::RGBA8),
-                _ =>                None,
+            attrs: partial_map! {
+                Attr::Position  => attr(Format::RGB32F),
+                Attr::Normal    => attr(Format::RGB32F),
+                Attr::Texcoord0 => attr(Format::RG16),
+                Attr::Color     => attr(Format::RGB8),
+                Attr::Joints    => attr(Format::RGBA8U),
+                Attr::Weights   => attr(Format::RGBA8),
             },
             ..Default::default()
         };
