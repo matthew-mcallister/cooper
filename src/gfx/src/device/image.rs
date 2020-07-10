@@ -74,13 +74,16 @@ pub struct ImageSubresources {
     pub layers: ResourceRange,
 }
 
-// TODO: You can't actually unbind image memory once bound, so there
-// practically needs to be an ImageDesc type which describes the image
-// and one or more types which own the vk::Image object and backing
-// allocation.
 #[derive(Debug)]
 pub struct Image {
     device: Arc<Device>,
+    def: Arc<ImageDef>,
+    inner: vk::Image,
+    alloc: Option<DeviceAlloc>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ImageDef {
     flags: ImageFlags,
     ty: ImageType,
     format: Format,
@@ -88,8 +91,6 @@ pub struct Image {
     extent: Extent3D,
     mip_levels: u32,
     layers: u32,
-    inner: vk::Image,
-    alloc: Option<DeviceAlloc>,
 }
 
 #[derive(Debug)]
@@ -113,20 +114,12 @@ impl Drop for Image {
 }
 
 impl Image {
-    crate unsafe fn new(
-        device: Arc<Device>,
-        flags: ImageFlags,
-        ty: ImageType,
-        format: Format,
-        samples: SampleCount,
-        extent: Extent3D,
-        mip_levels: u32,
-        layers: u32,
-    ) -> Self {
+    crate unsafe fn new(device: Arc<Device>, def: Arc<ImageDef>) -> Self {
         let dt = &*device.table;
 
-        validate_image_creation(&device, flags, ty, format, samples, extent,
-            mip_levels, layers);
+        let ImageDef {
+            flags, ty, format, samples, extent, mip_levels, layers,
+        } = *def;
 
         let create_info = vk::ImageCreateInfo {
             flags: ty.flags(),
@@ -144,21 +137,36 @@ impl Image {
         dt.create_image(&create_info, ptr::null(), &mut image)
             .check().unwrap();
 
-        Image {
+        Self {
             device,
-            flags,
-            ty,
-            format,
-            samples,
-            extent,
-            mip_levels,
-            layers,
+            def,
             inner: image,
             alloc: None,
         }
     }
 
-    crate unsafe fn new_bound(
+    crate unsafe fn new_with(
+        device: Arc<Device>,
+        flags: ImageFlags,
+        ty: ImageType,
+        format: Format,
+        samples: SampleCount,
+        extent: Extent3D,
+        mip_levels: u32,
+        layers: u32,
+    ) -> Self {
+        let def = Arc::new(ImageDef::new(
+            &device, flags, ty, format, samples, extent, mip_levels, layers));
+        Self::new(device, def)
+    }
+
+    crate unsafe fn new_bound(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
+        let mut img = Self::new(Arc::clone(heap.device()), def);
+        img.bind(heap);
+        img
+    }
+
+    crate unsafe fn new_bound_with(
         heap: &ImageHeap,
         flags: ImageFlags,
         ty: ImageType,
@@ -168,22 +176,115 @@ impl Image {
         mip_levels: u32,
         layers: u32,
     ) -> Self {
-        let mut img = Self::new(
-            Arc::clone(heap.device()),
-            flags,
-            ty,
-            format,
-            samples,
-            extent,
-            mip_levels,
-            layers,
-        );
-        img.bind(heap);
-        img
+        let def = Arc::new(ImageDef::new(
+            heap.device(), flags, ty, format, samples, extent, mip_levels,
+            layers));
+        Self::new_bound(heap, def)
     }
 
     crate fn inner(&self) -> vk::Image {
         self.inner
+    }
+
+    pub fn def(&self) -> &Arc<ImageDef> {
+        &self.def
+    }
+
+    pub fn flags(&self) -> ImageFlags {
+        self.def.flags()
+    }
+
+    pub fn ty(&self) -> ImageType {
+        self.def.ty()
+    }
+
+    pub fn format(&self) -> Format {
+        self.def.format()
+    }
+
+    pub fn samples(&self) -> SampleCount {
+        self.def.samples()
+    }
+
+    pub fn extent(&self) -> Extent3D {
+        self.def.extent()
+    }
+
+    pub fn layers(&self) -> u32 {
+        self.def.layers()
+    }
+
+    pub fn mip_levels(&self) -> u32 {
+        self.def.mip_levels()
+    }
+
+    crate fn alloc(&self) -> Option<&DeviceAlloc> {
+        self.alloc.as_ref()
+    }
+
+    // TODO; This name is confusing because `image.bind(heap)` is
+    // slightly different from `heap.bind(image)`.
+    crate fn bind(&mut self, heap: &ImageHeap) {
+        unsafe { self.alloc = Some(heap.bind(self.inner)); }
+    }
+
+    crate fn validate_subresources(&self, sub: &ImageSubresources) {
+        self.def.validate_subresources(sub);
+    }
+
+    crate fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
+    {
+        self.def.subresource_size(sub)
+    }
+
+    pub fn all_subresources(&self) -> ImageSubresources {
+        self.def.all_subresources()
+    }
+
+    crate fn all_layers_for_mip_level(&self, mip_level: u32) ->
+        ImageSubresources
+    {
+        self.def.all_layers_for_mip_level(mip_level)
+    }
+
+    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
+        let mut flags = ImageViewFlags::empty();
+        let min_array_layers;
+        if self.ty() == ImageType::Cube {
+            flags |= ImageViewFlags::CUBE;
+            min_array_layers = 6;
+        } else {
+            min_array_layers = 1;
+        }
+        if self.layers() > min_array_layers {
+            flags |= ImageViewFlags::ARRAY;
+        }
+        unsafe {
+            Arc::new(ImageView::new(
+                Arc::clone(self),
+                flags,
+                self.format(),
+                Default::default(),
+                self.all_subresources(),
+            ))
+        }
+    }
+}
+
+impl ImageDef {
+    crate fn new(
+        device: &Arc<Device>,
+        flags: ImageFlags,
+        ty: ImageType,
+        format: Format,
+        samples: SampleCount,
+        extent: Extent3D,
+        mip_levels: u32,
+        layers: u32,
+    ) -> Self {
+        validate_image_creation(&device, flags, ty, format, samples, extent,
+            mip_levels, layers);
+        Self { flags, ty, format, samples, extent, mip_levels, layers }
     }
 
     pub fn flags(&self) -> ImageFlags {
@@ -214,10 +315,6 @@ impl Image {
         self.mip_levels
     }
 
-    crate fn alloc(&self) -> Option<&DeviceAlloc> {
-        self.alloc.as_ref()
-    }
-
     crate fn validate_subresources(&self, sub: &ImageSubresources) {
         assert!(sub.aspects.contains(sub.aspects));
         assert_gt!(sub.mip_level_count(), 0);
@@ -228,8 +325,7 @@ impl Image {
         assert_lt!(sub.layers[0], sub.layers[1]);
     }
 
-    crate fn subresource_size(&self, sub: &ImageSubresources) ->
-        vk::DeviceSize
+    crate fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
     {
         let lvl_size = |lvl| self.extent().mip_level(lvl).texel_count();
         let texels: vk::DeviceSize = sub.mip_level_range().map(lvl_size).sum();
@@ -255,35 +351,6 @@ impl Image {
             layers: [0, self.layers],
         }
     }
-
-    // TODO; This name is confusing because `image.bind(heap)` is
-    // slightly different from `heap.bind(image)`.
-    crate fn bind(&mut self, heap: &ImageHeap) {
-        unsafe { self.alloc = Some(heap.bind(self.inner)); }
-    }
-
-    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
-        let mut flags = ImageViewFlags::empty();
-        let min_array_layers;
-        if self.ty == ImageType::Cube {
-            flags |= ImageViewFlags::CUBE;
-            min_array_layers = 6;
-        } else {
-            min_array_layers = 1;
-        }
-        if self.layers > min_array_layers {
-            flags |= ImageViewFlags::ARRAY;
-        }
-        unsafe {
-            Arc::new(ImageView::new(
-                Arc::clone(self),
-                flags,
-                self.format,
-                Default::default(),
-                self.all_subresources(),
-            ))
-        }
-    }
 }
 
 impl Drop for ImageView {
@@ -305,12 +372,12 @@ impl ImageView {
     ) -> Self {
         let dt = &*image.device.table;
 
-        validate_image_view_creation(&image, flags, format, components,
+        validate_image_view_creation(image.def(), flags, format, components,
             &subresources);
 
         let view_type = image.ty().view_type(flags);
         let create_info = vk::ImageViewCreateInfo {
-            image: image.inner,
+            image: image.inner(),
             view_type,
             format: format.into(),
             components,
@@ -345,11 +412,11 @@ impl ImageView {
     }
 
     pub fn samples(&self) -> SampleCount {
-        self.image.samples
+        self.image.samples()
     }
 
     pub fn extent(&self) -> Extent3D {
-        self.image.extent
+        self.image.extent()
     }
 
     pub fn subresources(&self) -> ImageSubresources {
@@ -371,6 +438,7 @@ impl ImageFlags {
             | Self::DEPTH_STENCIL_ATTACHMENT)
     }
 
+    // XXX: Is every input attachment also a color or depth attachment?
     crate fn is_attachment(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT
             | Self::DEPTH_STENCIL_ATTACHMENT
@@ -557,7 +625,7 @@ fn validate_image_creation(
 
 // Partial validation
 fn validate_image_view_creation(
-    image: &Image,
+    image: &ImageDef,
     flags: ImageViewFlags,
     format: Format,
     _components: vk::ComponentMapping,
@@ -577,7 +645,7 @@ fn validate_image_view_creation(
     }
 
     // MUTABLE_FORMAT_BIT not yet supported
-    assert_eq!(format, image.format);
+    assert_eq!(format, image.format());
 
     image.validate_subresources(sub);
 }
@@ -594,7 +662,7 @@ mod tests {
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);
-        let hdr = Arc::new(Image::new_bound(
+        let _hdr_view = Arc::new(Image::new_bound_with(
             heap,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::Dim2,
@@ -603,9 +671,8 @@ mod tests {
             extent,
             1,
             1,
-        ));
-        let _hdr_view = hdr.create_full_view();
-        let depth = Arc::new(Image::new_bound(
+        )).create_full_view();
+        let _depth_view = Arc::new(Image::new_bound_with(
             heap,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
             ImageType::Dim2,
@@ -614,11 +681,10 @@ mod tests {
             extent,
             1,
             1,
-        ));
-        let _depth_view = depth.create_full_view();
+        )).create_full_view();
 
         // HDR cube texture
-        let env = Arc::new(Image::new_bound(
+        let _env_view = Arc::new(Image::new_bound_with(
             heap,
             Default::default(),
             ImageType::Cube,
@@ -627,8 +693,7 @@ mod tests {
             Extent3D::new(256, 256, 1),
             1,
             6,
-        ));
-        let _env_view = env.create_full_view();
+        )).create_full_view();
     }
 
     unsafe fn subresource_size(vars: testing::TestVars) {
@@ -637,8 +702,8 @@ mod tests {
         let device = vars.device();
 
         let extent = Extent3D::new(128, 128, 1);
-        let img = Arc::new(Image::new(
-            Arc::clone(&device),
+        let img = ImageDef::new(
+            device,
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,
@@ -646,7 +711,7 @@ mod tests {
             extent,
             extent.mip_levels(),
             6,
-        ));
+        );
 
         let aspect = vk::ImageAspectFlags::COLOR_BIT;
         let tx_size = img.format().size() as vk::DeviceSize;

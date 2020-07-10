@@ -189,7 +189,7 @@ crate fn create_render_target(
         flags |= ImageFlags::INPUT_ATTACHMENT;
     }
     unsafe {
-        Arc::new(Image::new_bound(
+        Arc::new(Image::new_bound_with(
             &state.heap,
             flags,
             ImageType::Dim2,

@@ -55,6 +55,10 @@ impl RenderLoop {
         })
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     crate fn state(&self) -> &SystemState {
         &self.state.as_ref().unwrap()
     }
@@ -79,19 +83,17 @@ impl RenderLoop {
         extent: Extent3D,
         mip_levels: u32,
         layers: u32,
-    ) -> Arc<Image> {
-        unsafe {
-            Arc::new(Image::new(
-                Arc::clone(&self.device),
-                flags,
-                ty,
-                format,
-                SampleCount::One,
-                extent,
-                mip_levels,
-                layers,
-            ))
-        }
+    ) -> Arc<ImageDef> {
+        Arc::new(ImageDef::new(
+            self.device(),
+            flags,
+            ty,
+            format,
+            SampleCount::One,
+            extent,
+            mip_levels,
+            layers,
+        ))
     }
 
     pub fn get_image_state(&self, image: &Arc<Image>) -> ResourceState {

@@ -987,7 +987,7 @@ mod tests {
             MemoryMapping::Mapped,
             (64 * 64 * format.size()) as _,
         );
-        let dst = Arc::new(Image::new_bound(
+        let dst = Arc::new(Image::new_bound_with(
             &state.heap,
             ImageFlags::NO_SAMPLE,
             ImageType::Dim2,

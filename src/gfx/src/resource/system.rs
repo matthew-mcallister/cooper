@@ -75,7 +75,7 @@ mod tests {
         Arc<Image>
     {
         let extent = Extent3D::new(width, height, 1);
-        Arc::new(Image::new(
+        Arc::new(Image::new_with(
             device,
             Default::default(),
             ImageType::Dim2,
