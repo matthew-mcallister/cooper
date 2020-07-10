@@ -27,6 +27,18 @@ bitflags! {
     }
 }
 
+bitflags! {
+    /// Flags that control how an image is bound to a shader variable or
+    /// framebuffer.
+    #[derive(Default)]
+    pub struct ImageViewFlags: u32 {
+        /// The image will be used as an image array.
+        const ARRAY = bit!(0);
+        /// The image will be used as a cube map.
+        const CUBE = bit!(1);
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ImageType {
     /// One-dimensional image or image array.
@@ -83,7 +95,8 @@ pub struct Image {
 #[derive(Debug)]
 pub struct ImageView {
     image: Arc<Image>,
-    ty: vk::ImageViewType,
+    flags: ImageViewFlags,
+    view_type: vk::ImageViewType,
     format: Format,
     components: vk::ComponentMapping,
     subresources: ImageSubresources,
@@ -250,21 +263,21 @@ impl Image {
     }
 
     crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
-        use ImageType::*;
-        use vk::ImageViewType as T;
-        let ty = match self.ty {
-            Dim1 if self.layers == 1 => T::_1D,
-            Dim1 => T::_1D_ARRAY,
-            Dim2 if self.layers == 1 => T::_2D,
-            Dim2 => T::_2D_ARRAY,
-            Dim3 => T::_3D,
-            Cube if self.layers == 6 => T::CUBE,
-            Cube => T::CUBE_ARRAY,
-        };
+        let mut flags = ImageViewFlags::empty();
+        let min_array_layers;
+        if self.ty == ImageType::Cube {
+            flags |= ImageViewFlags::CUBE;
+            min_array_layers = 6;
+        } else {
+            min_array_layers = 1;
+        }
+        if self.layers > min_array_layers {
+            flags |= ImageViewFlags::ARRAY;
+        }
         unsafe {
             Arc::new(ImageView::new(
                 Arc::clone(self),
-                ty,
+                flags,
                 self.format,
                 Default::default(),
                 self.all_subresources(),
@@ -285,19 +298,20 @@ impl Drop for ImageView {
 impl ImageView {
     crate unsafe fn new(
         image: Arc<Image>,
-        ty: vk::ImageViewType,
+        flags: ImageViewFlags,
         format: Format,
         components: vk::ComponentMapping,
         subresources: ImageSubresources,
     ) -> Self {
         let dt = &*image.device.table;
 
-        validate_image_view_creation(&image, ty, format, components,
+        validate_image_view_creation(&image, flags, format, components,
             &subresources);
 
+        let view_type = image.ty().view_type(flags);
         let create_info = vk::ImageViewCreateInfo {
             image: image.inner,
-            view_type: ty,
+            view_type,
             format: format.into(),
             components,
             subresource_range: subresources.into(),
@@ -309,7 +323,8 @@ impl ImageView {
 
         ImageView {
             image,
-            ty,
+            flags,
+            view_type,
             format,
             components,
             subresources,
@@ -321,31 +336,31 @@ impl ImageView {
         self.inner
     }
 
-    crate fn image(&self) -> &Arc<Image> {
+    pub fn image(&self) -> &Arc<Image> {
         &self.image
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         self.format
     }
 
-    crate fn samples(&self) -> SampleCount {
+    pub fn samples(&self) -> SampleCount {
         self.image.samples
     }
 
-    crate fn extent(&self) -> Extent3D {
+    pub fn extent(&self) -> Extent3D {
         self.image.extent
     }
 
-    crate fn subresources(&self) -> ImageSubresources {
+    pub fn subresources(&self) -> ImageSubresources {
         self.subresources
     }
 
-    crate fn layers(&self) -> u32 {
+    pub fn layers(&self) -> u32 {
         self.subresources.layer_count()
     }
 
-    crate fn mip_levels(&self) -> u32 {
+    pub fn mip_levels(&self) -> u32 {
         self.subresources.mip_level_count()
     }
 }
@@ -394,16 +409,35 @@ impl ImageType {
         }
     }
 
-    fn compat_view(self, view: vk::ImageViewType) -> bool {
-        use vk::ImageViewType as T;
-        let compat: &[vk::ImageViewType] = match self {
-            Self::Dim1 => &[T::_1D, T::_1D_ARRAY],
-            Self::Dim2 => &[T::_2D, T::_2D_ARRAY],
-            // 2D_ARRAY_COMPATIBLE_BIT not supported
-            Self::Dim3 => &[T::_3D],
-            Self::Cube => &[T::_2D, T::_2D_ARRAY, T::CUBE, T::CUBE_ARRAY],
-        };
-        compat.contains(&view)
+    fn view_type(self, flags: ImageViewFlags) -> vk::ImageViewType {
+        let array = flags.intersects(ImageViewFlags::ARRAY);
+        if flags.intersects(ImageViewFlags::CUBE) {
+            if array {
+                vk::ImageViewType::CUBE_ARRAY
+            } else {
+                vk::ImageViewType::CUBE
+            }
+        } else {
+            match (self, array) {
+                (ImageType::Dim1, false) => vk::ImageViewType::_1D,
+                (ImageType::Dim1, true) => vk::ImageViewType::_1D_ARRAY,
+                (ImageType::Dim2 | ImageType::Cube, false) =>
+                    vk::ImageViewType::_2D,
+                (ImageType::Dim2 | ImageType::Cube, true) =>
+                    vk::ImageViewType::_2D_ARRAY,
+                (ImageType::Dim3, _) => vk::ImageViewType::_3D,
+            }
+        }
+    }
+
+    fn compat_view_flags(self) -> ImageViewFlags {
+        use ImageViewFlags as Flags;
+        match self {
+            Self::Dim1 => Flags::ARRAY,
+            Self::Dim2 => Flags::ARRAY,
+            Self::Dim3 => Flags::empty(),
+            Self::Cube => Flags::ARRAY | Flags::CUBE,
+        }
     }
 }
 
@@ -454,6 +488,22 @@ impl ImageSubresources {
     }
 }
 
+impl From<SampleCount> for vk::SampleCountFlags {
+    fn from(samples: SampleCount) -> Self {
+        use vk::SampleCountFlags as Flags;
+        use SampleCount::*;
+        match samples {
+            One => Flags::_1_BIT,
+            Two => Flags::_2_BIT,
+            Four => Flags::_4_BIT,
+            Eight => Flags::_8_BIT,
+            Sixteen => Flags::_16_BIT,
+            ThirtyTwo => Flags::_32_BIT,
+            SixtyFour => Flags::_64_BIT,
+        }
+    }
+}
+
 // Partial validation
 fn validate_image_creation(
     device: &Device,
@@ -486,10 +536,12 @@ fn validate_image_creation(
     }
 
     let dim: vk::ImageType = ty.into();
-    if dim == vk::ImageType::_1D {
-        assert_eq!((extent.height, extent.depth), (1, 1));
-    } else if dim == vk::ImageType::_2D {
-        assert_eq!(extent.depth, 1);
+    match dim {
+        vk::ImageType::_1D =>
+            assert_eq!((extent.height, extent.depth), (1, 1)),
+        vk::ImageType::_2D => assert_eq!(extent.depth, 1),
+        vk::ImageType::_3D => assert_eq!(layers, 1),
+        _ => unreachable!(),
     }
 
     if flags.is_attachment() {
@@ -506,44 +558,28 @@ fn validate_image_creation(
 // Partial validation
 fn validate_image_view_creation(
     image: &Image,
-    ty: vk::ImageViewType,
+    flags: ImageViewFlags,
     format: Format,
     _components: vk::ComponentMapping,
     sub: &ImageSubresources,
 ) {
-    assert!(image.ty.compat_view(ty), "{:?}, {:?}", image.ty, ty);
+    assert!(image.ty().compat_view_flags().contains(flags));
 
-    if ty == vk::ImageViewType::CUBE {
-        assert_eq!(sub.layer_count(), 6);
-    } else if ty == vk::ImageViewType::CUBE_ARRAY {
-        assert_eq!(sub.layer_count() % 6, 0);
-    }
-
-    if ty == vk::ImageViewType::_3D {
-        assert_eq!(sub.layers, [0, 1]);
+    let array = flags.intersects(ImageViewFlags::ARRAY);
+    if flags.intersects(ImageViewFlags::CUBE) {
+        if array {
+            assert_eq!(sub.layer_count() % 6, 0);
+        } else {
+            assert_eq!(sub.layer_count(), 6);
+        }
+    } else if !array {
+        assert_eq!(sub.layer_count(), 1);
     }
 
     // MUTABLE_FORMAT_BIT not yet supported
     assert_eq!(format, image.format);
 
-    // TODO: Check format is compatible
     image.validate_subresources(sub);
-}
-
-impl From<SampleCount> for vk::SampleCountFlags {
-    fn from(samples: SampleCount) -> Self {
-        use vk::SampleCountFlags as Flags;
-        use SampleCount::*;
-        match samples {
-            One => Flags::_1_BIT,
-            Two => Flags::_2_BIT,
-            Four => Flags::_4_BIT,
-            Eight => Flags::_8_BIT,
-            Sixteen => Flags::_16_BIT,
-            ThirtyTwo => Flags::_32_BIT,
-            SixtyFour => Flags::_64_BIT,
-        }
-    }
 }
 
 #[cfg(test)]

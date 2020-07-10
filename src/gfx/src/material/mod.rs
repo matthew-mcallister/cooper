@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use base::PartialEnumMap;
-use bitflags::*;
 use enum_map::{Enum, EnumMap};
 
 use crate::{
-    DescriptorSet, Globals, Image, ImageSubresources, ImageType, ImageView,
-    Sampler, ShaderStageMap, SystemState,
+    DescriptorSet, Globals, Image, ImageSubresources, ImageView,
+    ImageViewFlags, Sampler, ShaderStageMap, SystemState,
 };
 
 mod simple;
@@ -35,20 +34,11 @@ pub enum MaterialImage {
     // etc.
 }
 
-bitflags! {
-    /// Flags that control how an image is bound to a shader variable.
-    #[derive(Default)]
-    pub struct ImageBindingFlags: u32 {
-        /// The image will be used as a cube map.
-        const CUBE = bit!(0);
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct ImageBindingDesc {
     // TODO: Maybe should create an "ImageViewDesc" type.
     pub image: Arc<Image>,
-    pub flags: ImageBindingFlags,
+    pub flags: ImageViewFlags,
     pub subresources: ImageSubresources,
     pub sampler: Arc<Sampler>,
 }

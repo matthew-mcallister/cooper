@@ -55,6 +55,7 @@ impl Globals {
             256,
         ));
 
+        // TODO: These need layout transitions before use
         let empty_image_2d = Arc::new(Image::new_bound(
             heap,
             Default::default(),
@@ -75,6 +76,7 @@ impl Globals {
             1,
             1,
         )).create_full_view();
+
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
             min_filter: Filter::Linear,
