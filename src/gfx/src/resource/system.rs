@@ -6,12 +6,12 @@ use super::{
 };
 
 #[derive(Debug)]
-crate struct ResourceManager {
+crate struct ResourceSystem {
     state: ResourceStateTable,
     sched: UploadScheduler,
 }
 
-impl ResourceManager {
+impl ResourceSystem {
     crate fn new(device: Arc<Device>) -> Self {
         Self {
             state: ResourceStateTable::new(),
@@ -95,7 +95,7 @@ mod tests {
         let images: Vec<_> = (0..7)
             .map(|n| test_image(Arc::clone(&device), 2 << n, 2 << n))
             .collect();
-        let mut resources = ResourceManager::new(Arc::clone(device));
+        let mut resources = ResourceSystem::new(Arc::clone(device));
 
         for image in images.iter() {
             assert_eq!(

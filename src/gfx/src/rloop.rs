@@ -11,7 +11,7 @@ pub struct RenderLoop {
     globals: Arc<Globals>,
     frame: FrameControl,
     renderer: WorldRenderer,
-    resources: ResourceManager,
+    resources: ResourceSystem,
     // This is declared last so that it will be dropped last
     state: Option<Box<SystemState>>,
 }
@@ -40,7 +40,7 @@ impl RenderLoop {
             &swapchain,
             Arc::clone(&gfx_queue),
         );
-        let resources = ResourceManager::new(Arc::clone(&device));
+        let resources = ResourceSystem::new(Arc::clone(&device));
 
         let frame = FrameControl::new(swapchain);
 

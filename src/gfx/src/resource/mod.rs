@@ -1,12 +1,12 @@
-mod manager;
 mod scheduler;
 mod staging;
 mod state;
+mod system;
 
-crate use manager::*;
 use scheduler::*;
 use staging::*;
 crate use state::*;
+crate use system::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResourceState {
@@ -16,6 +16,6 @@ pub enum ResourceState {
 }
 
 unit::collect_tests![
-    manager,
     staging,
+    system,
 ];
