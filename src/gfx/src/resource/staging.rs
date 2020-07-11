@@ -167,7 +167,7 @@ mod tests {
             XferCmds::new(CmdBuffer::new(pool, CmdBufferLevel::Primary));
 
         let extent = Extent3D::new(128, 128, 1);
-        let img = Arc::new(Image::new_bound_with(
+        let img = Arc::new(Image::with(
             heap,
             Default::default(),
             ImageType::Dim2,

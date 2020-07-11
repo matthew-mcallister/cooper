@@ -1,5 +1,6 @@
 TODO.md
 /target
 **/*.rs.bk
+**/.cargo
 
 **/generated

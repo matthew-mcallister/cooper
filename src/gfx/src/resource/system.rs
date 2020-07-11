@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{CmdPool, Device, Image, ImageHeap, Queue, WaitResult};
+use crate::{CmdPool, Device, ImageDef, ImageHeap, Queue, WaitResult};
 use super::{
     ImageUploadTask, ResourceState, ResourceStateTable, UploadScheduler,
 };
@@ -27,19 +27,19 @@ impl ResourceSystem {
         self.sched.new_frame();
     }
 
-    crate fn get_image_state(&self, image: &Arc<Image>) -> ResourceState {
+    crate fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
         self.state.get_state(image, self.sched.avail_batch())
     }
 
     crate fn upload_image(
         &mut self,
-        image: &Arc<Image>,
+        image: &Arc<ImageDef>,
         src: Arc<Vec<u8>>,
         src_offset: usize,
     ) {
         // Mipmap generation not available yet
         assert_eq!(image.mip_levels(), 1);
-        self.state.register(image);
+        assert!(!image.flags().is_attachment());
         self.sched.add_task(ImageUploadTask {
             src,
             src_offset,
@@ -71,11 +71,11 @@ mod tests {
     use crate::*;
     use super::*;
 
-    unsafe fn test_image(device: Arc<Device>, width: u32, height: u32) ->
-        Arc<Image>
+    unsafe fn test_image(device: &Arc<Device>, width: u32, height: u32) ->
+        Arc<ImageDef>
     {
         let extent = Extent3D::new(width, height, 1);
-        Arc::new(Image::new_with(
+        Arc::new(ImageDef::new(
             device,
             Default::default(),
             ImageType::Dim2,
@@ -93,7 +93,7 @@ mod tests {
 
         let state = SystemState::new(Arc::clone(&device));
         let images: Vec<_> = (0..7)
-            .map(|n| test_image(Arc::clone(&device), 2 << n, 2 << n))
+            .map(|n| test_image(&device, 2 << n, 2 << n))
             .collect();
         let mut resources = ResourceSystem::new(Arc::clone(device));
 

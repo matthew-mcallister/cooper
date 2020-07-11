@@ -37,7 +37,7 @@ pub enum MaterialImage {
 #[derive(Clone, Debug)]
 pub struct ImageBindingDesc {
     // TODO: Maybe should create an "ImageViewDesc" type.
-    pub image: Arc<Image>,
+    crate image: Arc<Image>,    // TODO: Not constructible yet
     pub flags: ImageViewFlags,
     pub subresources: ImageSubresources,
     pub sampler: Arc<Sampler>,

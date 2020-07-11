@@ -96,13 +96,13 @@ impl RenderLoop {
         ))
     }
 
-    pub fn get_image_state(&self, image: &Arc<Image>) -> ResourceState {
+    pub fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
         self.resources.get_image_state(image)
     }
 
     pub fn upload_image(
         &mut self,
-        image: &Arc<Image>,
+        image: &Arc<ImageDef>,
         src: Arc<Vec<u8>>,
         src_offset: usize,
     ) {

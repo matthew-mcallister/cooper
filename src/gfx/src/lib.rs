@@ -4,6 +4,7 @@
     const_generics,
     cow_is_borrowed,
     crate_visibility_modifier,
+    hash_raw_entry,
     maybe_uninit_extra,
     maybe_uninit_slice_assume_init,
     or_patterns,

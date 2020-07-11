@@ -56,7 +56,7 @@ impl Globals {
         ));
 
         // TODO: These need layout transitions before use
-        let empty_image_2d = Arc::new(Image::new_bound_with(
+        let empty_image_2d = Arc::new(Image::with(
             heap,
             Default::default(),
             ImageType::Dim2,
@@ -66,7 +66,7 @@ impl Globals {
             1,
             1,
         )).create_full_view();
-        let empty_storage_image_2d = Arc::new(Image::new_bound_with(
+        let empty_storage_image_2d = Arc::new(Image::with(
             heap,
             ImageFlags::STORAGE,
             ImageType::Dim2,

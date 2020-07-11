@@ -162,7 +162,6 @@ fn validate_framebuffer_creation(
         assert_eq!(attch.extent(), extent);
 
         if let AttachmentImage::Image(view) = &attch {
-            assert!(view.image().alloc().is_some());
             assert_eq!(view.layers(), 1);
             assert_eq!(view.mip_levels(), 1);
         }
@@ -188,18 +187,16 @@ crate fn create_render_target(
     if render_pass.is_input_attachment(index) {
         flags |= ImageFlags::INPUT_ATTACHMENT;
     }
-    unsafe {
-        Arc::new(Image::new_bound_with(
-            &state.heap,
-            flags,
-            ImageType::Dim2,
-            attch.format,
-            attch.samples,
-            extent.into(),
-            1,
-            1,
-        )).create_full_view()
-    }
+    Arc::new(Image::with(
+        &state.heap,
+        flags,
+        ImageType::Dim2,
+        attch.format,
+        attch.samples,
+        extent.into(),
+        1,
+        1,
+    )).create_full_view()
 }
 
 #[cfg(test)]

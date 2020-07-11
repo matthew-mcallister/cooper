@@ -75,11 +75,11 @@ pub struct ImageSubresources {
 }
 
 #[derive(Debug)]
-pub struct Image {
+crate struct Image {
     device: Arc<Device>,
     def: Arc<ImageDef>,
     inner: vk::Image,
-    alloc: Option<DeviceAlloc>,
+    alloc: DeviceAlloc,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -94,7 +94,7 @@ pub struct ImageDef {
 }
 
 #[derive(Debug)]
-pub struct ImageView {
+crate struct ImageView {
     image: Arc<Image>,
     flags: ImageViewFlags,
     view_type: vk::ImageViewType,
@@ -114,7 +114,8 @@ impl Drop for Image {
 }
 
 impl Image {
-    crate unsafe fn new(device: Arc<Device>, def: Arc<ImageDef>) -> Self {
+    crate fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
+        let device = Arc::clone(heap.device());
         let dt = &*device.table;
 
         let ImageDef {
@@ -134,39 +135,22 @@ impl Image {
             ..Default::default()
         };
         let mut image = vk::null();
-        dt.create_image(&create_info, ptr::null(), &mut image)
-            .check().unwrap();
+        unsafe {
+            dt.create_image(&create_info, ptr::null(), &mut image)
+                .check().unwrap();
+        }
+
+        let alloc = unsafe { heap.bind(image) };
 
         Self {
             device,
             def,
             inner: image,
-            alloc: None,
+            alloc,
         }
     }
 
-    crate unsafe fn new_with(
-        device: Arc<Device>,
-        flags: ImageFlags,
-        ty: ImageType,
-        format: Format,
-        samples: SampleCount,
-        extent: Extent3D,
-        mip_levels: u32,
-        layers: u32,
-    ) -> Self {
-        let def = Arc::new(ImageDef::new(
-            &device, flags, ty, format, samples, extent, mip_levels, layers));
-        Self::new(device, def)
-    }
-
-    crate unsafe fn new_bound(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
-        let mut img = Self::new(Arc::clone(heap.device()), def);
-        img.bind(heap);
-        img
-    }
-
-    crate unsafe fn new_bound_with(
+    crate fn with(
         heap: &ImageHeap,
         flags: ImageFlags,
         ty: ImageType,
@@ -178,8 +162,9 @@ impl Image {
     ) -> Self {
         let def = Arc::new(ImageDef::new(
             heap.device(), flags, ty, format, samples, extent, mip_levels,
-            layers));
-        Self::new_bound(heap, def)
+            layers,
+        ));
+        Self::new(heap, def)
     }
 
     crate fn inner(&self) -> vk::Image {
@@ -218,14 +203,8 @@ impl Image {
         self.def.mip_levels()
     }
 
-    crate fn alloc(&self) -> Option<&DeviceAlloc> {
-        self.alloc.as_ref()
-    }
-
-    // TODO; This name is confusing because `image.bind(heap)` is
-    // slightly different from `heap.bind(image)`.
-    crate fn bind(&mut self, heap: &ImageHeap) {
-        unsafe { self.alloc = Some(heap.bind(self.inner)); }
+    crate fn alloc(&self) -> &DeviceAlloc {
+        &self.alloc
     }
 
     crate fn validate_subresources(&self, sub: &ImageSubresources) {
@@ -403,31 +382,35 @@ impl ImageView {
         self.inner
     }
 
-    pub fn image(&self) -> &Arc<Image> {
+    crate fn image(&self) -> &Arc<Image> {
         &self.image
     }
 
-    pub fn format(&self) -> Format {
+    crate fn flags(&self) -> ImageViewFlags {
+        self.flags
+    }
+
+    crate fn format(&self) -> Format {
         self.format
     }
 
-    pub fn samples(&self) -> SampleCount {
+    crate fn samples(&self) -> SampleCount {
         self.image.samples()
     }
 
-    pub fn extent(&self) -> Extent3D {
+    crate fn extent(&self) -> Extent3D {
         self.image.extent()
     }
 
-    pub fn subresources(&self) -> ImageSubresources {
+    crate fn subresources(&self) -> ImageSubresources {
         self.subresources
     }
 
-    pub fn layers(&self) -> u32 {
+    crate fn layers(&self) -> u32 {
         self.subresources.layer_count()
     }
 
-    pub fn mip_levels(&self) -> u32 {
+    crate fn mip_levels(&self) -> u32 {
         self.subresources.mip_level_count()
     }
 }
@@ -662,7 +645,7 @@ mod tests {
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);
-        let _hdr_view = Arc::new(Image::new_bound_with(
+        let _hdr_view = Arc::new(Image::with(
             heap,
             Flags::NO_SAMPLE | Flags::COLOR_ATTACHMENT,
             ImageType::Dim2,
@@ -672,7 +655,7 @@ mod tests {
             1,
             1,
         )).create_full_view();
-        let _depth_view = Arc::new(Image::new_bound_with(
+        let _depth_view = Arc::new(Image::with(
             heap,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
             ImageType::Dim2,
@@ -684,7 +667,7 @@ mod tests {
         )).create_full_view();
 
         // HDR cube texture
-        let _env_view = Arc::new(Image::new_bound_with(
+        let _env_view = Arc::new(Image::with(
             heap,
             Default::default(),
             ImageType::Cube,

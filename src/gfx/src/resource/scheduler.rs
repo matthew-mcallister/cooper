@@ -4,7 +4,7 @@ use derive_more::From;
 use more_asserts::assert_lt;
 
 use crate::{
-    CmdBuffer, CmdPool, Device, Image, ImageFlags, ImageHeap,
+    CmdBuffer, CmdPool, Device, ImageDef, ImageFlags, ImageHeap,
     ImageSubresources, Queue, SubmitInfo, TimelineSemaphore, WaitResult,
     XferCmds,
 };
@@ -29,7 +29,7 @@ struct TaskProcessor {
 crate struct ImageUploadTask {
     crate src: Arc<Vec<u8>>,
     crate src_offset: usize,
-    crate image: Arc<Image>,
+    crate image: Arc<ImageDef>,
     crate subresources: ImageSubresources,
 }
 
@@ -93,9 +93,9 @@ fn upload_image(
     task: &ImageUploadTask,
 ) -> Result<(), StagingOutOfMemory> {
     assert!(!task.image.flags().contains(ImageFlags::NO_SAMPLE));
-    resources.prepare_for_upload(&task.image, batch_num, &heap);
+    let image = resources.prepare_for_upload(&task.image, batch_num, &heap);
     let buf = staging.stage_image(
-        &task.image,
+        image,
         true,
         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         vk::AccessFlags::SHADER_READ_BIT,
