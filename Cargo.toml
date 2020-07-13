@@ -7,3 +7,6 @@ members = [
     "src/unit",
     "src/window",
 ]
+
+[profile.dev]
+opt-level = 3
