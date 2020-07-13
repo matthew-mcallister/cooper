@@ -3,6 +3,7 @@ use std::sync::Arc;
 use base::ByPtr;
 use fnv::FnvHashMap as HashMap;
 use log::trace;
+use prelude::*;
 
 use crate::{Image, ImageDef, ImageHeap, ResourceState};
 
@@ -11,6 +12,8 @@ crate struct ResourceStateTable {
     images: HashMap<ByPtr<Arc<ImageDef>>, ResourceInfo>,
 }
 
+// TODO: Is it possible to store this on the ImageDef itself while still
+// obtaining exclusive access to it?
 #[derive(Debug, Default)]
 struct ResourceInfo {
     resource: Option<Arc<Image>>,
@@ -61,5 +64,13 @@ impl ResourceStateTable {
         info.resource.get_or_insert_with(|| {
             Arc::new(Image::new(heap, Arc::clone(image)))
         })
+    }
+
+    crate fn get_image(&self, image: &Arc<ImageDef>, avail_batch: u64) ->
+        Option<&Arc<Image>>
+    {
+        let info = self.images.get(ByPtr::by_ptr(image))?;
+        guard(info.state(avail_batch) == ResourceState::Available)?;
+        info.resource.as_ref()
     }
 }

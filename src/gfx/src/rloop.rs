@@ -75,7 +75,7 @@ impl RenderLoop {
         self.frame.frame_num()
     }
 
-    pub fn create_image(
+    pub fn define_image(
         &self,
         flags: ImageFlags,
         ty: ImageType,
@@ -109,13 +109,12 @@ impl RenderLoop {
         self.resources.upload_image(image, src, src_offset)
     }
 
-    pub fn create_material(
+    pub fn define_material(
         &self,
         program: MaterialProgram,
         images: MaterialImageBindings,
-    ) -> Arc<Material> {
-        self.renderer.materials()
-            .create_material(self.state(), &self.globals, program, images)
+    ) -> Arc<MaterialDef> {
+        self.renderer.materials().define_material(program, images)
     }
 
     crate fn new_frame(&mut self) {
@@ -130,6 +129,7 @@ impl RenderLoop {
         let state = Arc::new(self.state.take().unwrap());
         self.renderer.run(
             Arc::clone(&state),
+            &self.resources,
             world,
             self.frame_num(),
             self.frame.image_index(),

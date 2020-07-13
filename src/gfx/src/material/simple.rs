@@ -4,6 +4,7 @@ use std::sync::Arc;
 use base::partial_map;
 
 use crate::*;
+use super::*;
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[non_exhaustive]

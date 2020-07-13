@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use math::matrix::*;
 use math::vector::*;
 
@@ -7,11 +5,7 @@ use crate::*;
 
 #[derive(Debug)]
 crate struct SceneViewState {
-    state: Arc<Box<SystemState>>,
-    globals: Arc<Globals>,
     crate uniforms: SceneViewUniforms,
-    crate uniform_buffer: BufferBox<SceneViewUniforms>,
-    uniform_desc: DescriptorSet,
     crate force_cull_mode: Option<vk::CullModeFlags>,
 }
 
@@ -42,7 +36,7 @@ pub struct PerspectiveParams {
 #[repr(C, align(16))]
 crate struct PerspectiveUniforms {
     crate proj: Matrix4<f32>,
-    //crate proj_inv: [[f32; 4]; 4],
+    //crate proj_inv: Matrix4<f32>,
     crate tan_fovx2: f32,
     crate tan_fovy2: f32,
     crate z_near: f32,
@@ -66,54 +60,31 @@ crate struct SceneViewUniforms {
 }
 
 impl SceneViewState {
-    crate fn new(
-        state: Arc<Box<SystemState>>,
-        globals: Arc<Globals>,
-        world: &RenderWorldData,
-    ) -> Self {
-        let view = world.view;
-
-        let view_inv = view.rot.translate(view.pos);
-        let view_mat = view.rot.transpose().translate(-view.pos);
-
-        let uniforms = SceneViewUniforms {
-            perspective: view.perspective.into(),
-            view: view_mat,
-            view_inv,
-        };
-        let uniform_buffer = state.buffers.boxed(
-            BufferBinding::Uniform,
-            Lifetime::Frame,
-            uniforms,
-        );
-
-        let mut uniform_desc = state.descriptors.alloc(
-            Lifetime::Frame,
-            &globals.scene_unifs_layout,
-        );
-        state.device.set_name(&uniform_desc, "scene_uniform_desc");
-        uniform_desc.write_buffer(0, uniform_buffer.range());
-
+    crate fn new(view: &SceneView) -> Self {
         Self {
-            state,
-            globals,
-            uniforms,
-            uniform_buffer,
-            uniform_desc,
+            uniforms: view_uniforms(view),
             force_cull_mode: view.force_cull_mode,
         }
     }
 
-    crate fn uniform_desc(&self) -> &DescriptorSet {
-        &self.uniform_desc
+    crate fn write_descriptor(
+        &self,
+        state: &SystemState,
+        descriptors: &mut SceneDescriptors,
+    ) {
+        let uniform_buffer = state.buffers.boxed(
+            BufferBinding::Uniform, Lifetime::Frame, self.uniforms);
+        descriptors.write_view_uniforms(uniform_buffer.range());
     }
+}
 
-    crate fn state(&self) -> &SystemState {
-        &self.state
-    }
-
-    crate fn globals(&self) -> &Arc<Globals> {
-        &self.globals
+fn view_uniforms(view: &SceneView) -> SceneViewUniforms {
+    let view_inv = view.rot.translate(view.pos);
+    let view_mat = view.rot.transpose().translate(-view.pos);
+    SceneViewUniforms {
+        perspective: view.perspective.into(),
+        view: view_mat,
+        view_inv,
     }
 }
 

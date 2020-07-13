@@ -248,6 +248,8 @@ impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
     }
 }
 
+// TODO: BufferBox implements Deref, so *none* of these methods should
+// take self!
 impl<T: ?Sized> BufferBox<T> {
     unsafe fn new(alloc: BufferAlloc, ptr: *mut T) -> Self {
         BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
@@ -268,6 +270,14 @@ impl<T: ?Sized> BufferBox<T> {
 
     crate fn range(&self) -> BufferRange<'_> {
         self.alloc.range()
+    }
+
+    crate fn leak<'a>(this: Self) -> &'a mut T
+        where T: 'a
+    {
+        let ptr = unsafe { &mut *this.ptr.as_ptr() };
+        std::mem::forget(this);
+        ptr
     }
 }
 

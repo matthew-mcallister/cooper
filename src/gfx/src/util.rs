@@ -12,6 +12,7 @@ use std::os::raw::c_char;
 use std::ptr;
 
 use enum_map::{Enum, EnumMap};
+use math::{Matrix4, Matrix4x3};
 use prelude::*;
 
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
@@ -239,6 +240,22 @@ macro_rules! enum_map {
             map
         }
     };
+}
+
+#[macro_export]
+macro_rules! impl_from_via_default {
+    ($name:ident, $from:ty) => {
+        impl From<$from> for $name {
+            fn from(_: $from) -> Self {
+                Default::default()
+            }
+        }
+    }
+}
+
+#[inline(always)]
+crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
+    xform.transpose().submatrix(0, 0)
 }
 
 #[macro_export]

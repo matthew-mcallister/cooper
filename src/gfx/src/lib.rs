@@ -4,11 +4,13 @@
     const_generics,
     cow_is_borrowed,
     crate_visibility_modifier,
+    entry_insert,
     hash_raw_entry,
     maybe_uninit_extra,
     maybe_uninit_slice_assume_init,
     or_patterns,
     try_blocks,
+    try_trait,
     type_ascription,
 )]
 
@@ -39,6 +41,7 @@ mod frame;
 mod global;
 mod material;
 mod mesh;
+mod object;
 mod render;
 mod resource;
 mod rloop;
@@ -53,6 +56,7 @@ crate use frame::*;
 crate use global::*;
 pub use material::*;
 pub use mesh::*;
+pub use object::*;
 pub use render::*;
 crate use resource::*;
 pub use rloop::*;

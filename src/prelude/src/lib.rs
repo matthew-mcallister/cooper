@@ -1,3 +1,5 @@
+pub use self::opt as guard;
+
 #[macro_export]
 macro_rules! c_str {
     ($($str:expr),*$(,)*) => {

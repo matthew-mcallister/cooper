@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::{CmdPool, Device, ImageDef, ImageHeap, Queue, WaitResult};
-use super::{
-    ImageUploadTask, ResourceState, ResourceStateTable, UploadScheduler,
+use crate::device::{
+    CmdPool, Device, Image, ImageDef, ImageHeap, Queue, WaitResult,
 };
+use super::*;
 
 #[derive(Debug)]
 crate struct ResourceSystem {
@@ -46,6 +46,11 @@ impl ResourceSystem {
             image: Arc::clone(image),
             subresources: image.all_subresources(),
         });
+    }
+
+    crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>>
+    {
+        self.state.get_image(image, self.sched.avail_batch())
     }
 
     crate fn schedule(

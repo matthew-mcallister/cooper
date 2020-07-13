@@ -14,8 +14,7 @@ crate struct Globals {
     crate empty_image_2d: Arc<ImageView>,
     crate empty_storage_image_2d: Arc<ImageView>,
     crate empty_sampler: Arc<Sampler>,
-    crate instance_buf_layout: Arc<DescriptorSetLayout>,
-    crate scene_unifs_layout: Arc<DescriptorSetLayout>,
+    crate scene_desc_layout: Arc<DescriptorSetLayout>,
 }
 
 #[derive(Debug)]
@@ -86,29 +85,8 @@ impl Globals {
         };
         let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
 
-        let bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
-                    | vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            },
-        ];
-        let scene_unifs_layout = Arc::new(DescriptorSetLayout::from_bindings(
-            Arc::clone(&device), &bindings));
-        let bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
-                ..Default::default()
-            },
-        ];
-        let instance_buf_layout = Arc::new(DescriptorSetLayout::from_bindings(
-            Arc::clone(&device), &bindings));
+        let scene_desc_layout =
+            SceneDescriptors::create_layout(Arc::clone(&device));
 
         Globals {
             device,
@@ -118,8 +96,7 @@ impl Globals {
             empty_image_2d,
             empty_storage_image_2d,
             empty_sampler,
-            scene_unifs_layout,
-            instance_buf_layout,
+            scene_desc_layout,
         }
     }
 

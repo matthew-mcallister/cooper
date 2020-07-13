@@ -146,7 +146,9 @@ mod tests {
     use prelude::*;
     use super::*;
 
-    unsafe fn create_mesh(state: &SystemState) -> RenderMesh {
+    unsafe fn create_mesh(vars: crate::testing::TestVars) {
+        let state = SystemState::new(Arc::clone(vars.device()));
+
         let pos: &[[f32; 3]] = &[
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -159,84 +161,18 @@ mod tests {
             0, 2, 3,
         ];
         let mut builder = RenderMeshBuilder {
-            state,
+            state: &state,
             lifetime: Lifetime::Frame,
             mesh: Default::default(),
         };
         builder.index(IndexType::U16, idxs.as_bytes())
             .attr(VertexAttr::Position, Format::RGB32F, pos.as_bytes())
             .attr(VertexAttr::Normal, Format::RGB32F, normal.as_bytes());
-        builder.build()
-    }
-
-    unsafe fn bind_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let dev = || Arc::clone(&device);
-
-        // TODO: Slim down test boilerplate
-        let state = SystemState::new(dev());
-        let globals = Arc::new(Globals::new(&state));
-
-        let mesh = create_mesh(&state);
-
-        let pass = TrivialPass::new(dev());
-        let framebuffers = pass.create_framebuffers(&vars.swapchain);
-
-        let pool = Box::new(CmdPool::new(
-            vars.gfx_queue().family(),
-            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-        ));
-        let mut cmds = RenderPassCmds::new(
-            CmdBuffer::new(pool, CmdBufferLevel::Primary),
-            Arc::clone(&framebuffers[0]),
-            &[],
-            SubpassContents::Inline,
-        ).enter_subpass();
-
-        let layouts = vec![
-            Arc::clone(&globals.scene_unifs_layout),
-            Arc::clone(&globals.instance_buf_layout),
-        ];
-        let mut scene_unifs = state.descriptors.alloc(
-            Lifetime::Frame,
-            &layouts[0],
-        );
-        let mut inst_unifs = state.descriptors.alloc(
-            Lifetime::Frame,
-            &layouts[1],
-        );
-        globals.write_empty_descriptors(&mut scene_unifs);
-        globals.write_empty_descriptors(&mut inst_unifs);
-
-        let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
-
-        let shaders = &globals.shaders;
-        let vertex_stage = Arc::new(Arc::clone(&shaders.static_vert).into());
-        desc.stages.insert(ShaderStage::Vertex, vertex_stage);
-        let fragment_stage = Arc::new(Arc::clone(&shaders.simple_frag).into());
-        desc.stages.insert(ShaderStage::Fragment, fragment_stage);
-
-        desc.layout.set_layouts = layouts;
-        desc.vertex_layout = mesh.vertex_layout()
-            .to_input_layout(desc.vertex_stage().shader());
-
-        let pipe = state.pipelines.get_or_create_gfx(&desc);
-        cmds.bind_gfx_pipe(&pipe);
-
-        cmds.bind_gfx_descs(0, &scene_unifs);
-        cmds.bind_gfx_descs(1, &inst_unifs);
-
-        let idx = mesh.index.as_ref().unwrap();
-        cmds.bind_index_buffer(idx.alloc.range(), idx.ty);
-
-        cmds.bind_vertex_buffers(&mesh.data());
-        cmds.draw_indexed(mesh.vertex_count, 1);
-
-        let (_, _) = cmds.exit_subpass().end().end();
+        let _ = builder.build();
     }
 
     unit::declare_tests![
-        bind_test,
+        create_mesh,
     ];
 }
 

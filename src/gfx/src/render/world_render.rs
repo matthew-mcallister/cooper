@@ -90,7 +90,6 @@ crate struct WorldRenderer {
     framebuffers: Vec<Arc<Framebuffer>>,
     clear_values: [vk::ClearValue; 2],
     materials: MaterialSystem,
-    inst_renderer: Option<Box<InstanceRenderer>>,
 }
 
 impl WorldRenderer {
@@ -105,7 +104,6 @@ impl WorldRenderer {
         let framebuffers = basic_pass.create_framebuffers(state, &swapchain);
         let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
         let materials = MaterialSystem::new(state, &globals);
-        let inst = InstanceRenderer::new(state, &globals);
         Self {
             globals,
             scheduler,
@@ -113,7 +111,6 @@ impl WorldRenderer {
             framebuffers,
             clear_values,
             materials,
-            inst_renderer: Some(Box::new(inst)),
         }
     }
 
@@ -126,9 +123,34 @@ impl WorldRenderer {
         &self.materials
     }
 
+    fn objects_pass(
+        &mut self,
+        state: &Arc<Box<SystemState>>,
+        resources: &ResourceSystem,
+        mut descriptors: SceneDescriptors,
+        view: SceneViewState,
+        pass: &mut RenderPassNode,
+        objects: Vec<RenderObject>,
+    ) {
+        // TODO: It should be possible to get this code working when
+        // `objects` is empty
+        if objects.is_empty() { return; }
+
+        let items: Vec<_> = lower_objects(
+            &state, &self.globals, &view.uniforms, resources,
+            &mut self.materials, &mut descriptors, objects.into_iter(),
+        ).collect();
+
+        let mut inst = InstanceRenderer::new(&state, &self.globals);
+        pass.add_task(0, Box::new(move |cmds| {
+            inst.render(&view, &descriptors, &items, cmds);
+        }));
+    }
+
     crate fn run(
         &mut self,
         state: Arc<Box<SystemState>>,
+        resources: &ResourceSystem,
         world: RenderWorldData,
         frame_num: u64,
         swapchain_image: u32,
@@ -143,14 +165,13 @@ impl WorldRenderer {
         let clear_values = self.clear_values.to_vec();
         let mut pass = RenderPassNode::with_clear(framebuffer, clear_values);
 
-        let view =
-            SceneViewState::new(state, Arc::clone(&self.globals), &world);
-        let mut inst = self.inst_renderer.take().unwrap();
-        let (inst_return, task) = subpass_task(move |cmds| {
-            inst.render(&view, world.instances, cmds);
-            inst
-        });
-        pass.add_task(0, task);
+        let mut descriptors = SceneDescriptors::new(&state, &self.globals);
+        let view = SceneViewState::new(&world.view);
+        view.write_descriptor(&state, &mut descriptors);
+
+        let objects = world.objects; // TODO: reuse this memory
+        self.objects_pass(
+            &state, resources, descriptors, view, &mut pass, objects);
 
         self.scheduler.schedule_pass(
             pass,
@@ -161,7 +182,5 @@ impl WorldRenderer {
             &[0, frame_num],
             None,
         );
-
-        self.inst_renderer = Some(inst_return.take().unwrap());
     }
 }

@@ -8,7 +8,7 @@ pub struct RenderWorld {
 
 #[derive(Debug, Default)]
 crate struct RenderWorldData {
-    crate instances: Vec<MeshInstance>,
+    crate objects: Vec<RenderObject>,
     crate view: SceneView,
 }
 
@@ -48,8 +48,8 @@ impl RenderWorld {
         self.rloop.frame_num()
     }
 
-    pub fn add_instance(&mut self, inst: MeshInstance) {
-        self.data.instances.push(inst);
+    pub fn add_object(&mut self, obj: impl Into<RenderObject>) {
+        self.data.objects.push(obj.into());
     }
 
     pub fn render(self) -> Box<RenderLoop> {
@@ -65,7 +65,7 @@ mod tests {
     use std::sync::Arc;
     use super::*;
 
-    unsafe fn smoke_test(vars: crate::testing::TestVars) {
+    unsafe fn render_nothing(vars: crate::testing::TestVars) {
         let window = Arc::clone(&vars.swapchain.surface.window);
         let app_info = (*vars.device().instance.app_info).clone();
         let rl = Box::new(RenderLoop::new(app_info, window).unwrap());
@@ -73,7 +73,7 @@ mod tests {
         world.render();
     }
 
-    unit::declare_tests![smoke_test];
+    unit::declare_tests![render_nothing];
 }
 
 unit::collect_tests![tests];

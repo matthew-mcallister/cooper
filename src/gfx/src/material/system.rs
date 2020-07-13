@@ -1,61 +1,63 @@
 use std::sync::Arc;
 
-use crate::{Globals, SystemState};
+use crate::{SystemState, Globals};
+use crate::device::{DescriptorSet, ShaderStageMap};
+use crate::resource::ResourceSystem;
 use super::*;
+
+pub(super) trait MaterialFactory: std::fmt::Debug + Send + Sync {
+    fn create_descriptor_set(
+        &self,
+        state: &SystemState,
+        globals: &Globals,
+        images: &MaterialImageState,
+    ) -> Option<DescriptorSet>;
+
+    // TODO: Not necessary.
+    fn select_shaders(&self) -> ShaderStageMap;
+}
 
 #[derive(Debug)]
 crate struct MaterialSystem {
-    materials: EnumMap<MaterialProgram, Arc<dyn MaterialFactory>>,
+    factories: EnumMap<MaterialProgram, Arc<dyn MaterialFactory>>,
+    materials: MaterialStateTable,
 }
 
 impl MaterialSystem {
     crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
         let [checker, depth, normal] =
             SimpleMaterialFactory::new(_state, globals);
-        let materials = unsafe { std::mem::transmute([
+        let factories = unsafe { std::mem::transmute([
              Arc::new(checker),  // Checker
              Arc::new(depth),    // FragDepth
              Arc::new(normal),   // FragNormal
         ]: [Arc<dyn MaterialFactory>; 3]) };
         Self {
-            materials,
+            factories,
+            materials: MaterialStateTable::new(),
         }
     }
 
-    crate fn create_material(
+    crate fn define_material(
         &self,
-        system: &SystemState,
-        globals: &Globals,
         program: MaterialProgram,
         images: MaterialImageBindings,
-    ) -> Arc<Material> {
-        let images = create_image_bindings(images);
-        let renderer = Arc::clone(&self.materials[program]);
-        let desc = renderer.create_descriptor_set(system, globals, &images);
-        Arc::new(Material {
-            renderer,
+    ) -> Arc<MaterialDef> {
+        let factory = Arc::clone(&self.factories[program]);
+        Arc::new(MaterialDef {
+            factory,
             program,
-            images,
-            desc,
+            image_bindings: images,
         })
     }
-}
 
-fn create_image_bindings(bindings: MaterialImageBindings) -> MaterialImageState
-{
-    bindings.iter().map(|(name, binding)| {
-        // TODO: We currently create a new ImageView for every image,
-        // but they could conceivably be cached and shared.
-        let view = unsafe { Arc::new(ImageView::new(
-            Arc::clone(&binding.image),
-            binding.flags,
-            binding.image.format(),
-            Default::default(),
-            binding.subresources,
-        )) };
-        (name, ImageBindingState {
-            view,
-            sampler: Arc::clone(&binding.sampler),
-        })
-    }).collect()
+    crate fn get_or_create(
+        &mut self,
+        state: &SystemState,
+        globals: &Globals,
+        resources: &ResourceSystem,
+        def: &Arc<MaterialDef>,
+    ) -> Result<&Arc<Material>, ResourceUnavailable> {
+        self.materials.get_or_create(state, globals, resources, def)
+    }
 }
