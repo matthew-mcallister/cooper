@@ -7,6 +7,7 @@
     entry_insert,
     hash_raw_entry,
     maybe_uninit_extra,
+    maybe_uninit_ref,
     maybe_uninit_slice_assume_init,
     or_patterns,
     try_blocks,

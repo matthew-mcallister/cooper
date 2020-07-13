@@ -115,6 +115,13 @@ impl Shader {
     }
 }
 
+impl Debuggable for Shader {
+    type Handle = vk::ShaderModule;
+    fn handle(&self) -> Self::Handle {
+        self.module
+    }
+}
+
 impl ShaderSpec {
     crate fn new(shader: Arc<Shader>) -> Self {
         ShaderSpec {

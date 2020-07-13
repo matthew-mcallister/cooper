@@ -237,6 +237,12 @@ impl BufferAlloc {
             size: self.size,
         }
     }
+
+    /// Destroys `self` without deallocating memory.
+    fn leak(self) {
+        let this = MaybeUninit::new(self);
+        unsafe { std::ptr::read(&this.get_ref().buffer as *const Arc<_>); }
+    }
 }
 
 unsafe impl<T: ?Sized> Send for BufferBox<T> {}
@@ -272,12 +278,12 @@ impl<T: ?Sized> BufferBox<T> {
         self.alloc.range()
     }
 
-    crate fn leak<'a>(this: Self) -> &'a mut T
-        where T: 'a
-    {
-        let ptr = unsafe { &mut *this.ptr.as_ptr() };
-        std::mem::forget(this);
-        ptr
+    /// Unlike `Box::leak`, the pointer returned by this method deosn't
+    /// have `'static` lifetime---it may dangle. Hence, it is not safe
+    /// to dereference.
+    crate fn leak(this: Self) -> NonNull<T> {
+        this.alloc.leak();
+        this.ptr
     }
 }
 

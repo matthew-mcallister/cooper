@@ -6,7 +6,7 @@
 layout(set = 0, binding = 0) uniform blk_scene {
     SceneView g_scene_view;
 };
-layout(set = 1, binding = 0) readonly buffer blk_inst {
+layout(set = 0, binding = 1) readonly buffer blk_inst {
     Instance g_instances[];
 };
 

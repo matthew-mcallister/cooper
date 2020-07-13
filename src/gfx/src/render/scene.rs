@@ -73,11 +73,11 @@ impl SceneDescriptors {
         self.inner.layout()
     }
 
-    crate fn write_instance_uniforms(&mut self, buffer: BufferRange<'_>) {
-        self.inner.write_buffer(Binding::InstanceUniforms as _, buffer);
-    }
-
     crate fn write_view_uniforms(&mut self, buffer: BufferRange<'_>) {
         self.inner.write_buffer(Binding::ViewUniforms as _, buffer);
+    }
+
+    crate fn write_instance_uniforms(&mut self, buffer: BufferRange<'_>) {
+        self.inner.write_buffer(Binding::InstanceUniforms as _, buffer);
     }
 }

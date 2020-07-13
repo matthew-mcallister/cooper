@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
-autoexamples = false
 
 [lib]
 harness = false

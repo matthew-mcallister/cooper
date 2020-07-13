@@ -58,8 +58,10 @@ impl<'ctx> LowerCtx<'ctx> {
 
         // TODO: 99% sure lifetimes can be used to ensure that there are
         // no dangling pointers like this one at the end of a frame
-        let slice = BufferBox::leak(instance_buf);
-        let instance_data = unsafe { MaybeUninit::slice_get_mut(slice) };
+        let instance_data = unsafe {
+            let slice = &mut *BufferBox::leak(instance_buf).as_ptr();
+            MaybeUninit::slice_get_mut(slice)
+        };
 
         Self { state, globals, uniforms, resources, materials, instance_data }
     }

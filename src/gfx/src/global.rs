@@ -165,7 +165,7 @@ mod shader_sources {
         TRIVIAL_VERT = "trivial_vert";
         TRIVIAL_FRAG = "trivial_frag";
         STATIC_VERT = "static_vert";
-        DEBUG_DEPTH_FRAG = "simple_frag";
+        SIMPLE_FRAG = "simple_frag";
     }
 }
 
@@ -179,27 +179,26 @@ impl GlobalShaders {
             words
         };
 
-        let trivial_vert = Arc::new(Shader::new(
-            Arc::clone(&device),
-            to_words(shader_sources::TRIVIAL_VERT),
-        ));
-        let trivial_frag = Arc::new(Shader::new(
-            Arc::clone(&device),
-            to_words(shader_sources::TRIVIAL_FRAG),
-        ));
-        let static_vert = Arc::new(Shader::new(
-            Arc::clone(&device),
-            to_words(shader_sources::STATIC_VERT),
-        ));
-        let simple_frag = Arc::new(Shader::new(
-            Arc::clone(&device),
-            to_words(shader_sources::DEBUG_DEPTH_FRAG),
-        ));
-        GlobalShaders {
-            trivial_vert,
-            trivial_frag,
-            static_vert,
-            simple_frag,
+        macro_rules! build {
+            ($($field:ident => $shader:ident,)*) => {
+                GlobalShaders {
+                    $($field: {
+                        let shader = Arc::new(Shader::new(
+                            Arc::clone(&device),
+                            to_words(shader_sources::$shader),
+                        ));
+                        device.set_name(&*shader, stringify!($field));
+                        shader
+                    },)*
+                }
+            }
+        }
+
+        build! {
+            trivial_vert => TRIVIAL_VERT,
+            trivial_frag => TRIVIAL_FRAG,
+            static_vert => STATIC_VERT,
+            simple_frag => SIMPLE_FRAG,
         }
     }
 }

@@ -1,7 +1,9 @@
-#![feature(crate_visibility_modifier)]
-#![feature(exclusive_range_pattern)]
-#![feature(exact_size_is_empty)]
-#![feature(try_blocks)]
+#![feature(
+    crate_visibility_modifier,
+    exclusive_range_pattern,
+    exact_size_is_empty,
+    try_blocks,
+)]
 
 use std::sync::Arc;
 
@@ -23,7 +25,7 @@ const NAME: &'static str = "debug example";
 unsafe fn render_world(
     world: &mut RenderWorld,
     mesh: &Mesh,
-    materials: &[Arc<Material>],
+    materials: &[Arc<MaterialDef>],
 ) {
     let mut view = SceneView::default();
 
@@ -64,13 +66,13 @@ unsafe fn render_world(
     ]);
 
     let idx = (world.frame_num() / 109) as usize;
-    let material = &materials[idx % materials.len()];
-    world.add_instance(MeshInstance {
+    let material = Arc::clone(&materials[idx % materials.len()]);
+    world.add_object(MeshInstance {
         /// Assumed to be orthogonal.
         mesh: Arc::clone(&mesh.render_mesh),
         rot,
         pos: Default::default(),
-        material: Arc::clone(material),
+        material,
     });
 }
 
@@ -97,9 +99,9 @@ unsafe fn unsafe_main() {
         let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
 
         let materials = [
-            rl.create_material(MaterialProgram::Checker, Default::default()),
-            rl.create_material(MaterialProgram::FragDepth, Default::default()),
-            rl.create_material(MaterialProgram::FragNormal, Default::default()),
+            rl.define_material(MaterialProgram::Checker, Default::default()),
+            rl.define_material(MaterialProgram::FragDepth, Default::default()),
+            rl.define_material(MaterialProgram::FragNormal, Default::default()),
         ];
 
         let mut rl = Some(Box::new(rl));
@@ -109,10 +111,7 @@ unsafe fn unsafe_main() {
             rl = Some(world.render());
         }
 
-        // Manually dropping things sucks; for that reason it seems
-        // better to dynamically initialize them inside the main loop.
         std::mem::drop(mesh);
-        std::mem::drop(materials);
 
         Ok(())
     });
