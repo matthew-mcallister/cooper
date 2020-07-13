@@ -74,7 +74,7 @@ impl SceneViewState {
     ) {
         let uniform_buffer = state.buffers.boxed(
             BufferBinding::Uniform, Lifetime::Frame, self.uniforms);
-        descriptors.write_view_uniforms(uniform_buffer.range());
+        descriptors.write_view_uniforms(BufferBox::range(&uniform_buffer));
     }
 }
 

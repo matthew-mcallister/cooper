@@ -92,8 +92,8 @@ impl<'a> RenderMeshBuilder<'a> {
         assert_eq!(data.len() % ty.size(), 0);
         let binding = BufferBinding::Index;
         let lifetime = self.lifetime;
-        let alloc = self.state.buffers.box_slice(binding, lifetime, data)
-            .into_inner();
+        let alloc = BufferBox::into_inner(
+            self.state.buffers.box_slice(binding, lifetime, data));
         self.mesh.index = Some(IndexBuffer { alloc, ty });
         self
     }
@@ -104,8 +104,8 @@ impl<'a> RenderMeshBuilder<'a> {
         assert_eq!(data.len() % format.size(), 0);
         let binding = BufferBinding::Vertex;
         let lifetime = self.lifetime;
-        let alloc = self.state.buffers.box_slice(binding, lifetime, data)
-            .into_inner();
+        let alloc = BufferBox::into_inner(
+            self.state.buffers.box_slice(binding, lifetime, data));
         self.mesh.bindings.insert(attr, AttrBuffer { alloc, format });
         self
     }

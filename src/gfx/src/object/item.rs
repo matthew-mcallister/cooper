@@ -54,7 +54,7 @@ impl<'ctx> LowerCtx<'ctx> {
             Lifetime::Frame,
             object_count,
         );
-        descs.write_instance_uniforms(instance_buf.range());
+        descs.write_instance_uniforms(BufferBox::range(&instance_buf));
 
         // TODO: 99% sure lifetimes can be used to ensure that there are
         // no dangling pointers like this one at the end of a frame

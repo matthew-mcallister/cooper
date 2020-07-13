@@ -45,6 +45,8 @@ crate struct BufferAlloc {
     size: vk::DeviceSize,
 }
 
+/// Warning: This type does *not* call `T::drop`. Unfortunately Rust
+/// does not allow us to express this as a type constraint yet.
 #[derive(Debug)]
 crate struct BufferBox<T: ?Sized> {
     alloc: BufferAlloc,
@@ -254,28 +256,21 @@ impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
     }
 }
 
-// TODO: BufferBox implements Deref, so *none* of these methods should
-// take self!
 impl<T: ?Sized> BufferBox<T> {
     unsafe fn new(alloc: BufferAlloc, ptr: *mut T) -> Self {
         BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
     }
 
-    crate fn alloc(&self) -> &BufferAlloc {
-        &self.alloc
+    crate fn alloc(this: &Self) -> &BufferAlloc {
+        &this.alloc
     }
 
-    crate fn into_inner(self) -> BufferAlloc {
-        unsafe {
-            std::ptr::drop_in_place(self.ptr.as_ptr());
-            let alloc = ptr::read(&self.alloc);
-            std::mem::forget(self);
-            alloc
-        }
+    crate fn range(this: &Self) -> BufferRange<'_> {
+        this.alloc.range()
     }
 
-    crate fn range(&self) -> BufferRange<'_> {
-        self.alloc.range()
+    crate fn into_inner(this: Self) -> BufferAlloc {
+        this.alloc
     }
 
     /// Unlike `Box::leak`, the pointer returned by this method deosn't
