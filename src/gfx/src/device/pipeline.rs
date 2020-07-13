@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use base::PartialEnumMap;
 use derivative::Derivative;
+use enum_map::Enum;
 use log::trace;
 
 use crate::*;
@@ -38,6 +39,16 @@ crate struct GraphicsPipeline {
     desc: GraphicsPipelineDesc,
 }
 
+#[derive(Clone, Copy, Debug, Derivative, Enum, Eq, Hash, PartialEq)]
+#[derivative(Default)]
+pub enum CullMode {
+    None = 0,
+    Front = 1,
+    #[derivative(Default)]
+    Back = 2,
+    FrontAndBack = 3,
+}
+
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
 crate struct GraphicsPipelineDesc {
@@ -48,7 +59,7 @@ crate struct GraphicsPipelineDesc {
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
     crate stages: ShaderStageMap,
-    crate cull_mode: vk::CullModeFlags,
+    crate cull_mode: CullMode,
     crate wireframe: bool,
     crate depth_test: bool,
     crate depth_write: bool,
@@ -226,7 +237,7 @@ impl GraphicsPipelineDesc {
             layout: Default::default(),
             vertex_layout: Default::default(),
             stages: Default::default(),
-            cull_mode: vk::CullModeFlags::BACK_BIT,
+            cull_mode: Default::default(),
             wireframe: Default::default(),
             depth_test: Default::default(),
             depth_write: Default::default(),
@@ -326,7 +337,7 @@ unsafe fn create_graphics_pipeline(
         polygon_mode:
             if desc.wireframe { vk::PolygonMode::LINE }
             else { vk::PolygonMode::FILL },
-        cull_mode: desc.cull_mode,
+        cull_mode: desc.cull_mode.into(),
         front_face: vk::FrontFace::COUNTER_CLOCKWISE,
         depth_bias_enable: bool32(desc.depth_bias),
         // Depth bias parameters set dynamically
@@ -428,6 +439,17 @@ impl PipelineLayoutCache {
             Arc::clone(&self.device),
             desc.clone(),
         )))
+    }
+}
+
+impl From<CullMode> for vk::CullModeFlags {
+    fn from(mode: CullMode) -> Self {
+        match mode {
+            CullMode::None => Self::NONE,
+            CullMode::Front => Self::FRONT_BIT,
+            CullMode::Back => Self::BACK_BIT,
+            CullMode::FrontAndBack => Self::FRONT_AND_BACK,
+        }
     }
 }
 

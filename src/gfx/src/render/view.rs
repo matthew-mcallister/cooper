@@ -6,7 +6,7 @@ use crate::*;
 #[derive(Debug)]
 crate struct SceneViewState {
     crate uniforms: SceneViewUniforms,
-    crate force_cull_mode: Option<vk::CullModeFlags>,
+    crate force_cull_mode: Option<CullMode>,
 }
 
 // TODO: Override Default
@@ -19,7 +19,7 @@ pub struct SceneView {
     /// Position of view camera.
     pub pos: Vector3<f32>,
     /// For debugging
-    pub force_cull_mode: Option<vk::CullModeFlags>,
+    pub force_cull_mode: Option<CullMode>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

@@ -43,7 +43,7 @@ unsafe fn render_instances(
 
     let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
     desc.cull_mode = view.force_cull_mode
-        .unwrap_or(vk::CullModeFlags::BACK_BIT);
+        .unwrap_or(CullMode::Back);
     desc.depth_test = true;
     desc.depth_write = true;
     desc.depth_cmp_op = vk::CompareOp::GREATER;
