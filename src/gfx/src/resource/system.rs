@@ -31,6 +31,8 @@ impl ResourceSystem {
         self.state.get_state(image, self.sched.avail_batch())
     }
 
+    // TODO: For stuff like storage images, it could potentially be
+    // useful to be able to do ad-hoc layout transitions with no upload.
     crate fn upload_image(
         &mut self,
         image: &Arc<ImageDef>,

@@ -11,8 +11,10 @@ crate struct Globals {
     crate shaders: GlobalShaders,
     crate empty_uniform_buffer: Arc<BufferAlloc>,
     crate empty_storage_buffer: Arc<BufferAlloc>,
-    crate empty_image_2d: Arc<ImageView>,
-    crate empty_storage_image_2d: Arc<ImageView>,
+    crate immediate_image_2d: Arc<ImageView>,
+    crate immediate_storage_image_2d: Arc<ImageView>,
+    crate empty_image_2d: Arc<ImageDef>,
+    crate empty_storage_image_2d: Arc<ImageDef>,
     crate empty_sampler: Arc<Sampler>,
     crate scene_desc_layout: Arc<DescriptorSetLayout>,
 }
@@ -54,8 +56,7 @@ impl Globals {
             256,
         ));
 
-        // TODO: These need layout transitions before use
-        let empty_image_2d = Arc::new(Image::with(
+        let immediate_image_2d = Arc::new(Image::with(
             heap,
             Default::default(),
             ImageType::Dim2,
@@ -65,9 +66,9 @@ impl Globals {
             1,
             1,
         )).create_full_view();
-        let empty_storage_image_2d = Arc::new(Image::with(
+        let immediate_storage_image_2d = Arc::new(Image::with(
             heap,
-            ImageFlags::STORAGE,
+            ImageFlags::STORAGE | ImageFlags::NO_SAMPLE,
             ImageType::Dim2,
             Format::RGBA8,
             SampleCount::One,
@@ -75,6 +76,27 @@ impl Globals {
             1,
             1,
         )).create_full_view();
+
+        let empty_image_2d = Arc::new(ImageDef::new(
+            &device,
+            Default::default(),
+            ImageType::Dim2,
+            Format::RGBA8,
+            SampleCount::One,
+            (1, 1).into(),
+            1,
+            1,
+        ));
+        let empty_storage_image_2d = Arc::new(ImageDef::new(
+            &device,
+            ImageFlags::STORAGE | ImageFlags::NO_SAMPLE,
+            ImageType::Dim2,
+            Format::RGBA8,
+            SampleCount::One,
+            (1, 1).into(),
+            1,
+            1,
+        ));
 
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
@@ -93,6 +115,8 @@ impl Globals {
             shaders,
             empty_uniform_buffer,
             empty_storage_buffer,
+            immediate_image_2d,
+            immediate_storage_image_2d,
             empty_image_2d,
             empty_storage_image_2d,
             empty_sampler,
@@ -100,6 +124,21 @@ impl Globals {
         }
     }
 
+    crate fn upload_images(&self, resources: &mut ResourceSystem) {
+        let image_data = Arc::new(vec![0, 0, 0, 0]);
+        resources.upload_image(
+            &self.empty_image_2d,
+            Arc::clone(&image_data),
+            0,
+        );
+        resources.upload_image(
+            &self.empty_storage_image_2d,
+            image_data,
+            0,
+        );
+    }
+
+    // TODO: This is obsolete
     crate unsafe fn write_empty_descriptors(&self, desc: &mut DescriptorSet) {
         let layout = Arc::clone(&desc.layout());
         for i in 0..layout.bindings().len() {
@@ -119,18 +158,18 @@ impl Globals {
         match layout_binding.descriptor_type {
             Dt::SAMPLER => todo!(),
             Dt::COMBINED_IMAGE_SAMPLER => {
-                let views = vec![&self.empty_image_2d; count];
+                let views = vec![&self.immediate_image_2d; count];
                 let samplers = vec![&self.empty_sampler; count];
                 let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
                 desc.write_images(binding, 0, &views, layout, Some(&samplers));
             },
             Dt::SAMPLED_IMAGE => {
-                let views = vec![&self.empty_image_2d; count];
+                let views = vec![&self.immediate_image_2d; count];
                 let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
                 desc.write_images(binding, 0, &views, layout, None);
             },
             Dt::STORAGE_IMAGE => {
-                let views = vec![&self.empty_storage_image_2d; count];
+                let views = vec![&self.immediate_storage_image_2d; count];
                 let layout = vk::ImageLayout::GENERAL;
                 desc.write_images(binding, 0, &views, layout, None);
             },

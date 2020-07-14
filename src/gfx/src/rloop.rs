@@ -34,13 +34,15 @@ impl RenderLoop {
         let state = Box::new(SystemState::new(Arc::clone(&device)));
         let globals = Arc::new(Globals::new(&state));
 
+        let mut resources = ResourceSystem::new(Arc::clone(&device));
+        globals.upload_images(&mut resources);
+
         let renderer = WorldRenderer::new(
             &state,
             Arc::clone(&globals),
             &swapchain,
             Arc::clone(&gfx_queue),
         );
-        let resources = ResourceSystem::new(Arc::clone(&device));
 
         let frame = FrameControl::new(swapchain);
 

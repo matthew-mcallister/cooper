@@ -771,11 +771,11 @@ mod tests {
         let buffers = vec![globals.empty_uniform_buffer.range(); 2];
         let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
         desc.write_buffers(0, 0, &buffers);
-        desc.write_image(1, &globals.empty_image_2d, layout, None);
+        desc.write_image(1, &globals.immediate_image_2d, layout, None);
         desc.write_images(
             2,
             0,
-            &vec![&globals.empty_image_2d; 2],
+            &vec![&globals.immediate_image_2d; 2],
             layout,
             Some(&vec![&globals.empty_sampler; 2]),
         );
