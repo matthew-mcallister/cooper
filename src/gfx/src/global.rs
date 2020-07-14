@@ -25,11 +25,13 @@ crate struct GlobalShaders {
     crate trivial_frag: Arc<Shader>,
     crate static_vert: Arc<Shader>,
     crate simple_frag: Arc<Shader>,
+    crate texture_vis_frag: Arc<Shader>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 crate enum ShaderConst {
     SimpleMode = 0,
+    TextureVisSlot = 1,
 }
 
 impl Globals {
@@ -205,6 +207,7 @@ mod shader_sources {
         TRIVIAL_FRAG = "trivial_frag";
         STATIC_VERT = "static_vert";
         SIMPLE_FRAG = "simple_frag";
+        TEXTURE_VIS_FRAG = "texture_vis_frag";
     }
 }
 
@@ -238,6 +241,7 @@ impl GlobalShaders {
             trivial_frag => TRIVIAL_FRAG,
             static_vert => STATIC_VERT,
             simple_frag => SIMPLE_FRAG,
+            texture_vis_frag => TEXTURE_VIS_FRAG,
         }
     }
 }

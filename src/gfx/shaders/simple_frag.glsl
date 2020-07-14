@@ -12,6 +12,7 @@ layout(set = 0, binding = 0) uniform blk_scene {
 };
 
 layout(location = 0) in vec3 in_normal;
+layout(location = 1) in vec2 _in_texcoord0;
 
 layout(location = 0) out vec4 out_color;
 

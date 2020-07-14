@@ -3,7 +3,7 @@ use std::sync::Arc;
 use base::PartialEnumMap;
 use enum_map::{Enum, EnumMap};
 
-use crate::{Globals, SystemState};
+use crate::SystemState;
 use crate::device::{
     DescriptorSet, Image, ImageDef, ImageSubresources, ImageView,
     ImageViewFlags, Sampler, ShaderStageMap,
@@ -12,10 +12,12 @@ use crate::device::{
 mod simple;
 mod state;
 mod system;
+mod texture;
 
 use simple::*;
 crate use state::*;
 crate use system::*;
+use texture::*;
 
 /// An identifier of a particular material rendering technique.
 // TODO: Should be serializable to/from a string.
@@ -25,17 +27,20 @@ pub enum MaterialProgram {
     Checker,
     FragDepth,
     FragNormal,
-    // etc.
+    Albedo,
+    NormalMap,
+    MetallicRoughness,
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub enum MaterialImage {
-    Albedo,
-    Normal,
-    MetallicRoughness,
-    // etc.
+    Albedo = 0,
+    Normal = 1,
+    MetallicRoughness = 2,
 }
+
+const MATERIAL_IMAGE_MAX: usize = 3;
 
 #[derive(Clone, Debug)]
 pub struct ImageBindingDesc {

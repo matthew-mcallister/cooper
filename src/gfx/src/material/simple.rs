@@ -8,7 +8,7 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[non_exhaustive]
-enum SimpleMode {
+pub(super) enum SimpleMode {
     Checker = 0,
     Depth = 1,
     Normal = 2,
@@ -28,45 +28,34 @@ impl TryFrom<MaterialProgram> for SimpleMode {
 }
 
 #[derive(Debug)]
-crate struct SimpleMaterialFactory {
+pub(super) struct SimpleMaterialFactory {
     mode: SimpleMode,
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
 }
 
 impl SimpleMaterialFactory {
-    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> [Self; 3] {
+    pub(super) fn new(
+        _state: &SystemState,
+        globals: &Arc<Globals>,
+        mode: SimpleMode,
+    ) -> Self {
         let vert_shader =
             Arc::new(Arc::clone(&globals.shaders.static_vert).into());
-        let mk_rend = |mode| {
-            let shader = Arc::clone(&globals.shaders.simple_frag);
-            let mut spec = ShaderSpec::new(shader);
-            spec.set(ShaderConst::SimpleMode as _, &(mode as u32));
-            Self {
-                mode,
-                vert_shader: Arc::clone(&vert_shader),
-                frag_shader: Arc::new(spec),
-            }
-        };
 
-        [
-            mk_rend(SimpleMode::Checker),
-            mk_rend(SimpleMode::Depth),
-            mk_rend(SimpleMode::Normal),
-        ]
+        let shader = Arc::clone(&globals.shaders.simple_frag);
+        let mut spec = ShaderSpec::new(shader);
+        spec.set(ShaderConst::SimpleMode as _, &(mode as u32));
+
+        Self {
+            mode,
+            vert_shader,
+            frag_shader: Arc::new(spec),
+        }
     }
 }
 
 impl MaterialFactory for SimpleMaterialFactory {
-    fn create_descriptor_set(
-        &self,
-        _state: &SystemState,
-        _globals: &Globals,
-        _images: &MaterialImageState,
-    ) -> Option<DescriptorSet> {
-        None
-    }
-
     fn select_shaders(&self) -> ShaderStageMap {
         partial_map! {
             ShaderStage::Vertex => Arc::clone(&self.vert_shader),

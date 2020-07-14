@@ -5,13 +5,17 @@ use crate::device::{DescriptorSet, ShaderStageMap};
 use crate::resource::ResourceSystem;
 use super::*;
 
+#[allow(unused_variables)]
 pub(super) trait MaterialFactory: std::fmt::Debug + Send + Sync {
+    fn process_image_bindings(&self, images: &mut MaterialImageBindings) {}
+
     fn create_descriptor_set(
         &self,
         state: &SystemState,
-        globals: &Globals,
         images: &MaterialImageState,
-    ) -> Option<DescriptorSet>;
+    ) -> Option<DescriptorSet> {
+        None
+    }
 
     // TODO: Not necessary.
     fn select_shaders(&self) -> ShaderStageMap;
@@ -24,14 +28,30 @@ crate struct MaterialSystem {
 }
 
 impl MaterialSystem {
-    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
-        let [checker, depth, normal] =
-            SimpleMaterialFactory::new(_state, globals);
-        let factories = unsafe { std::mem::transmute([
-             Arc::new(checker),  // Checker
-             Arc::new(depth),    // FragDepth
-             Arc::new(normal),   // FragNormal
-        ]: [Arc<dyn MaterialFactory>; 3]) };
+    crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
+        let factories = EnumMap::from(|prog| match prog {
+            MaterialProgram::Checker => Arc::new(SimpleMaterialFactory::new(
+                state, globals, SimpleMode::Checker,
+            )),
+            MaterialProgram::FragDepth => Arc::new(SimpleMaterialFactory::new(
+                state, globals, SimpleMode::Depth,
+            )),
+            MaterialProgram::FragNormal => Arc::new(SimpleMaterialFactory::new(
+                state, globals, SimpleMode::Normal,
+            )),
+            MaterialProgram::Albedo =>
+                Arc::new(TextureVisMaterialFactory::new(
+                    state, globals, MaterialImage::Albedo,
+                )),
+            MaterialProgram::NormalMap =>
+                Arc::new(TextureVisMaterialFactory::new(
+                    state, globals, MaterialImage::Normal,
+                )),
+            MaterialProgram::MetallicRoughness =>
+                Arc::new(TextureVisMaterialFactory::new(
+                    state, globals, MaterialImage::MetallicRoughness,
+                )),
+        }: Arc<dyn MaterialFactory>);
         Self {
             factories,
             materials: MaterialStateTable::new(),
@@ -41,9 +61,10 @@ impl MaterialSystem {
     crate fn define_material(
         &self,
         program: MaterialProgram,
-        images: MaterialImageBindings,
+        mut images: MaterialImageBindings,
     ) -> Arc<MaterialDef> {
         let factory = Arc::clone(&self.factories[program]);
+        factory.process_image_bindings(&mut images);
         Arc::new(MaterialDef {
             factory,
             program,
@@ -54,10 +75,9 @@ impl MaterialSystem {
     crate fn get_or_create(
         &mut self,
         state: &SystemState,
-        globals: &Globals,
         resources: &ResourceSystem,
         def: &Arc<MaterialDef>,
     ) -> Result<&Arc<Material>, ResourceUnavailable> {
-        self.materials.get_or_create(state, globals, resources, def)
+        self.materials.get_or_create(state, resources, def)
     }
 }

@@ -11,7 +11,6 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::ptr;
 
-use enum_map::{Enum, EnumMap};
 use math::{Matrix4, Matrix4x3};
 use prelude::*;
 
@@ -208,38 +207,6 @@ macro_rules! primitive_enum {
         @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
         enum $name:ident { $($member:ident = $val:expr,)* }
     ) => {};
-}
-
-// TODO: This is stupid.
-crate fn enum_map<K: Enum<V>, V>(array: K::Array) -> EnumMap<K, V> {
-    unsafe {
-        let res = std::ptr::read(&array as *const _ as *const EnumMap<K, V>);
-        std::mem::forget(array);
-        res
-    }
-}
-
-#[macro_export]
-macro_rules! enum_map {
-    (
-        $($key:expr => $value:expr),*$(,)?
-    ) => {
-        {
-            let mut map = EnumMap::default();
-            $(map[$key] = $value;)*
-            map
-        }
-    };
-    (
-        $($key:expr => $value:expr,)*
-        _ => $default:tt,
-    ) => {
-        {
-            let mut map: enum_map::EnumMap<_, _> = (|_| $default).into();
-            $(map[$key] = $value;)*
-            map
-        }
-    };
 }
 
 #[macro_export]

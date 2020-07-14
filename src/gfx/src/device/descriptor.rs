@@ -3,7 +3,7 @@ use std::sync::{Arc, Weak};
 
 use base::impl_bin_ops;
 use derive_more::*;
-use enum_map::EnumMap;
+use enum_map::{EnumMap, enum_map};
 use log::trace;
 use math::Vector;
 use parking_lot::Mutex;
@@ -610,25 +610,27 @@ impl Debuggable for Pool {
 
 impl Heap {
     crate fn new(device: &Arc<Device>) -> Self {
-        let (static_sets, static_sizes) = static_descriptor_counts();
-        let static_pool = Pool::new(
-            Arc::clone(&device), static_sets, static_sizes,
-            Lifetime::Static,
-        );
-        device.set_name(&static_pool, "static_pool");
-
-        let (frame_sets, frame_sizes) = frame_descriptor_counts();
-        let frame_pool = Pool::new(
-            Arc::clone(&device), frame_sets, frame_sizes,
-            Lifetime::Frame,
-        );
-        device.set_name(&frame_pool, "frame_pool");
-
         Self {
-            pools: enum_map([
-                Arc::new(Mutex::new(static_pool)),
-                Arc::new(Mutex::new(frame_pool)),
-            ])
+            pools: enum_map! {
+                Lifetime::Static => {
+                    let (sets, sizes) = static_descriptor_counts();
+                    let pool = Pool::new(
+                        Arc::clone(&device), sets, sizes,
+                        Lifetime::Static,
+                    );
+                    device.set_name(&pool, "static_pool");
+                    Arc::new(Mutex::new(pool))
+                },
+                Lifetime::Frame => {
+                    let (sets, sizes) = frame_descriptor_counts();
+                    let pool = Pool::new(
+                        Arc::clone(&device), sets, sizes,
+                        Lifetime::Frame,
+                    );
+                    device.set_name(&pool, "frame_pool");
+                    Arc::new(Mutex::new(pool))
+                },
+            },
         }
     }
 

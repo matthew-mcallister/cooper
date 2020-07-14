@@ -5,9 +5,7 @@ use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
 
-use crate::{
-    Globals, RenderMesh, ResourceUnavailable, SystemState,
-};
+use crate::{RenderMesh, ResourceUnavailable, SystemState};
 use crate::device::{BufferBinding, BufferBox, Lifetime};
 use crate::material::{Material, MaterialSystem};
 use crate::render::{PerInstanceData, SceneDescriptors, SceneViewUniforms};
@@ -25,7 +23,6 @@ crate struct RenderItem {
 #[derive(Debug)]
 struct LowerCtx<'ctx> {
     state: &'ctx SystemState,
-    globals: &'ctx Globals,
     uniforms: &'ctx SceneViewUniforms,
     resources: &'ctx ResourceSystem,
     materials: &'ctx mut MaterialSystem,
@@ -40,7 +37,6 @@ trait Lower {
 impl<'ctx> LowerCtx<'ctx> {
     fn new<'obj>(
         state: &'ctx SystemState,
-        globals: &'ctx Globals,
         uniforms: &'ctx SceneViewUniforms,
         resources: &'ctx ResourceSystem,
         materials: &'ctx mut MaterialSystem,
@@ -63,13 +59,12 @@ impl<'ctx> LowerCtx<'ctx> {
             MaybeUninit::slice_get_mut(slice)
         };
 
-        Self { state, globals, uniforms, resources, materials, instance_data }
+        Self { state, uniforms, resources, materials, instance_data }
     }
 }
 
 crate fn lower_objects<'a>(
     state: &'a SystemState,
-    globals: &'a Globals,
     uniforms: &'a SceneViewUniforms,
     resources: &'a ResourceSystem,
     materials: &'a mut MaterialSystem,
@@ -77,7 +72,7 @@ crate fn lower_objects<'a>(
     objects: impl ExactSizeIterator<Item = RenderObject> + 'a,
 ) -> impl Iterator<Item = RenderItem> + 'a {
     let mut ctx = LowerCtx::new(
-        state, globals, uniforms, resources, materials, descs, objects.len());
+        state, uniforms, resources, materials, descs, objects.len());
     // TODO: Allow overriding the action to take when lowering fails
     objects.into_iter().enumerate().filter_map(move |(i, obj)| {
         obj.lower(i as _, &mut ctx)
@@ -105,7 +100,6 @@ impl Lower for MeshInstance {
 
         let material = Arc::clone(ctx.materials.get_or_create(
             ctx.state,
-            ctx.globals,
             ctx.resources,
             &self.material,
         )?);

@@ -137,8 +137,8 @@ impl WorldRenderer {
         if objects.is_empty() { return; }
 
         let items: Vec<_> = lower_objects(
-            &state, &self.globals, &view.uniforms, resources,
-            &mut self.materials, &mut descriptors, objects.into_iter(),
+            &state, &view.uniforms, resources, &mut self.materials,
+            &mut descriptors, objects.into_iter(),
         ).collect();
 
         let mut inst = InstanceRenderer::new(&state, &self.globals);

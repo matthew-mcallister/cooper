@@ -35,7 +35,6 @@ impl MaterialStateTable {
     pub(super) fn get_or_create(
         &mut self,
         state: &SystemState,
-        globals: &Globals,
         resources: &ResourceSystem,
         def: &Arc<MaterialDef>,
     ) -> Result<&Arc<Material>, ResourceUnavailable> {
@@ -43,8 +42,7 @@ impl MaterialStateTable {
         let materials = unsafe { &*(&self.materials as *const HashMap<_, _>) };
         try_opt! { return Ok(materials.get(ByPtr::by_ptr(def))?); };
 
-        let material = create_material(
-            state, globals, resources, Arc::clone(&def))?;
+        let material = create_material(state, resources, Arc::clone(&def))?;
         let material = self.materials.entry(Arc::clone(def).into())
             .insert(Arc::new(material)).into_mut();
         Ok(material)
@@ -61,7 +59,6 @@ fn resource_state(state: Option<&Arc<Material>>) -> ResourceState {
 
 fn create_material(
     state: &SystemState,
-    globals: &Globals,
     resources: &ResourceSystem,
     def: Arc<MaterialDef>,
 ) -> Option<Material> {
@@ -71,7 +68,7 @@ fn create_material(
         })
         .collect();
     let images = bind_images(images, &def.image_bindings);
-    let desc = def.factory.create_descriptor_set(state, globals, &images);
+    let desc = def.factory.create_descriptor_set(state, &images);
     Some(Material {
         def,
         images,

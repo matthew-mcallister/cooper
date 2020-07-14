@@ -1,11 +1,25 @@
 const uint CONST_ID_SIMPLE_MODE = 0;
+const uint CONST_ID_TEXTURE_VIS_SLOT = 1;
+
+const uint VERTEX_ATTR_POSITION = 0;
+const uint VERTEX_ATTR_NORMAL = 1;
+const uint VERTEX_ATTR_TANGENT = 2;
+const uint VERTEX_ATTR_QTANGENT = 3;
+const uint VERTEX_ATTR_TEXCOORD0 = 4;
+const uint VERTEX_ATTR_TEXCOORD1 = 5;
+const uint VERTEX_ATTR_COLOR = 6;
+const uint VERTEX_ATTR_JOINTS = 7;
+const uint VERTEX_ATTR_WEIGHTS = 8;
+const uint VERTEX_ATTR_VELOCITY = 9;
 
 const uint SIMPLE_MODE_CHECKER = 0;
 const uint SIMPLE_MODE_DEPTH = 1;
 const uint SIMPLE_MODE_NORMAL = 2;
 
-const uint VERTEX_ATTR_POSITION = 0;
-const uint VERTEX_ATTR_NORMAL = 1;
+const uint IMAGE_SLOT_ALBEDO = 0;
+const uint IMAGE_SLOT_NORMAL = 1;
+const uint IMAGE_SLOT_METALLIC_ROUGHNESS = 2;
+const uint IMAGE_SLOT_MAX = 3;
 
 struct Perspective {
     mat4 proj;
