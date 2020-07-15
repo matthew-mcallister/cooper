@@ -28,7 +28,7 @@ pub use memory::*;
 crate use pipeline::*;
 crate use queue::*;
 crate use render_pass::*;
-crate use sampler::*;
+pub use sampler::*;
 crate use shader::*;
 crate use swapchain::*;
 crate use sync::*;

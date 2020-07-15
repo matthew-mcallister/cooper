@@ -9,22 +9,26 @@ use super::*;
 crate struct ResourceSystem {
     state: ResourceStateTable,
     sched: UploadScheduler,
+    queue: Arc<Queue>,
+    cmd_pool: Option<Box<CmdPool>>,
 }
 
 impl ResourceSystem {
-    crate fn new(device: Arc<Device>) -> Self {
+    crate fn new(queue: &Arc<Queue>) -> Self {
+        let cmd_pool = Some(Box::new(CmdPool::new(
+            queue.family(),
+            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+        )));
         Self {
             state: ResourceStateTable::new(),
-            sched: UploadScheduler::new(device),
+            sched: UploadScheduler::new(Arc::clone(queue.device())),
+            queue: Arc::clone(queue),
+            cmd_pool,
         }
     }
 
     crate fn device(&self) -> &Arc<Device> {
         self.sched.device()
-    }
-
-    crate fn new_frame(&mut self) {
-        self.sched.new_frame();
     }
 
     crate fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
@@ -50,19 +54,20 @@ impl ResourceSystem {
         });
     }
 
-    crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>>
-    {
+    crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>> {
         self.state.get_image(image, self.sched.avail_batch())
     }
 
-    crate fn schedule(
-        &mut self,
-        frame_num: u64,
-        queue: &Queue,
-        heap: &ImageHeap,
-        pool: Box<CmdPool>,
-    ) -> Box<CmdPool> {
-        self.sched.schedule(frame_num, queue, &mut self.state, heap, pool)
+    crate fn schedule(&mut self, frame_num: u64, heap: &ImageHeap) {
+        match self.sched.query_tasks() {
+            SchedulerStatus::Idle => {
+                let mut cmd_pool = self.cmd_pool.take().unwrap();
+                unsafe { cmd_pool.reset(); }
+                self.cmd_pool = Some(self.sched.schedule(
+                    frame_num, &self.queue, &mut self.state, heap, cmd_pool));
+            },
+            _ => {},
+        }
     }
 
     crate fn wait(&self, timeout: u64) -> WaitResult {
@@ -102,7 +107,7 @@ mod tests {
         let images: Vec<_> = (0..7)
             .map(|n| test_image(&device, 2 << n, 2 << n))
             .collect();
-        let mut resources = ResourceSystem::new(Arc::clone(device));
+        let mut resources = ResourceSystem::new(queue);
 
         for image in images.iter() {
             assert_eq!(
@@ -115,11 +120,6 @@ mod tests {
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
-        let mut pool = Box::new(CmdPool::new(
-            vars.gfx_queue().family(),
-            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-        ));
-
         // Simulate uploading N images, one at a time, and waiting on
         // them in a loop.
         let mut frame = 1;
@@ -128,10 +128,7 @@ mod tests {
 
             loop {
                 frame += 1;
-                resources.new_frame();
-
-                pool = resources.schedule(
-                    frame as _, queue, &state.heap, pool);
+                resources.schedule(frame as _, &state.heap);
 
                 let state = resources.get_image_state(image);
                 if state == ResourceState::Available {

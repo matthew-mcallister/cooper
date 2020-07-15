@@ -40,12 +40,11 @@ pub enum MaterialImage {
     MetallicRoughness = 2,
 }
 
-const MATERIAL_IMAGE_MAX: usize = 3;
-
 #[derive(Clone, Debug)]
 pub struct ImageBindingDesc {
     // TODO: Maybe should create an "ImageViewDesc" type.
     pub image: Arc<ImageDef>,
+    // TODO: Should be set by the factory, not the user
     pub flags: ImageViewFlags,
     pub subresources: ImageSubresources,
     pub sampler: Arc<Sampler>,
@@ -57,6 +56,8 @@ pub type MaterialImageBindings =
 // TODO: Bake VkPipeline object(s) at material creation time.
 #[derive(Debug)]
 pub struct MaterialDef {
+    // TODO: Shouldn't own this pointer (may hold on to internal
+    // resources).
     factory: Arc<dyn MaterialFactory>,
     program: MaterialProgram,
     image_bindings: MaterialImageBindings,
@@ -108,8 +109,9 @@ impl Material {
 }
 
 impl MaterialImage {
+    const SIZE: usize = <Self as Enum<()>>::POSSIBLE_VALUES;
+
     crate fn values() -> impl ExactSizeIterator<Item = Self> {
-        (0..<Self as Enum<()>>::POSSIBLE_VALUES)
-            .map(<Self as Enum<()>>::from_usize)
+        (0..Self::SIZE).map(<Self as Enum<()>>::from_usize)
     }
 }

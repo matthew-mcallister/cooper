@@ -69,6 +69,10 @@ impl ResourceStateTable {
     crate fn get_image(&self, image: &Arc<ImageDef>, avail_batch: u64) ->
         Option<&Arc<Image>>
     {
+        trace!(
+            "ResourceStateTable::get_image(image: {:?}, avail_batch: {:?})",
+            image, avail_batch,
+        );
         let info = self.images.get(ByPtr::by_ptr(image))?;
         guard(info.state(avail_batch) == ResourceState::Available)?;
         info.resource.as_ref()

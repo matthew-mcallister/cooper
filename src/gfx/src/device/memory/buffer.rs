@@ -550,7 +550,7 @@ impl<A: Allocator> Drop for BufferPool<A> {
             assert_eq!(Arc::strong_count(chunk), 1,
                 concat!(
                     "allocator destroyed while chunk in use: {:?};\n",
-                    "make sure all resources are destroyed before the",
+                    "make sure all resources are destroyed before the\n",
                     "render loop is destroyed",
                 ), chunk);
         }

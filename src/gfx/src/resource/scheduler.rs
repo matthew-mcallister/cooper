@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use derive_more::From;
+use log::trace;
 use more_asserts::assert_lt;
 
 use crate::{
@@ -16,6 +17,12 @@ pub(super) struct UploadScheduler {
     sem: TimelineSemaphore,
     avail_batch: u64,
     pending_batch: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum SchedulerStatus {
+    Busy,
+    Idle,
 }
 
 /// Schedules the execution of GPU transfer commands.
@@ -40,7 +47,7 @@ crate enum UploadTask {
 
 impl TaskProcessor {
     fn new(device: Arc<Device>) -> Self {
-        let staging_buffer_size = 0x40_0000;
+        let staging_buffer_size = 0x100_0000;
         let staging = UploadStage::new(device, staging_buffer_size);
         Self {
             staging,
@@ -129,8 +136,13 @@ impl UploadScheduler {
         self.avail_batch
     }
 
-    crate fn new_frame(&mut self) {
+    crate fn query_tasks(&mut self) -> SchedulerStatus {
         self.avail_batch = self.sem.get_value();
+        if self.avail_batch() < self.pending_batch {
+            SchedulerStatus::Busy
+        } else {
+            SchedulerStatus::Idle
+        }
     }
 
     crate fn schedule(
@@ -141,10 +153,11 @@ impl UploadScheduler {
         heap: &ImageHeap,
         pool: Box<CmdPool>,
     ) -> Box<CmdPool> {
+        trace!("UploadScheduler::schedule(frame_num: {})", frame_num);
+
+        assert_eq!(self.avail_batch(), self.pending_batch);
         assert_lt!(self.pending_batch, frame_num);
-        if (self.avail_batch() < self.pending_batch) | self.tasks.is_empty() {
-            return pool;
-        }
+        if self.tasks.is_empty() { return pool; }
 
         // TODO: Maybe this should should just inc by 1 each time?
         self.pending_batch = frame_num;

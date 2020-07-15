@@ -34,7 +34,7 @@ impl RenderLoop {
         let state = Box::new(SystemState::new(Arc::clone(&device)));
         let globals = Arc::new(Globals::new(&state));
 
-        let mut resources = ResourceSystem::new(Arc::clone(&device));
+        let mut resources = ResourceSystem::new(&gfx_queue);
         globals.upload_images(&mut resources);
 
         let renderer = WorldRenderer::new(
@@ -119,13 +119,23 @@ impl RenderLoop {
         self.renderer.materials().define_material(program, images)
     }
 
+    pub fn get_or_create_sampler(&mut self, desc: &SamplerDesc) -> Arc<Sampler>
+    {
+        self.state().samplers.get_or_create(desc).into_owned()
+    }
+
     crate fn new_frame(&mut self) {
+        // FIXME: This is called prior to frame.acquire() to occupy time
+        // that might otherwise be spent waiting on the swapchain, but
+        // frame_num doesn't update until after frame.acquire().
+        let frame_num = self.frame_num() + 1;
         self.state_mut().frame_over();
-        self.resources.new_frame();
+        self.resources.schedule(frame_num, &self.state.as_ref().unwrap().heap);
     }
 
     crate fn render(&mut self, world: RenderWorldData) {
         self.frame.wait();
+        self.new_frame();
         self.frame.acquire();
 
         let state = Arc::new(self.state.take().unwrap());

@@ -3,6 +3,7 @@
     exclusive_range_pattern,
     exact_size_is_empty,
     try_blocks,
+    type_ascription,
 )]
 
 use std::sync::Arc;
@@ -92,16 +93,17 @@ unsafe fn unsafe_main() {
             ..Default::default()
         };
 
-        let rl = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
+        let mut rl = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
 
         let path = std::env::var("GLTF_PATH")?;
         let bundle = GltfBundle::import(&path)?;
-        let mesh = Arc::new(Mesh::from_gltf(&rl, &bundle)?);
+        let mesh = Arc::new(Mesh::from_gltf(&mut rl, &bundle)?);
 
         let materials = [
             rl.define_material(MaterialProgram::Checker, Default::default()),
             rl.define_material(MaterialProgram::FragDepth, Default::default()),
             rl.define_material(MaterialProgram::FragNormal, Default::default()),
+            rl.define_material(MaterialProgram::Albedo, mesh.images.clone()),
         ];
 
         let mut rl = Some(Box::new(rl));
@@ -112,6 +114,7 @@ unsafe fn unsafe_main() {
         }
 
         std::mem::drop(mesh);
+        std::mem::drop(materials);
 
         Ok(())
     });

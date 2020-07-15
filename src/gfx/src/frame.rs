@@ -62,11 +62,10 @@ impl FrameControl {
     crate fn acquire(&mut self) {
         debug!("FrameControl::begin(self: {:?})", self);
         assert!(!self.pending());
-
-        self.frame_num += 1;
         self.image_idx = self.swapchain
             .acquire_next_image(&mut self.acquire_sem)
             .unwrap();
+        self.frame_num += 1;
     }
 
     crate fn present(&mut self, present_queue: &Arc<Queue>) {

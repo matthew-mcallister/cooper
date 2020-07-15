@@ -3,8 +3,8 @@ use std::sync::Arc;
 use base::ByPtr;
 use derive_more::Display;
 use fnv::FnvHashMap as HashMap;
+use log::trace;
 
-use crate::impl_from_via_default;
 use crate::device::ImageView;
 use crate::resource::{ResourceState, ResourceSystem};
 use super::*;
@@ -63,10 +63,8 @@ fn create_material(
     def: Arc<MaterialDef>,
 ) -> Option<Material> {
     let images: PartialEnumMap<_, &Arc<Image>> = def.image_bindings.iter()
-        .filter_map(|(k, binding)| {
-            Some((k, resources.get_image(&binding.image)?))
-        })
-        .collect();
+        .map(|(k, binding)| Some((k, resources.get_image(&binding.image)?)))
+        .collect::<Option<_>>()?;
     let images = bind_images(images, &def.image_bindings);
     let desc = def.factory.create_descriptor_set(state, &images);
     Some(Material {
@@ -80,6 +78,7 @@ fn bind_images(
     images: PartialEnumMap<MaterialImage, &Arc<Image>>,
     bindings: &MaterialImageBindings,
 ) -> MaterialImageState {
+    trace!("bind_images(images: {:?}, bindings: {:?})", images, bindings);
     bindings.iter().map(|(name, binding)| {
         // TODO: We currently create a new ImageView for every image,
         // but they could conceivably be cached and shared.

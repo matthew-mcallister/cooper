@@ -16,12 +16,10 @@ use prelude::*;
 
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
-#[macro_export]
 macro_rules! try_opt {
     ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
 }
 
-#[macro_export]
 macro_rules! bit {
     ($bit:expr) => {
         (1 << $bit)
@@ -147,7 +145,6 @@ crate unsafe fn debug_cstrs<'a>(ptrs: &'a [*const c_char]) ->
     DebugIter::new(ptrs.iter().map(|&p| CStr::from_ptr(p)))
 }
 
-#[macro_export]
 macro_rules! primitive_enum {
     (
         @[try_from: $($try_from:ty),*$(,)?]
@@ -171,7 +168,7 @@ macro_rules! primitive_enum {
             }
         )*
 
-        $crate::primitive_enum! {
+        primitive_enum! {
             @impl_try_from
             @[try_from: $($try_from,)*]
             @[try_from_error: $try_from_err_ty = $try_from_err_expr]
@@ -194,7 +191,7 @@ macro_rules! primitive_enum {
             }
         }
 
-        $crate::primitive_enum! {
+        primitive_enum! {
             @impl_try_from
             @[try_from: $($try_from_rest),*]
             @[try_from_error: $try_from_err_ty = $try_from_err_expr]
@@ -209,7 +206,6 @@ macro_rules! primitive_enum {
     ) => {};
 }
 
-#[macro_export]
 macro_rules! impl_from_via_default {
     ($name:ident, $from:ty) => {
         impl From<$from> for $name {
@@ -225,7 +221,6 @@ crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
     xform.transpose().submatrix(0, 0)
 }
 
-#[macro_export]
 macro_rules! set_layout_bindings {
     ($(($($binding:tt)*)),*$(,)?) => {
         [$(set_layout_bindings!(@binding ($($binding)*)),)*]
@@ -248,7 +243,6 @@ macro_rules! set_layout_bindings {
     };
 }
 
-#[macro_export]
 macro_rules! wrap_vk_enum {
     (
         $(#[$($meta:meta)*])*

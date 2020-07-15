@@ -142,8 +142,7 @@ impl CmdPool {
     }
 
     crate fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
-        trace!("allocating command buffer: queue_family: {}, {:?}, {:?}",
-            self.queue_family, self.flags, level);
+        trace!("CmdPool::alloc(self: {:?}, level: {:?})", self, level);
         let dt = &*self.device.table;
         let mut buffer = vk::null();
         let buffers = std::slice::from_mut(&mut buffer);
@@ -773,6 +772,10 @@ impl XferCmds {
         layout: vk::ImageLayout,
         regions: &[vk::BufferImageCopy],
     ) {
+        trace!(concat!(
+            "XferCmds::copy_buffer_to_image(src: {:?}, dst: {:?}, ",
+            "layout: {:?}, regions: {:?})",
+        ), src, dst, layout, regions);
         validate_buffer_image_copy(src, dst, layout, regions);
         self.dt().cmd_copy_buffer_to_image(
             self.raw(),

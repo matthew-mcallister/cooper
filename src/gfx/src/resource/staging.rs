@@ -2,6 +2,7 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use derive_more::Display;
+use log::trace;
 use more_asserts::assert_le;
 
 use crate::{
@@ -55,6 +56,15 @@ impl UploadStage {
         access_mask: vk::AccessFlags,
         subresources: ImageSubresources,
     ) -> Result<&mut [u8], StagingOutOfMemory> {
+        trace!(
+            concat!(
+                "UploadStage::stage_image(image: {:?}, ",
+                "emit_pre_barrier: {:?}, final_layout: {:?}, ",
+                "access_mask: {:?}, subresources: {:?})",
+            ),
+            image, emit_pre_barrier, final_layout, access_mask, subresources,
+        );
+
         let sub = subresources;
         image.validate_subresources(&sub);
         assert_eq!(sub.aspects, image.format().aspects());

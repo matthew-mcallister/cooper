@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use enum_map::enum_map;
+
 use crate::{SystemState, Globals};
 use crate::device::{DescriptorSet, ShaderStageMap};
 use crate::resource::ResourceSystem;
@@ -29,10 +31,10 @@ crate struct MaterialSystem {
 
 impl MaterialSystem {
     crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
-        let factories = EnumMap::from(|prog| match prog {
+        let factories = enum_map! {
             MaterialProgram::Checker => Arc::new(SimpleMaterialFactory::new(
                 state, globals, SimpleMode::Checker,
-            )),
+            )) as Arc<dyn MaterialFactory>,
             MaterialProgram::FragDepth => Arc::new(SimpleMaterialFactory::new(
                 state, globals, SimpleMode::Depth,
             )),
@@ -51,7 +53,7 @@ impl MaterialSystem {
                 Arc::new(TextureVisMaterialFactory::new(
                     state, globals, MaterialImage::MetallicRoughness,
                 )),
-        }: Arc<dyn MaterialFactory>);
+        };
         Self {
             factories,
             materials: MaterialStateTable::new(),

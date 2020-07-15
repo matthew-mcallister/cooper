@@ -14,7 +14,6 @@ crate struct Globals {
     crate immediate_image_2d: Arc<ImageView>,
     crate immediate_storage_image_2d: Arc<ImageView>,
     crate empty_image_2d: Arc<ImageDef>,
-    crate empty_storage_image_2d: Arc<ImageDef>,
     crate empty_sampler: Arc<Sampler>,
     crate scene_desc_layout: Arc<DescriptorSetLayout>,
 }
@@ -89,16 +88,6 @@ impl Globals {
             1,
             1,
         ));
-        let empty_storage_image_2d = Arc::new(ImageDef::new(
-            &device,
-            ImageFlags::STORAGE | ImageFlags::NO_SAMPLE,
-            ImageType::Dim2,
-            Format::RGBA8,
-            SampleCount::One,
-            (1, 1).into(),
-            1,
-            1,
-        ));
 
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
@@ -120,7 +109,6 @@ impl Globals {
             immediate_image_2d,
             immediate_storage_image_2d,
             empty_image_2d,
-            empty_storage_image_2d,
             empty_sampler,
             scene_desc_layout,
         }
@@ -131,11 +119,6 @@ impl Globals {
         resources.upload_image(
             &self.empty_image_2d,
             Arc::clone(&image_data),
-            0,
-        );
-        resources.upload_image(
-            &self.empty_storage_image_2d,
-            image_data,
             0,
         );
     }

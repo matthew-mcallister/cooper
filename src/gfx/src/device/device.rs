@@ -12,12 +12,18 @@ use crate::*;
 crate struct Device {
     #[derivative(Debug = "ignore")]
     crate table: Arc<vkl::DeviceTable>,
+    #[derivative(Debug = "ignore")]
     crate instance: Arc<Instance>,
+    #[derivative(Debug = "ignore")]
     crate app_info: Arc<AppInfo>,
     crate pdev: vk::PhysicalDevice,
+    #[derivative(Debug = "ignore")]
     crate props: vk::PhysicalDeviceProperties,
+    #[derivative(Debug = "ignore")]
     crate queue_families: Vec<vk::QueueFamilyProperties>,
+    #[derivative(Debug = "ignore")]
     crate mem_props: vk::PhysicalDeviceMemoryProperties,
+    #[derivative(Debug = "ignore")]
     crate features: vk::PhysicalDeviceFeatures,
 }
 

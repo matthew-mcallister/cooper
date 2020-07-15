@@ -1,16 +1,20 @@
 use std::sync::Arc;
 
+use derivative::Derivative;
+use log::trace;
 use parking_lot::Mutex;
 use prelude::*;
 
 use super::*;
 
 /// A suballocation of a VkMemory object.
-#[derive(Clone, Debug)]
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
 crate struct DeviceAlloc {
     memory: Arc<DeviceMemory>,
     offset: vk::DeviceSize,
     size: vk::DeviceSize,
+    #[derivative(Debug = "ignore")]
     pool: Option<Arc<HeapPool>>,
 }
 
@@ -116,7 +120,7 @@ impl HeapPool {
     }
 
     fn chunk_size(&self) -> vk::DeviceSize {
-        0x100_0000
+        0x400_0000
     }
 
     fn min_alignment(&self) -> vk::DeviceSize {
@@ -157,6 +161,7 @@ impl HeapPool {
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
     ) -> DeviceAlloc {
+        trace!("ImageHeap::alloc(size: {}, alignment: {})", size, alignment);
         let alignment = std::cmp::max(self.min_alignment(), alignment);
         let mut inner = self.inner.lock();
         let block = inner.allocator.alloc(size, alignment)

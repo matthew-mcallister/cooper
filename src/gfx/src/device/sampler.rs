@@ -97,10 +97,7 @@ impl Drop for Sampler {
 }
 
 impl Sampler {
-    crate fn new(
-        device: Arc<Device>,
-        desc: SamplerDesc,
-    ) -> Self { unsafe {
+    crate fn new(device: Arc<Device>, desc: SamplerDesc) -> Self { unsafe {
         let dt = &*device.table;
 
         assert!((0.0 <= desc.mip_lod_bias) & (desc.mip_lod_bias <= 15.0));

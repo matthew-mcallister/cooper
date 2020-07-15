@@ -26,7 +26,7 @@ impl TextureVisMaterialFactory {
             vk::DescriptorSetLayoutBinding {
                 binding: 0,
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: MATERIAL_IMAGE_MAX as u32,
+                descriptor_count: MaterialImage::SIZE as u32,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
                 ..Default::default()
             },
@@ -77,9 +77,9 @@ impl MaterialFactory for TextureVisMaterialFactory {
     ) -> Option<dev::DescriptorSet> {
         let mut set =
             state.descriptors.alloc(dev::Lifetime::Static, &self.layout);
-        let views: SmallVec<_, MATERIAL_IMAGE_MAX> =
+        let views: SmallVec<_, {MaterialImage::SIZE}> =
             images.values().map(|img| &img.view).collect();
-        let samplers: SmallVec<_, MATERIAL_IMAGE_MAX> =
+        let samplers: SmallVec<_, {MaterialImage::SIZE}> =
             images.values().map(|img| &img.sampler).collect();
         unsafe {
             set.write_images(

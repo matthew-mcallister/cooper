@@ -11,6 +11,11 @@ macro_rules! tassert {
     };
 }
 
+#[macro_export]
+macro_rules! try_opt {
+    ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
+}
+
 mod gltf;
 
 crate use self::gltf::*;
