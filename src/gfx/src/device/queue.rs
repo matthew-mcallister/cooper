@@ -166,7 +166,7 @@ impl Queue {
             self.inner,
             infos.len() as _,
             infos.as_ptr(),
-            try_opt!(fence?.inner()).unwrap_or(vk::null()),
+            tryopt!(fence?.inner()).unwrap_or(vk::null()),
         ).check().unwrap();
     }
 

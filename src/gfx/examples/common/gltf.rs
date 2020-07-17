@@ -171,7 +171,7 @@ fn load_mesh(
             anyhow!("missing attribute: {:?}", attr));
     }
 
-    let index = try_opt!(bundle.read_index_accessor(&prim.indices()?))
+    let index = tryopt!(bundle.read_index_accessor(&prim.indices()?))
         .transpose()?;
 
     build_mesh(rloop, attrs, index)
@@ -333,9 +333,9 @@ fn format(format: gltf::image::Format) -> Format {
 }
 
 fn load_sampler(sampler: gltf::texture::Sampler<'_>) -> SamplerDesc {
-    let mag_filter = try_opt!(mag_filter(sampler.mag_filter()?))
+    let mag_filter = tryopt!(mag_filter(sampler.mag_filter()?))
         .unwrap_or(Filter::Linear);
-    let (min_filter, mipmap_mode) = try_opt!(min_filter(sampler.min_filter()?))
+    let (min_filter, mipmap_mode) = tryopt!(min_filter(sampler.min_filter()?))
         .unwrap_or((Filter::Linear, SamplerMipmapMode::Linear));
     let address_mode_u = wrapping_mode(sampler.wrap_s());
     let address_mode_v = wrapping_mode(sampler.wrap_t());

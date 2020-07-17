@@ -199,7 +199,7 @@ fn subpass_samples(
     let idx = desc.color_attchs.first()
         .or(desc.input_attchs.first())
         .or(desc.depth_stencil_attch.as_ref());
-    try_opt! { return attachments[*idx? as usize].samples; };
+    tryopt! { return attachments[*idx? as usize].samples; };
     SampleCount::One
 }
 

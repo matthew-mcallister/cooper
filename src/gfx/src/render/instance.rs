@@ -56,7 +56,7 @@ unsafe fn render_instances(
 
         let set_layouts = &mut desc.layout.set_layouts;
         *set_layouts = vec![Arc::clone(descriptors.layout())];
-        try_opt! {
+        tryopt! {
             set_layouts.push(Arc::clone(material.desc()?.layout()));
         };
 
@@ -71,7 +71,7 @@ unsafe fn render_instances(
             // TODO: this could be done outside the loop
             cmds.bind_gfx_descs(0, descriptors.inner());
         }
-        try_opt! {
+        tryopt! {
             cmds.bind_gfx_descs(1, material.desc()?);
         };
 

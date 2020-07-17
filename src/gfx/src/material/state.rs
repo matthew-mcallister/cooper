@@ -28,7 +28,7 @@ impl MaterialStateTable {
     }
 
     pub(super) fn get_state(&self, def: &Arc<MaterialDef>) -> ResourceState {
-        try_opt!(resource_state(self.materials.get(ByPtr::by_ptr(def))))
+        tryopt!(resource_state(self.materials.get(ByPtr::by_ptr(def))))
             .unwrap_or(ResourceState::Unavailable)
     }
 
@@ -40,7 +40,7 @@ impl MaterialStateTable {
     ) -> Result<&Arc<Material>, ResourceUnavailable> {
         // borrowck is braindead
         let materials = unsafe { &*(&self.materials as *const HashMap<_, _>) };
-        try_opt! { return Ok(materials.get(ByPtr::by_ptr(def))?); };
+        tryopt! { return Ok(materials.get(ByPtr::by_ptr(def))?); };
 
         let material = create_material(state, resources, Arc::clone(&def))?;
         let material = self.materials.entry(Arc::clone(def).into())

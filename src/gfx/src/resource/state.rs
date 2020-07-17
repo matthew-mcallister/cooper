@@ -44,7 +44,7 @@ impl ResourceStateTable {
     crate fn get_state(&self, image: &Arc<ImageDef>, avail_batch: u64) ->
         ResourceState
     {
-        try_opt!(self.images.get(ByPtr::by_ptr(image))?.state(avail_batch))
+        tryopt!(self.images.get(ByPtr::by_ptr(image))?.state(avail_batch))
             .unwrap_or(ResourceState::Unavailable)
     }
 

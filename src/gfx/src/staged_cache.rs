@@ -55,7 +55,7 @@ where
         key: &K,
         f: impl FnOnce() -> V,
     ) -> Cow<V> {
-        try_opt! { return Cow::Borrowed(self.get_committed(key)?); };
+        tryopt! { return Cow::Borrowed(self.get_committed(key)?); };
         let mut staged = self.staged.lock();
         // NB: hold the lock while creating entry to avoid racing
         let val = staged.entry(key.clone()).or_insert_with(f);

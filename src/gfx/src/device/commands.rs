@@ -428,7 +428,7 @@ impl SubpassCmds {
 
     crate fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>) {
         self.ensure_recording();
-        try_opt! {
+        tryopt! {
             if Arc::ptr_eq(self.gfx_pipe.as_ref()?, pipeline) {
                 return;
             }

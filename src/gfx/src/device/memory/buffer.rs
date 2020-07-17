@@ -187,7 +187,7 @@ impl<'a> MemoryRegion for BufferRange<'a> {
 
 impl Drop for BufferAlloc {
     fn drop(&mut self) {
-        unsafe { try_opt! { Weak::upgrade(&self.buffer.heap)?.free(self) }; }
+        unsafe { tryopt! { Weak::upgrade(&self.buffer.heap)?.free(self) }; }
     }
 }
 

@@ -12,7 +12,7 @@ macro_rules! tassert {
 }
 
 #[macro_export]
-macro_rules! try_opt {
+macro_rules! tryopt {
     ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
 }
 

@@ -249,8 +249,8 @@ impl Set {
         layout: vk::ImageLayout,
         sampler: Option<&Arc<Sampler>>,
     ) {
-        let sampler = try_opt!([sampler?]);
-        let samplers = try_opt!(&sampler.as_ref()?[..]);
+        let sampler = tryopt!([sampler?]);
+        let samplers = tryopt!(&sampler.as_ref()?[..]);
         self.write_images(binding, 0, &[view], layout, samplers);
     }
 
@@ -270,7 +270,7 @@ impl Set {
         }
 
         for (i, &view) in views.iter().enumerate() {
-            let sampler = try_opt!(samplers?[i]);
+            let sampler = tryopt!(samplers?[i]);
             let elem = first_element + i as u32;
             self.write_image_element(binding, elem, view, layout, sampler);
         }
@@ -291,7 +291,7 @@ impl Set {
         let layout_binding = &self.layout.bindings()[binding as usize];
         let ty = layout_binding.descriptor_type;
 
-        let sampler = try_opt!(sampler?.inner()).unwrap_or(vk::null());
+        let sampler = tryopt!(sampler?.inner()).unwrap_or(vk::null());
 
         // Validation
         {
