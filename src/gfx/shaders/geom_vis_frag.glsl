@@ -4,8 +4,8 @@
 #include "common_inc.glsl"
 
 // TODO: Consider collecting all spec constants in one big header
-layout(constant_id = CONST_ID_SIMPLE_MODE)
-const uint SIMPLE_MODE = SIMPLE_MODE_DEPTH;
+layout(constant_id = CONST_ID_GEOM_VIS_MODE)
+const uint GEOM_VIS_MODE = GEOM_VIS_MODE_DEPTH;
 
 layout(set = 0, binding = 0) uniform blk_scene {
     SceneView g_scene_view;
@@ -17,7 +17,7 @@ layout(location = 1) in vec2 _in_texcoord0;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    if (SIMPLE_MODE == SIMPLE_MODE_DEPTH) {
+    if (GEOM_VIS_MODE == GEOM_VIS_MODE_DEPTH) {
         // TODO: configurable saturation point for interior scenes
         float z = 1 / gl_FragCoord.w;
         float z_far = g_scene_view.perspective.z_far;
@@ -25,7 +25,7 @@ void main() {
         // Invert to mimic the real Z buffer
         float value = 1.0 - z / (z_far - z_near);
         out_color = vec4(vec3(value), 1);
-    } else if (SIMPLE_MODE == SIMPLE_MODE_NORMAL) {
+    } else if (GEOM_VIS_MODE == GEOM_VIS_MODE_NORMAL) {
         vec3 color = -0.5 * in_normal + vec3(0.5);
         out_color = vec4(color, 1);
     } else {

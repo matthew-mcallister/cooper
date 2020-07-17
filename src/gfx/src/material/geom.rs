@@ -8,44 +8,44 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[non_exhaustive]
-pub(super) enum SimpleMode {
+pub(super) enum GeomVisMode {
     Checker = 0,
     Depth = 1,
     Normal = 2,
 }
 
-impl TryFrom<MaterialProgram> for SimpleMode {
+impl TryFrom<MaterialProgram> for GeomVisMode {
     type Error = &'static str;
     #[allow(unreachable_patterns)]
     fn try_from(prog: MaterialProgram) -> Result<Self, Self::Error> {
         Ok(match prog {
-            MaterialProgram::Checker => SimpleMode::Checker,
-            MaterialProgram::FragDepth => SimpleMode::Depth,
-            MaterialProgram::FragNormal => SimpleMode::Normal,
-            _ => return Err("invalid SimpleMode"),
+            MaterialProgram::Checker => GeomVisMode::Checker,
+            MaterialProgram::GeomDepth => GeomVisMode::Depth,
+            MaterialProgram::GeomNormal => GeomVisMode::Normal,
+            _ => return Err("invalid GeomVisMode"),
         })
     }
 }
 
 #[derive(Debug)]
-pub(super) struct SimpleMaterialFactory {
-    mode: SimpleMode,
+pub(super) struct GeomVisMaterialFactory {
+    mode: GeomVisMode,
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
 }
 
-impl SimpleMaterialFactory {
+impl GeomVisMaterialFactory {
     pub(super) fn new(
         _state: &SystemState,
         globals: &Arc<Globals>,
-        mode: SimpleMode,
+        mode: GeomVisMode,
     ) -> Self {
         let vert_shader =
             Arc::new(Arc::clone(&globals.shaders.static_vert).into());
 
-        let shader = Arc::clone(&globals.shaders.simple_frag);
+        let shader = Arc::clone(&globals.shaders.geom_vis_frag);
         let mut spec = ShaderSpec::new(shader);
-        spec.set(ShaderConst::SimpleMode as _, &(mode as u32));
+        spec.set(ShaderConst::GeomVisMode as _, &(mode as u32));
 
         Self {
             mode,
@@ -55,7 +55,7 @@ impl SimpleMaterialFactory {
     }
 }
 
-impl MaterialFactory for SimpleMaterialFactory {
+impl MaterialFactory for GeomVisMaterialFactory {
     fn select_shaders(&self) -> ShaderStageMap {
         partial_map! {
             ShaderStage::Vertex => Arc::clone(&self.vert_shader),

@@ -9,12 +9,12 @@ use crate::device::{
     ImageViewFlags, Sampler, ShaderStageMap,
 };
 
-mod simple;
+mod geom;
 mod state;
 mod system;
 mod texture;
 
-use simple::*;
+use geom::*;
 crate use state::*;
 crate use system::*;
 use texture::*;
@@ -25,8 +25,8 @@ use texture::*;
 #[non_exhaustive]
 pub enum MaterialProgram {
     Checker,
-    FragDepth,
-    FragNormal,
+    GeomDepth,
+    GeomNormal,
     Albedo,
     NormalMap,
     MetallicRoughness,

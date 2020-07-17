@@ -129,8 +129,8 @@ fn mesh_materials(rl: &mut RenderLoop, meshes: &[Mesh]) -> Vec<MeshMaterials> {
     use MaterialProgram::*;
 
     let checker_mat = rl.define_material(Checker, Default::default());
-    let geom_depth_mat = rl.define_material(FragDepth, Default::default());
-    let geom_normal_mat = rl.define_material(FragNormal, Default::default());
+    let geom_depth_mat = rl.define_material(GeomDepth, Default::default());
+    let geom_normal_mat = rl.define_material(GeomNormal, Default::default());
 
     meshes.iter().map(|mesh| {
         let albedo_mat = rl.define_material(Albedo, mesh.images.clone());

@@ -32,15 +32,18 @@ crate struct MaterialSystem {
 impl MaterialSystem {
     crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
         let factories = enum_map! {
-            MaterialProgram::Checker => Arc::new(SimpleMaterialFactory::new(
-                state, globals, SimpleMode::Checker,
-            )) as Arc<dyn MaterialFactory>,
-            MaterialProgram::FragDepth => Arc::new(SimpleMaterialFactory::new(
-                state, globals, SimpleMode::Depth,
-            )),
-            MaterialProgram::FragNormal => Arc::new(SimpleMaterialFactory::new(
-                state, globals, SimpleMode::Normal,
-            )),
+            MaterialProgram::Checker =>
+                Arc::new(GeomVisMaterialFactory::new(
+                    state, globals, GeomVisMode::Checker,
+                )) as Arc<dyn MaterialFactory>,
+            MaterialProgram::GeomDepth =>
+                Arc::new(GeomVisMaterialFactory::new(
+                    state, globals, GeomVisMode::Depth,
+                )),
+            MaterialProgram::GeomNormal =>
+                Arc::new(GeomVisMaterialFactory::new(
+                    state, globals, GeomVisMode::Normal,
+                )),
             MaterialProgram::Albedo =>
                 Arc::new(TextureVisMaterialFactory::new(
                     state, globals, MaterialImage::Albedo,

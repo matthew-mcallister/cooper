@@ -1,4 +1,4 @@
-const uint CONST_ID_SIMPLE_MODE = 0;
+const uint CONST_ID_GEOM_VIS_MODE = 0;
 const uint CONST_ID_TEXTURE_VIS_SLOT = 1;
 
 const uint VERTEX_ATTR_POSITION = 0;
@@ -12,9 +12,9 @@ const uint VERTEX_ATTR_JOINTS = 7;
 const uint VERTEX_ATTR_WEIGHTS = 8;
 const uint VERTEX_ATTR_VELOCITY = 9;
 
-const uint SIMPLE_MODE_CHECKER = 0;
-const uint SIMPLE_MODE_DEPTH = 1;
-const uint SIMPLE_MODE_NORMAL = 2;
+const uint GEOM_VIS_MODE_CHECKER = 0;
+const uint GEOM_VIS_MODE_DEPTH = 1;
+const uint GEOM_VIS_MODE_NORMAL = 2;
 
 const uint IMAGE_SLOT_ALBEDO = 0;
 const uint IMAGE_SLOT_NORMAL = 1;
