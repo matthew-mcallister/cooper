@@ -143,6 +143,17 @@ macro_rules! partial_map {
     }
 }
 
+#[macro_export]
+macro_rules! partial_map_opt {
+    ($($key:expr => $val:expr),*$(,)?) => {
+        {
+            let mut map = $crate::PartialEnumMap::new();
+            $(if let Some(val) = $val { map.insert($key, val); })*
+            map
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use enum_map::Enum;

@@ -15,7 +15,8 @@ use math::matrix::*;
 
 mod common;
 
-use common::*;
+use common::with_event_loop;
+use common::gltf::*;
 
 fn main() {
     unsafe { unsafe_main() }
@@ -34,24 +35,19 @@ unsafe fn render_world(
     let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
 
-    // Calculate camera position and near/far planes, chosen so that
-    // the mesh is always fully visible.
-    let (start, end) = (vec(mesh.bbox.start), vec(mesh.bbox.end));
-    let diam = (end - start).length();
+    // Use mesh bbox to ensure mesh is always visible.
+    let bbox = mesh.bbox;
+    let diam = (bbox[1] - bbox[0]).length();
     let radius = diam / 2.0;
-    let mid = (end + start) / 2.0;
-
-    // Increase distance to center a bit in case mesh is spherical
-    let dist = 1.1 * radius / fovy2.sin();
+    let dist = 1.1 * radius / fovy2.sin(); // Give it a little room
     let (z_near, z_far) = (dist - radius, dist + radius);
-
     let (min_depth, max_depth) = (1.0, 0.0);
+
     view.perspective = PerspectiveParams {
         z_near, z_far, tan_fovx2, tan_fovy2, min_depth, max_depth,
     };
-
     view.rot = Matrix3::identity();
-    view.pos = mid - vec3(0.0, 0.0, dist);
+    view.pos = vec3(0.0, 0.0, -dist);
     world.set_view(view);
 
     // Framerate is not bounded yet, so the frequency is kind of
@@ -60,19 +56,31 @@ unsafe fn render_world(
     let f = 0.2;
     let phi = 2.0 * std::f32::consts::PI * f * t;
     let (c, s) = (phi.cos(), phi.sin());
-    let rot = Matrix3::from([
-        [c, 0.0, s],
-        [0.0, 1.0, 0.0],
-        [-s, 0.0, c],
+    let turntable = Matrix3::from([
+        [ c,   0.0, s  ],
+        [ 0.0, 1.0, 0.0],
+        [-s,   0.0, c  ],
     ]);
+
+    let flip = Matrix3::from([
+        [-1.0,  0.0, 0.0],
+        [ 0.0, -1.0, 0.0],
+        [ 0.0,  0.0, 0.0],
+    ]);
+    let rot = flip * turntable;
+
+    // p = P R (p_0 - m)
+    let mid = (bbox[0] + bbox[1]) / 2.0;
+    let pos = -rot * mid;
 
     let idx = (world.frame_num() / 109) as usize;
     let material = Arc::clone(&materials[idx % materials.len()]);
+
     world.add_object(MeshInstance {
         /// Assumed to be orthogonal.
         mesh: Arc::clone(&mesh.render_mesh),
         rot,
-        pos: Default::default(),
+        pos,
         material,
     });
 }

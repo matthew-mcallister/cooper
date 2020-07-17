@@ -120,7 +120,8 @@ impl VertexInputLayout {
         let mut attrs = PartialEnumMap::new();
         for &location in shader.inputs().iter() {
             let name = location.try_into().unwrap();
-            let attr = &layout.attrs[name];
+            let attr = &layout.attrs.get(name).unwrap_or_else(||
+                panic!("missing attribute: {:?}", name));
             assert!(!attrs.contains_key(name));
             attrs.insert(name, VertexInputAttr {
                 location,

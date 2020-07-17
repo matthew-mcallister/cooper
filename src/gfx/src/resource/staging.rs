@@ -71,7 +71,8 @@ impl UploadStage {
         assert_eq!(image.samples(), SampleCount::One);
 
         let size = image.subresource_size(&sub) as usize;
-        assert_le!(size, self.staging.capacity());
+        assert_le!(size, self.staging.capacity(),
+            "image data too large for staging buffer: {} bytes", size);
         let mut alloc = self.staging.alloc(size).ok_or(StagingOutOfMemory)?;
 
         let extent = image.extent();

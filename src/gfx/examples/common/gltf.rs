@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::{self as any, anyhow, Context, Error};
-use base::partial_map;
+use base::{PartialEnumMap, partial_map_opt};
 use cooper_gfx::*;
 use fehler::{throw, throws};
 use gltf::{accessor, mesh};
+use math::vector::{Vector3, vec};
 
 #[derive(Debug)]
 crate struct GltfBundle {
@@ -22,9 +23,11 @@ crate struct ImageData {
     crate height: u32,
 }
 
+crate type BBox = [Vector3<f32>; 2];
+
 #[derive(Debug)]
 crate struct Mesh {
-    crate bbox: std::ops::Range<[f32; 3]>,
+    crate bbox: BBox,
     crate render_mesh: Arc<RenderMesh>,
     crate images: MaterialImageBindings,
 }
@@ -41,9 +44,35 @@ impl GltfBundle {
         Ok(Self { path, document, buffers, images })
     }
 
-    crate fn get_buffer_view(&self, view: &gltf::buffer::View<'_>) -> &[u8] {
-        let data = &self.buffers[view.buffer().index()];
-        &data[view.offset()..view.offset() + view.length()]
+    #[throws]
+    #[inline]
+    fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) -> &[u8] {
+        let view = accessor.view().ok_or(anyhow!("sparse accessor"))?;
+        &self.buffers[view.buffer().index()][view.offset()..]
+    }
+
+    #[throws]
+    fn read_attr_accessor(&self, accessor: &gltf::Accessor<'_>) ->
+        (Format, &[u8])
+    {
+        let format = map_format(
+            accessor.data_type(),
+            accessor.dimensions(),
+            accessor.normalized(),
+        )?;
+        let data = self.accessor_view_data(accessor)?;
+        let len = accessor.count() * format.size();
+        (format, &data[..len])
+    }
+
+    #[throws]
+    fn read_index_accessor(&self, accessor: &gltf::Accessor<'_>) ->
+        (IndexType, &[u8])
+    {
+        let ty = map_index_type(accessor.data_type())?;
+        let data = self.accessor_view_data(accessor)?;
+        let len = accessor.count() * ty.size();
+        (ty, &data[..len])
     }
 }
 
@@ -85,64 +114,81 @@ fn from_primitive(
     }
 }
 
-fn get_bbox(prim: &gltf::Primitive<'_>) -> std::ops::Range<[f32; 3]> {
+fn get_bbox(prim: &gltf::Primitive<'_>) -> BBox {
     let bbox = prim.bounding_box();
-    bbox.min..bbox.max
+    [vec(bbox.min), vec(bbox.max)]
+}
+
+macro_rules! try_as {
+    ($err:ty, $($body:tt)*) => {
+        (try { $($body)* }: Result<_, $err>)
+    }
+}
+
+// I swear this library needs a proc macro to make mixing contexts with
+// control flow at all reasonable.
+macro_rules! with_context {
+    (
+        where context = $context:expr;
+        $($body:tt)*
+    ) => {
+        try_as!(anyhow::Error, { $($body)* }).with_context($context)
+    }
 }
 
 #[throws]
 fn load_mesh(
-    rl: &mut RenderLoop,
+    rloop: &mut RenderLoop,
     bundle: &GltfBundle,
     prim: &gltf::Primitive<'_>,
 ) -> Arc<RenderMesh> {
+    use VertexAttr::*;
+
     tassert!(prim.mode() == mesh::Mode::Triangles,
         anyhow!("unsupported primitive topology: {:?}", prim.mode()));
-
-    let mut attrs = Vec::new();
-    for (sem, accessor) in prim.attributes() {
-        // TODO: try block results in bad indentation
-        let res: any::Result<_> = try {
-            let attr = map_semantic(&sem)?;
-            let format = map_format(
-                accessor.data_type(),
-                accessor.dimensions(),
-                accessor.normalized(),
-            )?;
-
-            let view = accessor.view()
-                .ok_or_else(|| anyhow!("sparse accessor"))?;
-            let data = bundle.get_buffer_view(&view);
-            attrs.push((attr, format, data));
-        };
-        res.with_context(|| format!("attribute {:?}", sem))?;
-    }
     tassert!(!prim.attributes().is_empty(), anyhow!("no attribute data"));
 
-    let index: Result<_, any::Error> = prim.indices()
-        .map(|accessor| {
-            let data_ty = accessor.data_type();
-            let ty = map_index_type(data_ty)?;
-            let data = bundle.get_buffer_view(&accessor_view(&accessor)?);
-            Ok((ty, data))
-        })
-        .transpose();
-    let index = index?;
+    let vertex_count = prim.attributes().next().unwrap().1.count();
+    let mut attrs: PartialEnumMap<_, _> = Default::default();
+    for (sem, accessor) in prim.attributes() { with_context!(
+        where context = || format!("attribute {:?}", sem);
+        tassert!(
+            accessor.count() == vertex_count,
+            anyhow!("accessor size: got: {}, expected: {}",
+                accessor.count(), vertex_count),
+        );
+        let attr = map_semantic(&sem)?;
+        let (format, data) = bundle.read_attr_accessor(&accessor)?;
+        attrs.insert(attr, (format, data));
+    )?; }
 
-    let mut counts = attrs.iter()
-        .map(|(_, fmt, data)| data.len() / fmt.size());
-    let vertex_count = counts.clone().next().unwrap();
-    tassert!(counts.all(|count| count == vertex_count),
-        anyhow!("attribute counts not equal"));
+    for &attr in &[Position, Normal, Texcoord0] {
+        tassert!(attrs.contains_key(attr),
+            anyhow!("missing attribute: {:?}", attr));
+    }
 
-    let mut builder = RenderMeshBuilder::from_loop(rl);
+    let index = try_opt!(bundle.read_index_accessor(&prim.indices()?))
+        .transpose()?;
+
+    build_mesh(rloop, attrs, index)
+}
+
+fn build_mesh(
+    rloop: &mut RenderLoop,
+    attrs: PartialEnumMap<VertexAttr, (Format, &[u8])>,
+    index: Option<(IndexType, &[u8])>,
+) -> Arc<RenderMesh> {
+    let mut builder = RenderMeshBuilder::from_loop(rloop);
     builder.lifetime(Lifetime::Static);
-    for &(attr, fmt, data) in attrs.iter() {
+
+    for (attr, &(fmt, data)) in attrs.iter() {
         builder.attr(attr, fmt, data);
     }
+
     if let Some((ty, buf)) = index {
         builder.index(ty, buf);
     }
+
     unsafe { Arc::new(builder.build()) }
 }
 
@@ -176,12 +222,15 @@ fn map_format(
         (Type::U8, Dim::Vec3, true) => Format::RGB8,
         (Type::U8, Dim::Vec4, true) => Format::RGBA8,
         (Type::U8, Dim::Vec4, false) => Format::RGBA8U,
-        (Type::U16, Dim::Vec4, true) => Format::RG16,
+        (Type::U16, Dim::Vec4, false) => Format::RGBA16U,
         (Type::F32, Dim::Scalar, _) => Format::R32F,
         (Type::F32, Dim::Vec2, _) => Format::RG32F,
         (Type::F32, Dim::Vec3, _) => Format::RGB32F,
         (Type::F32, Dim::Vec4, _) => Format::RGBA32F,
-        _ => throw!(anyhow!("unsupported format")),
+        _ => throw!(anyhow!(
+            "unsupported format: {:?}",
+            (ty, shape, normalized),
+        )),
     }
 }
 
@@ -196,13 +245,6 @@ fn map_index_type(ty: accessor::DataType) -> IndexType {
 }
 
 #[throws]
-fn accessor_view<'a>(accessor: &'a accessor::Accessor<'a>) ->
-    gltf::buffer::View<'a>
-{
-    accessor.view().ok_or(anyhow!("sparse accessor"))?
-}
-
-#[throws]
 fn load_material_images(
     rloop: &mut RenderLoop,
     bundle: &GltfBundle,
@@ -211,30 +253,30 @@ fn load_material_images(
     tassert!(material.alpha_mode() == gltf::material::AlphaMode::Opaque,
         anyhow!("transparency not supported"));
 
-    let binding = material.normal_texture()
-        .ok_or(anyhow!("missing normal texture"))?;
-    tassert!(binding.tex_coord() == 0, anyhow!("expected texcoord == 0"));
-    tassert!(binding.scale() == 1.0, anyhow!("expected normal scale == 1"));
-    let normal = load_texture(rloop, bundle, binding.texture())?;
+    let normal = if let Some(binding) = material.normal_texture() {
+        tassert!(binding.tex_coord() == 0, anyhow!("texcoord != 0"));
+        tassert!(binding.scale() == 1.0, anyhow!("normal scale != 1"));
+        Some(load_texture(rloop, bundle, binding.texture())?)
+    } else { None };
 
     let pbr = material.pbr_metallic_roughness();
 
-    let binding = pbr.base_color_texture()
-        .ok_or(anyhow!("missing albedo texture"), )?;
-    tassert!(binding.tex_coord() == 0, anyhow!("expected texcoord == 0"));
-    let albedo = load_texture(rloop, bundle, binding.texture())?;
+    macro_rules! try_load_texture { ($texture:expr) => {
+        if let Some(binding) = $texture {
+            tassert!(binding.tex_coord() == 0, anyhow!("texcoord != 0"));
+            Some(load_texture(rloop, bundle, binding.texture())?)
+        } else { None }
+    } }
 
-    let binding = pbr.metallic_roughness_texture()
-        .ok_or(anyhow!("missing metallic_roughness texture"))?;
-    tassert!(binding.tex_coord() == 0, anyhow!("expected texcoord == 0"));
-    let metallic_roughness = load_texture(rloop, bundle, binding.texture())?;
+    let albedo = try_load_texture!(pbr.base_color_texture());
+    let metal_rough = try_load_texture!(pbr.metallic_roughness_texture());
 
     // NB: This is fixed in the upcoming version of fehler
     #[allow(unused_parens)]
-    (partial_map! {
+    (partial_map_opt! {
         MaterialImage::Albedo => albedo,
         MaterialImage::Normal => normal,
-        MaterialImage::MetallicRoughness => metallic_roughness,
+        MaterialImage::MetallicRoughness => metal_rough,
     })
 }
 
