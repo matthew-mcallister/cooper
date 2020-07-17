@@ -32,6 +32,16 @@ crate struct Mesh {
     crate images: MaterialImageBindings,
 }
 
+#[throws]
+fn load_meshes(
+    rl: &mut RenderLoop,
+    bundle: &GltfBundle,
+) -> Vec<Mesh> {
+    bundle.document.meshes().flat_map(|mesh| mesh.primitives())
+        .map(move |prim| Mesh::from_primitive(rl, bundle, &prim))
+        .collect::<Result<_, _>>()?
+}
+
 impl GltfBundle {
     crate fn import(path: impl Into<String>) -> gltf::Result<Self> {
         let path = path.into();
@@ -74,21 +84,15 @@ impl GltfBundle {
         let len = accessor.count() * ty.size();
         (ty, &data[..len])
     }
+
+    crate fn load_meshes(&self, rloop: &mut RenderLoop) ->
+        any::Result<Vec<Mesh>>
+    {
+        load_meshes(rloop, self)
+    }
 }
 
 impl Mesh {
-    /// Creates a mesh from the first primitive of the first mesh in a model
-    /// file.
-    crate fn from_gltf(rl: &mut RenderLoop, bundle: &GltfBundle) ->
-        any::Result<Self>
-    {
-        let prim: Option<_> = try {
-            bundle.document.meshes().next()?.primitives().next()?
-        };
-        let prim = prim.ok_or_else(|| anyhow!("no primitives: path: `{}`"))?;
-        Self::from_primitive(rl, bundle, &prim)
-    }
-
     crate fn from_primitive(
         rl: &mut RenderLoop,
         bundle: &GltfBundle,
@@ -244,6 +248,7 @@ fn map_index_type(ty: accessor::DataType) -> IndexType {
     }
 }
 
+// FIXME: This is going to load a ton of duplicate textures
 #[throws]
 fn load_material_images(
     rloop: &mut RenderLoop,
