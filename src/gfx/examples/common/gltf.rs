@@ -149,8 +149,8 @@ fn load_mesh(
     use VertexAttr::*;
 
     tassert!(prim.mode() == mesh::Mode::Triangles,
-        anyhow!("unsupported primitive topology: {:?}", prim.mode()));
-    tassert!(!prim.attributes().is_empty(), anyhow!("no attribute data"));
+        "unsupported primitive topology: {:?}", prim.mode());
+    tassert!(!prim.attributes().is_empty(), "no attribute data");
 
     let vertex_count = prim.attributes().next().unwrap().1.count();
     let mut attrs: PartialEnumMap<_, _> = Default::default();
@@ -158,8 +158,8 @@ fn load_mesh(
         where context = || format!("attribute {:?}", sem);
         tassert!(
             accessor.count() == vertex_count,
-            anyhow!("accessor size: got: {}, expected: {}",
-                accessor.count(), vertex_count),
+            "accessor size: got: {}, expected: {}",
+            accessor.count(), vertex_count,
         );
         let attr = map_semantic(&sem)?;
         let (format, data) = bundle.read_attr_accessor(&accessor)?;
@@ -167,8 +167,7 @@ fn load_mesh(
     )?; }
 
     for &attr in &[Position, Normal, Texcoord0] {
-        tassert!(attrs.contains_key(attr),
-            anyhow!("missing attribute: {:?}", attr));
+        tassert!(attrs.contains_key(attr), "missing attribute: {:?}", attr);
     }
 
     let index = tryopt!(bundle.read_index_accessor(&prim.indices()?))
@@ -256,11 +255,11 @@ fn load_material_images(
     material: gltf::Material<'_>,
 ) -> MaterialImageBindings {
     tassert!(material.alpha_mode() == gltf::material::AlphaMode::Opaque,
-        anyhow!("transparency not supported"));
+        "transparency not supported");
 
     let normal = if let Some(binding) = material.normal_texture() {
-        tassert!(binding.tex_coord() == 0, anyhow!("texcoord != 0"));
-        tassert!(binding.scale() == 1.0, anyhow!("normal scale != 1"));
+        tassert!(binding.tex_coord() == 0, "texcoord != 0");
+        tassert!(binding.scale() == 1.0, "normal scale != 1");
         Some(load_texture(rloop, bundle, binding.texture())?)
     } else { None };
 
@@ -268,7 +267,7 @@ fn load_material_images(
 
     macro_rules! try_load_texture { ($texture:expr) => {
         if let Some(binding) = $texture {
-            tassert!(binding.tex_coord() == 0, anyhow!("texcoord != 0"));
+            tassert!(binding.tex_coord() == 0, "texcoord != 0");
             Some(load_texture(rloop, bundle, binding.texture())?)
         } else { None }
     } }

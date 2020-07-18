@@ -3,8 +3,8 @@ use std::thread;
 /// Throwing assert.
 #[macro_export]
 macro_rules! tassert {
-    ($cond:expr, $err:expr$(,)?) => {
-        if !$cond { fehler::throw!($err); }
+    ($cond:expr, $($err:expr),*$(,)?) => {
+        if !$cond { fehler::throw!(anyhow!($($err,)*)); }
     };
     ($cond:expr) => {
         if !$cond { fehler::throw!(); }
