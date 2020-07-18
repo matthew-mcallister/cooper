@@ -40,6 +40,10 @@ package = "vulkan-loader"
 
 [dev-dependencies]
 anyhow = "1.0.28"
-fehler = "1.0.0"
 env_logger = "0.7.1"
+fehler = "1.0.0"
 gltf = { version = "0.15.1", features = ["import"] }
+
+[[test]]
+name = "upload"
+harness = false

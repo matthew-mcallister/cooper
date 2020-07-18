@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::debug;
 use prelude::*;
 
 use crate::*;
@@ -129,10 +130,12 @@ impl RenderLoop {
         // that might otherwise be spent waiting on the swapchain, but
         // frame_num doesn't update until after frame.acquire().
         let frame_num = self.frame_num() + 1;
+        debug!("beginning frame {}", frame_num);
         self.state_mut().frame_over();
         self.resources.schedule(frame_num, &self.state.as_ref().unwrap().heap);
     }
 
+    // TODO: Allowing doing a frame without rendering anything
     crate fn render(&mut self, world: RenderWorldData) {
         self.frame.wait();
         self.new_frame();
@@ -151,6 +154,6 @@ impl RenderLoop {
         );
         self.state = Some(Arc::try_unwrap(state).unwrap());
 
-        self.frame.present(&self.gfx_queue);
+        unsafe { self.frame.present(&self.gfx_queue); }
     }
 }

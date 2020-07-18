@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use log::debug;
+use log::trace;
 
 use crate::{
     BufferHeap, DescriptorHeap, Device, ImageHeap, PipelineCache, SamplerCache,
@@ -40,7 +40,7 @@ impl SystemState {
     }
 
     crate fn frame_over(&mut self) {
-        debug!("SystemState::frame_over(...)");
+        trace!("SystemState::frame_over(...)");
         unsafe {
             self.buffers.clear_frame();
             self.descriptors.clear_frame();

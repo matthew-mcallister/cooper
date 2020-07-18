@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bitflags::*;
 use derivative::Derivative;
 use derive_more::Constructor;
+use log::trace;
 use more_asserts::{assert_gt, assert_le, assert_lt};
 
 use crate::*;
@@ -74,11 +75,13 @@ pub struct ImageSubresources {
     pub layers: ResourceRange,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct Image {
     device: Arc<Device>,
     def: Arc<ImageDef>,
     inner: vk::Image,
+    #[derivative(Debug = "ignore")]
     alloc: DeviceAlloc,
 }
 
@@ -115,6 +118,8 @@ impl Drop for Image {
 
 impl Image {
     crate fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
+        trace!("Image::new(def: {:?})", def);
+
         let device = Arc::clone(heap.device());
         let dt = &*device.table;
 

@@ -301,11 +301,7 @@ fn load_texture(
         1,
         1,
     );
-    rloop.upload_image(
-        &image,
-        Arc::clone(&data.pixels),
-        0,
-    );
+    rloop.upload_image(&image, Arc::clone(&data.pixels), 0);
 
     let sampler = rloop.get_or_create_sampler(&load_sampler(tex.sampler()));
 

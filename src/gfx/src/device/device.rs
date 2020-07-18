@@ -112,6 +112,10 @@ impl Device {
         &self.table
     }
 
+    crate fn instance(&self) -> &Arc<Instance> {
+        &self.instance
+    }
+
     crate fn properties(&self) -> &vk::PhysicalDeviceProperties {
         &self.props
     }

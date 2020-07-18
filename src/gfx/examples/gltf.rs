@@ -20,7 +20,7 @@ mod common;
 use common::with_event_loop;
 use common::gltf::*;
 
-const NAME: &'static str = "debug example";
+const NAME: &'static str = "gltf example";
 
 unsafe fn render_world(
     world: &mut RenderWorld,

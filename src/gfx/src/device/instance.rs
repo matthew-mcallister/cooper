@@ -31,6 +31,12 @@ impl Drop for Instance {
             }
             self.table.destroy_instance(ptr::null());
         }
+
+        // XXX: Don't bother if already panicking
+        if self.app_info.test {
+            let msg_count = self.debug_message_count();
+            assert!(msg_count == 0, "caught {} validation errors", msg_count);
+        }
     }
 }
 
@@ -159,7 +165,7 @@ impl Instance {
         self.debug_messengers.push(messenger);
     }
 
-    crate fn debug_message_count(&self) -> u32 {
+    fn debug_message_count(&self) -> u32 {
         self.debug_handler.message_count()
     }
 }

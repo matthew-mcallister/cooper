@@ -19,6 +19,7 @@ pub fn opt(b: bool) -> Option<()> {
 }
 
 pub type AnyError = Box<dyn std::error::Error>;
+pub type AnyResult<T> = Result<T, AnyError>;
 
 pub trait ResultExt<T, E> {
     /// Executes a callback if the result was an error and returns the

@@ -92,12 +92,7 @@ impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
             let vars = self.init_vars().unwrap_or_else(|e| {
                 panic!("failed to initialize video: {}", e);
             });
-            let instance = Arc::clone(&vars.swapchain.device.instance);
-
             (test.data())(vars);
-
-            let msg_count = instance.debug_message_count();
-            assert!(msg_count == 0, "caught {} validation errors", msg_count);
         }
     }
 }

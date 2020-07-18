@@ -41,6 +41,7 @@ macro_rules! impl_format {
 
 // TODO: What are good HDR render target formats?
 //       Cf. Unreal r.SceneColorFormat, light accumulation buffer
+// TODO: Use ordunary name conventions, e.g. Rgb32F, Bgra8Srgb
 impl_format! {
     R8(R8_UNORM, 1, COLOR_BIT),
     R32F(R32_SFLOAT, 4, COLOR_BIT),

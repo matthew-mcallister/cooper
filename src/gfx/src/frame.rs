@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use log::debug;
+use log::trace;
 
 use crate::*;
 
@@ -60,7 +60,7 @@ impl FrameControl {
     }
 
     crate fn acquire(&mut self) {
-        debug!("FrameControl::begin(self: {:?})", self);
+        trace!("[frame {}] FrameControl::acquire()", self.frame_num + 1);
         assert!(!self.pending());
         self.image_idx = self.swapchain
             .acquire_next_image(&mut self.acquire_sem)
@@ -68,17 +68,17 @@ impl FrameControl {
         self.frame_num += 1;
     }
 
-    crate fn present(&mut self, present_queue: &Arc<Queue>) {
-        debug!(
-            "FrameControl::finish(self: {:?}, present_queue: {:?})",
-            self, present_queue,
+    // TODO: This API lets you unsafely present to the same image twice
+    // in a row!
+    crate unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
+        trace!(
+            "[frame {}] FrameControl::present(present_queue: {:?})",
+            self.frame_num, present_queue,
         );
-        unsafe {
-            present_queue.present(
-                &[&mut self.present_sem],
-                &mut self.swapchain,
-                self.image_idx,
-            ).check().unwrap();
-        }
+        present_queue.present(
+            &[&mut self.present_sem],
+            &mut self.swapchain,
+            self.image_idx,
+        ).check().unwrap();
     }
 }

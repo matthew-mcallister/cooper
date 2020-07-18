@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use log::debug;
+
 use crate::device::{
     CmdPool, Device, Image, ImageDef, ImageHeap, Queue, WaitResult,
 };
@@ -59,15 +61,15 @@ impl ResourceSystem {
     }
 
     crate fn schedule(&mut self, frame_num: u64, heap: &ImageHeap) {
-        match self.sched.query_tasks() {
-            SchedulerStatus::Idle => {
-                let mut cmd_pool = self.cmd_pool.take().unwrap();
-                unsafe { cmd_pool.reset(); }
-                self.cmd_pool = Some(self.sched.schedule(
-                    frame_num, &self.queue, &mut self.state, heap, cmd_pool));
-            },
-            _ => {},
+        if self.sched.query_tasks() != SchedulerStatus::Idle {
+            debug!("[frame {}] resource scheduler busy", frame_num);
+            return;
         }
+
+        let mut cmd_pool = self.cmd_pool.take().unwrap();
+        unsafe { cmd_pool.reset(); }
+        self.cmd_pool = Some(self.sched.schedule(
+            frame_num, &self.queue, &mut self.state, heap, cmd_pool));
     }
 
     crate fn wait(&self, timeout: u64) -> WaitResult {

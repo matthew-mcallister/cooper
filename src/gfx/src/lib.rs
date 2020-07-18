@@ -59,7 +59,7 @@ pub use material::*;
 pub use mesh::*;
 pub use object::*;
 pub use render::*;
-crate use resource::*;
+pub use resource::*;
 pub use rloop::*;
 crate use staged_cache::*;
 crate use state::*;
