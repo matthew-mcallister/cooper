@@ -57,8 +57,8 @@ impl Globals {
             256,
         ));
 
-        let immediate_image_2d = Arc::new(Image::with(
-            heap,
+        let immediate_image_2d = ImageDef::new(
+            &device,
             Default::default(),
             ImageType::Dim2,
             Format::RGBA8,
@@ -66,9 +66,12 @@ impl Globals {
             (1, 1).into(),
             1,
             1,
-        )).create_full_view();
-        let immediate_storage_image_2d = Arc::new(Image::with(
-            heap,
+        ).with_name("immediate_image_2d")
+            .build_image(heap)
+            .create_full_view();
+
+        let immediate_storage_image_2d = ImageDef::new(
+            &device,
             ImageFlags::STORAGE | ImageFlags::NO_SAMPLE,
             ImageType::Dim2,
             Format::RGBA8,
@@ -76,7 +79,9 @@ impl Globals {
             (1, 1).into(),
             1,
             1,
-        )).create_full_view();
+        ).with_name("immediate_storage_image_2d")
+            .build_image(heap)
+            .create_full_view();
 
         let empty_image_2d = Arc::new(ImageDef::new(
             &device,
@@ -87,7 +92,7 @@ impl Globals {
             (1, 1).into(),
             1,
             1,
-        ));
+        ).with_name("empty_image_2d"));
 
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
@@ -212,7 +217,6 @@ impl GlobalShaders {
                             Arc::clone(&device),
                             to_words(shader_sources::$shader),
                         ));
-                        device.set_name(&*shader, stringify!($field));
                         shader
                     },)*
                 }

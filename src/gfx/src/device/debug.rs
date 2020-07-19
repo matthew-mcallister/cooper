@@ -1,6 +1,5 @@
 use std::ffi::{CStr, c_void};
 use std::fmt;
-use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -12,23 +11,10 @@ use crate::*;
 
 /// Adds type information to Vulkan object types from the debug_utils
 /// extension.
-// TODO: should set HandleType: Copy
+// TODO: should be part of vk::HandleType
 crate trait DebugHandle: vk::traits::HandleType + Copy {
     /// Returns the debug object type.
     fn object_type() -> vk::ObjectType;
-}
-
-/// Allows an object to have its debug name set.
-crate trait Debuggable {
-    type Handle: DebugHandle;
-    fn handle(&self) -> Self::Handle;
-}
-
-impl<T> Debuggable for T where T: DebugHandle {
-    type Handle = Self;
-    fn handle(&self) -> Self::Handle {
-        *self
-    }
 }
 
 macro_rules! impl_debug_marker_name {
@@ -94,15 +80,15 @@ impl_debug_marker_name! {
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
 }
 
-crate unsafe fn set_name<T: Debuggable>(
+crate unsafe fn set_name<T: DebugHandle>(
     device: &vkl::DeviceTable,
-    object: &T,
-    name: *const c_char,
+    handle: T,
+    name: &impl AsRef<std::ffi::CStr>,
 ) {
     let info = vk::DebugUtilsObjectNameInfoEXT {
-        object_type: T::Handle::object_type(),
-        object_handle: object.handle().into(),
-        p_object_name: name,
+        object_type: T::object_type(),
+        object_handle: handle.into(),
+        p_object_name: name.as_ref().as_ptr(),
         ..Default::default()
     };
     device.set_debug_utils_object_name_ext(&info);

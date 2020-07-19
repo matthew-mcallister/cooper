@@ -41,6 +41,7 @@ crate struct DescriptorSet {
     layout: Arc<DescriptorSetLayout>,
     pool: Weak<Mutex<DescriptorPool>>,
     inner: vk::DescriptorSet,
+    name: Option<String>,
 }
 
 impl Drop for Layout {
@@ -342,12 +343,15 @@ impl Set {
     ) {
         todo!()
     }
-}
 
-impl Debuggable for Set {
-    type Handle = vk::DescriptorSet;
-    fn handle(&self) -> Self::Handle {
-        self.inner
+    crate fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner(), name); }
     }
 }
 
@@ -476,6 +480,7 @@ struct DescriptorPool {
     used_sets: u32,
     max_descriptors: Counts,
     used_descriptors: Counts,
+    name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -525,7 +530,12 @@ impl Pool {
             used_sets: 0,
             max_descriptors: descriptor_counts,
             used_descriptors: Default::default(),
+            name: None,
         }
+    }
+
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
     }
 
     crate fn max_sets(&self) -> u32 {
@@ -576,6 +586,7 @@ impl Pool {
                 layout: layout.clone(),
                 pool: Weak::new(),
                 inner,
+                name: None,
             }
         }).collect()
     }
@@ -601,37 +612,37 @@ impl Pool {
         let dt = &*self.device.table;
         dt.reset_descriptor_pool(self.inner, Default::default());
     }
-}
 
-impl Debuggable for Pool {
-    type Handle = vk::DescriptorPool;
-    fn handle(&self) -> Self::Handle { self.inner }
+    crate fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner, name); }
+    }
 }
 
 impl Heap {
     crate fn new(device: &Arc<Device>) -> Self {
-        Self {
-            pools: enum_map! {
-                Lifetime::Static => {
-                    let (sets, sizes) = static_descriptor_counts();
-                    let pool = Pool::new(
-                        Arc::clone(&device), sets, sizes,
-                        Lifetime::Static,
-                    );
-                    device.set_name(&pool, "static_pool");
-                    Arc::new(Mutex::new(pool))
-                },
-                Lifetime::Frame => {
-                    let (sets, sizes) = frame_descriptor_counts();
-                    let pool = Pool::new(
-                        Arc::clone(&device), sets, sizes,
-                        Lifetime::Frame,
-                    );
-                    device.set_name(&pool, "frame_pool");
-                    Arc::new(Mutex::new(pool))
-                },
+        let pools = enum_map! {
+            Lifetime::Static => {
+                let (sets, sizes) = static_descriptor_counts();
+                let mut pool = Pool::new(
+                    Arc::clone(&device), sets, sizes, Lifetime::Static);
+                pool.set_name("static_pool");
+                Arc::new(Mutex::new(pool))
             },
-        }
+            Lifetime::Frame => {
+                let (sets, sizes) = frame_descriptor_counts();
+                let mut pool = Pool::new(
+                    Arc::clone(&device), sets, sizes, Lifetime::Frame);
+                pool.set_name("frame_pool");
+                Arc::new(Mutex::new(pool))
+            },
+        };
+        Self { pools }
     }
 
     crate fn alloc_many(

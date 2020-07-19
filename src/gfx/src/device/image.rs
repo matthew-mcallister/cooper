@@ -85,7 +85,7 @@ crate struct Image {
     alloc: DeviceAlloc,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageDef {
     flags: ImageFlags,
     ty: ImageType,
@@ -94,6 +94,7 @@ pub struct ImageDef {
     extent: Extent3D,
     mip_levels: u32,
     layers: u32,
+    name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -123,9 +124,9 @@ impl Image {
         let device = Arc::clone(heap.device());
         let dt = &*device.table;
 
-        let ImageDef {
-            flags, ty, format, samples, extent, mip_levels, layers,
-        } = *def;
+        let &ImageDef {
+            flags, ty, format, samples, extent, mip_levels, layers, ..
+        } = &*def;
 
         let create_info = vk::ImageCreateInfo {
             flags: ty.flags(),
@@ -146,6 +147,10 @@ impl Image {
         }
 
         let alloc = unsafe { heap.bind(image) };
+
+        if let Some(name) = &def.name {
+            unsafe { device.set_name(image, name); }
+        }
 
         Self {
             device,
@@ -253,6 +258,10 @@ impl Image {
             ))
         }
     }
+
+    crate fn name(&self) -> Option<&str> {
+        self.def.name()
+    }
 }
 
 impl ImageDef {
@@ -268,7 +277,9 @@ impl ImageDef {
     ) -> Self {
         validate_image_creation(&device, flags, ty, format, samples, extent,
             mip_levels, layers);
-        Self { flags, ty, format, samples, extent, mip_levels, layers }
+        Self {
+            flags, ty, format, samples, extent, mip_levels, layers, name: None,
+        }
     }
 
     pub fn flags(&self) -> ImageFlags {
@@ -334,6 +345,23 @@ impl ImageDef {
             mip_levels: [mip_level, mip_level + 1],
             layers: [0, self.layers],
         }
+    }
+
+    crate fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        self.name = Some(name.into());
+    }
+
+    crate fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.set_name(name);
+        self
+    }
+
+    crate fn build_image(self, heap: &ImageHeap) -> Arc<Image> {
+        Arc::new(Image::new(heap, Arc::new(self)))
     }
 }
 

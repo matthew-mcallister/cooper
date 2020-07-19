@@ -299,6 +299,7 @@ fn load_texture(
         (data.width, data.height).into(),
         1,
         1,
+        Some(source_string(bundle, tex.source().source())),
     );
     rloop.upload_image(&image, Arc::clone(&data.pixels), 0);
 
@@ -309,6 +310,14 @@ fn load_texture(
         image,
         flags: Default::default(),
         sampler,
+    }
+}
+
+fn source_string(bundle: &GltfBundle, src: gltf::image::Source<'_>) -> String {
+    match src {
+        gltf::image::Source::View { view, .. } =>
+            format!("{}:{}", bundle.path, view.index()),
+        gltf::image::Source::Uri { uri, .. } => uri.into(),
     }
 }
 

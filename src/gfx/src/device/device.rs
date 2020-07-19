@@ -135,14 +135,14 @@ impl Device {
         &self.features
     }
 
-    crate fn set_name(
+    crate unsafe fn set_name(
         &self,
-        obj: &impl Debuggable,
-        name: &(impl AsRef<str> + ?Sized),
+        handle: impl DebugHandle,
+        name: impl Into<String>,
     ) {
         if self.app_info.debug {
-            let name = CString::new(name.as_ref()).unwrap();
-            unsafe { set_name(&self.table, obj, name.as_ptr()); }
+            let name = CString::new(name.into()).unwrap();
+            set_name(&self.table, handle, &name);
         }
     }
 

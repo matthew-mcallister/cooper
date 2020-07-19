@@ -23,6 +23,7 @@ unsafe fn upload(mut rloop: Box<RenderLoop>) {
         (16, 16).into(),
         1,
         1,
+        Some("test_image"),
     );
     rloop.upload_image(&image, Arc::new(data), 0);
 

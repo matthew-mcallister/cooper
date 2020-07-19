@@ -312,6 +312,10 @@ impl DeviceMemory {
         self.inner
     }
 
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     crate fn size(&self) -> vk::DeviceSize {
         self.size
     }

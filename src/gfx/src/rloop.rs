@@ -86,8 +86,9 @@ impl RenderLoop {
         extent: Extent3D,
         mip_levels: u32,
         layers: u32,
+        name: Option<impl Into<String>>,
     ) -> Arc<ImageDef> {
-        Arc::new(ImageDef::new(
+        let mut def = ImageDef::new(
             self.device(),
             flags,
             ty,
@@ -96,7 +97,11 @@ impl RenderLoop {
             extent,
             mip_levels,
             layers,
-        ))
+        );
+        if let Some(name) = name {
+            def.set_name(name.into());
+        }
+        Arc::new(def)
     }
 
     pub fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {

@@ -72,8 +72,10 @@ impl Shader {
         let reflected = spirv_reflect::ShaderModule::load_u8_data(data)
             .unwrap();
         let stage = reflected.get_spirv_execution_model().try_into().unwrap();
-        let source_file = reflected.get_source_file();
         let (inputs, outputs) = get_shader_interface(&reflected);
+
+        let source_file = reflected.get_source_file();
+        device.set_name(module, source_file.clone());
 
         Shader {
             device,
@@ -113,12 +115,9 @@ impl Shader {
     crate fn outputs(&self) -> &[ShaderLocation] {
         &self.outputs
     }
-}
 
-impl Debuggable for Shader {
-    type Handle = vk::ShaderModule;
-    fn handle(&self) -> Self::Handle {
-        self.module
+    crate fn name(&self) -> Option<&str> {
+        Some(&self.source_file)
     }
 }
 

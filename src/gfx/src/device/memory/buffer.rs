@@ -16,6 +16,7 @@ crate struct DeviceBuffer {
     usage: vk::BufferUsageFlags,
     binding: Option<BufferBinding>,
     heap: Weak<BufferHeap>,
+    name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
@@ -103,6 +104,7 @@ unsafe fn create_buffer(
         usage,
         binding: None,
         heap: Weak::new(),
+        name: None,
     };
     buffer.bind();
 
@@ -161,13 +163,15 @@ impl DeviceBuffer {
         }
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
     }
-}
 
-impl Debuggable for DeviceBuffer {
-    type Handle = vk::Buffer;
+    crate fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
+    }
 
-    fn handle(&self) -> Self::Handle {
-        self.inner
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner(), name); }
     }
 }
 
@@ -630,7 +634,7 @@ impl<A: Allocator> BufferPool<A> {
         buffer.binding = Some(self.binding);
         buffer.heap = Weak::clone(&self.heap);
 
-        self.device.set_name(&buffer, &format!(
+        buffer.set_name(format!(
             "{:?}|{:?}|{:?}[{}]",
             self.binding,
             self.lifetime,

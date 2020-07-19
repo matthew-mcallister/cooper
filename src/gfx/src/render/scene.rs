@@ -57,11 +57,11 @@ impl SceneDescriptors {
     }
 
     pub(super) fn new(state: &SystemState, globals: &Globals) -> Self {
-        let inner = state.descriptors.alloc(
+        let mut inner = state.descriptors.alloc(
             Lifetime::Frame,
             &globals.scene_desc_layout,
         );
-        state.device().set_name(&inner, "SceneDescriptors::inner");
+        inner.set_name("SceneDescriptors::inner");
         SceneDescriptors { inner }
     }
 
