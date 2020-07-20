@@ -73,7 +73,7 @@ impl FrameControl {
     crate unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
         trace!(
             "[frame {}] FrameControl::present(present_queue: {:?})",
-            self.frame_num, present_queue,
+            self.frame_num, fmt_named(&**present_queue),
         );
         present_queue.present(
             &[&mut self.present_sem],

@@ -344,14 +344,16 @@ impl Set {
         todo!()
     }
 
-    crate fn name(&self) -> Option<&str> {
-        Some(&self.name.as_ref()?)
-    }
-
     crate fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
+    }
+}
+
+impl Named for Set {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 
@@ -613,14 +615,16 @@ impl Pool {
         dt.reset_descriptor_pool(self.inner, Default::default());
     }
 
-    crate fn name(&self) -> Option<&str> {
-        Some(&self.name.as_ref()?)
-    }
-
     crate fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner, name); }
+    }
+}
+
+impl Named for Pool {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 

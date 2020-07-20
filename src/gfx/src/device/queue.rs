@@ -29,6 +29,7 @@ crate struct Queue {
     inner: vk::Queue,
     family: u32,
     mutex: Mutex<()>,
+    name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -43,10 +44,7 @@ crate struct SubmitInfo<'a> {
 
 impl<'dev> QueueFamily<'dev> {
     // The encapsulation here is kind of bad...
-    crate fn new(
-        device: &'dev Arc<Device>,
-        index: u32,
-    ) -> QueueFamily<'dev> {
+    crate fn new(device: &'dev Arc<Device>, index: u32) -> QueueFamily<'dev> {
         assert_lt!(index as usize, device.queue_families.len());
         QueueFamily {
             device,
@@ -123,7 +121,7 @@ impl Queue {
     ) {
         trace!(
             "Queue::submit(self: {:?}, submissions: {:?}, fence: {:?})",
-            self, submissions, fence,
+            fmt_named(self), submissions, fence,
         );
 
         let _lock = self.mutex.lock();
@@ -181,7 +179,7 @@ impl Queue {
                 "Queue::present(self: {:?}, wait_sems: {:?}, ",
                 "swapchain: {:?}, image: {})",
             ),
-            self, wait_sems, swapchain, image,
+            fmt_named(self), wait_sems, fmt_named(swapchain), image,
         );
 
         let _lock = self.mutex.lock();
@@ -206,14 +204,28 @@ impl Queue {
         let mut inner = vk::null();
         device.table().get_device_queue(0, 0, &mut inner);
 
-        let queue = Arc::new(Queue {
+        let mut queue = Queue {
             device: Arc::clone(device),
             inner,
             family: 0,
             mutex: Mutex::new(()),
-        });
+            name: None,
+        };
+        queue.set_name("gfx_queue");
 
-        vec![vec![queue]]
+        vec![vec![Arc::new(queue)]]
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner(), name); }
+    }
+}
+
+impl Named for Queue {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 

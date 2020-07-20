@@ -164,14 +164,16 @@ impl DeviceBuffer {
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
     }
 
-    crate fn name(&self) -> Option<&str> {
-        Some(&self.name.as_ref()?)
-    }
-
     crate fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
+    }
+}
+
+impl Named for DeviceBuffer {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 

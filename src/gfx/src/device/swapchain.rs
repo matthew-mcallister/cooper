@@ -2,14 +2,17 @@ use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use derivative::Derivative;
 use log::{debug, trace};
 use prelude::*;
 
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct Surface {
     crate window: Arc<window::Window>,
+    #[derivative(Debug = "ignore")]
     crate instance: Arc<Instance>,
     crate inner: vk::SurfaceKHR,
 }
@@ -22,6 +25,7 @@ crate struct Swapchain {
     crate extent: Extent2D,
     crate images: Vec<vk::Image>,
     token: Token,
+    name: Option<String>,
 }
 
 /// Specialized image view for the swapchain.
@@ -78,6 +82,7 @@ impl Swapchain {
             extent: Default::default(),
             images: Vec::new(),
             token: Default::default(),
+            name: None,
         };
         result.recreate()?;
 
@@ -86,6 +91,10 @@ impl Swapchain {
 
     crate fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    crate fn inner(&self) -> vk::SwapchainKHR {
+        self.inner
     }
 
     crate fn extent(&self) -> Extent2D {
@@ -234,6 +243,18 @@ impl Swapchain {
         debug!("acquired swapchain image {}", idx);
         Ok(idx)
     }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner(), name); }
+    }
+}
+
+impl Named for Swapchain {
+    fn name(&self) -> Option<&str> {
+        Some(self.name.as_ref()?)
+    }
 }
 
 impl Drop for SwapchainView {
@@ -346,7 +367,7 @@ crate unsafe fn init_swapchain(
     let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
     let pdev = device_for_surface(&surface).unwrap();
     let (device, queues) = Device::new(instance, pdev)?;
-    Ok((Swapchain::new(surface, device)?, queues))
+    Ok((device.create_swapchain(surface)?, queues))
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ crate struct StagingBuffer {
 
 impl StagingBuffer {
     crate fn new(device: Arc<Device>, capacity: usize) -> Self {
-        let buffer = unsafe {
+        let mut buffer = unsafe {
             DeviceBuffer::new(
                 device,
                 capacity as _,
@@ -19,6 +19,7 @@ impl StagingBuffer {
                 None,
             )
         };
+        buffer.set_name("staging_buffer");
         let mut allocator = LinearAllocator::default();
         allocator.add_chunk(capacity as _);
         Self {

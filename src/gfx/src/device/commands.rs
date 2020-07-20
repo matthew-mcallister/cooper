@@ -775,7 +775,7 @@ impl XferCmds {
         trace!(concat!(
             "XferCmds::copy_buffer_to_image(src: {:?}, dst: {:?}, ",
             "layout: {:?}, regions: {:?})",
-        ), src, dst, layout, regions);
+        ), fmt_named(&*src), fmt_named(&**dst), layout, regions);
         validate_buffer_image_copy(src, dst, layout, regions);
         self.dt().cmd_copy_buffer_to_image(
             self.raw(),

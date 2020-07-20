@@ -258,8 +258,10 @@ impl Image {
             ))
         }
     }
+}
 
-    crate fn name(&self) -> Option<&str> {
+impl Named for Image {
+    fn name(&self) -> Option<&str> {
         self.def.name()
     }
 }
@@ -347,10 +349,6 @@ impl ImageDef {
         }
     }
 
-    crate fn name(&self) -> Option<&str> {
-        Some(&self.name.as_ref()?)
-    }
-
     crate fn set_name(&mut self, name: impl Into<String>) {
         self.name = Some(name.into());
     }
@@ -362,6 +360,12 @@ impl ImageDef {
 
     crate fn build_image(self, heap: &ImageHeap) -> Arc<Image> {
         Arc::new(Image::new(heap, Arc::new(self)))
+    }
+}
+
+impl Named for ImageDef {
+    fn name(&self) -> Option<&str> {
+        Some(self.name.as_ref()?)
     }
 }
 

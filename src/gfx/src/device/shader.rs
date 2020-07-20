@@ -115,8 +115,10 @@ impl Shader {
     crate fn outputs(&self) -> &[ShaderLocation] {
         &self.outputs
     }
+}
 
-    crate fn name(&self) -> Option<&str> {
+impl Named for Shader {
+    fn name(&self) -> Option<&str> {
         Some(&self.source_file)
     }
 }

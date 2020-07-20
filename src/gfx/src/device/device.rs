@@ -146,10 +146,12 @@ impl Device {
         }
     }
 
-    crate unsafe fn create_swapchain(self: &Arc<Self>, surface: &Arc<Surface>)
+    crate unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>)
         -> Result<Swapchain, AnyError>
     {
-        Ok(Swapchain::new(Arc::clone(surface), Arc::clone(self))?)
+        let mut swapchain = Swapchain::new(surface, self)?;
+        swapchain.set_name("swapchain");
+        Ok(swapchain)
     }
 
     crate fn wait_idle(&self) {

@@ -5,7 +5,8 @@ use fnv::FnvHashMap as HashMap;
 use log::trace;
 use prelude::*;
 
-use crate::{Image, ImageDef, ImageHeap, ResourceState};
+use crate::device::{Image, ImageDef, ImageHeap, fmt_named};
+use super::ResourceState;
 
 #[derive(Debug)]
 crate struct ResourceStateTable {
@@ -56,7 +57,7 @@ impl ResourceStateTable {
     ) -> &Arc<Image> {
         trace!(
             "ResourceStateTable::prepare_for_upload(image: {:?}, batch: {:?})",
-            image, batch,
+            fmt_named(&**image), batch,
         );
 
         let info = self.get_or_init(image);
@@ -71,7 +72,7 @@ impl ResourceStateTable {
     {
         trace!(
             "ResourceStateTable::get_image(image: {:?}, avail_batch: {:?})",
-            image, avail_batch,
+            fmt_named(&**image), avail_batch,
         );
         let info = self.images.get(ByPtr::by_ptr(image))?;
         guard(info.state(avail_batch) == ResourceState::Available)?;

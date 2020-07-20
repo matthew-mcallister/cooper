@@ -10,6 +10,7 @@
     maybe_uninit_ref,
     maybe_uninit_slice_assume_init,
     or_patterns,
+    trait_alias,
     try_blocks,
     try_trait,
     type_ascription,

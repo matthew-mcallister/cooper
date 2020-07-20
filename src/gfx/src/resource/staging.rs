@@ -5,9 +5,9 @@ use derive_more::Display;
 use log::trace;
 use more_asserts::assert_le;
 
-use crate::{
+use crate::device::{
     Device, Image, ImageSubresources, MemoryRegion, SampleCount, StagingBuffer,
-    XferCmds,
+    XferCmds, fmt_named,
 };
 
 #[derive(Clone, Copy, Debug, Default, Display, Eq, PartialEq)]
@@ -62,7 +62,8 @@ impl UploadStage {
                 "emit_pre_barrier: {:?}, final_layout: {:?}, ",
                 "access_mask: {:?}, subresources: {:?})",
             ),
-            image, emit_pre_barrier, final_layout, access_mask, subresources,
+            fmt_named(&**image), emit_pre_barrier, final_layout, access_mask,
+            subresources,
         );
 
         let sub = subresources;

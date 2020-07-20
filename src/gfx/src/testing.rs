@@ -73,7 +73,7 @@ impl VulkanTestContext {
         let surface = instance.create_surface(&window)?;
         let pdev = device_for_surface(&surface)?;
         let (device, queues) = instance.create_device(pdev)?;
-        let swapchain = device.create_swapchain(&surface)?;
+        let swapchain = device.create_swapchain(surface)?;
         let gfx_queue = Arc::clone(&queues[0][0]);
         Ok(TestVars {
             swapchain,
