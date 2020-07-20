@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use derive_more::From;
 use log::trace;
-use more_asserts::assert_lt;
 
 use crate::{
     CmdBuffer, CmdPool, Device, ImageDef, ImageFlags, ImageHeap,
@@ -15,7 +14,7 @@ use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 pub(super) struct UploadScheduler {
     tasks: TaskProcessor,
     sem: TimelineSemaphore,
-    avail_batch: u64,
+    avail_batch: u64,   // Memoized sem.get_value()
     pending_batch: u64,
 }
 
@@ -147,20 +146,17 @@ impl UploadScheduler {
 
     crate fn schedule(
         &mut self,
-        frame_num: u64,
         queue: &Queue,
         resources: &mut ResourceStateTable,
         heap: &ImageHeap,
         pool: Box<CmdPool>,
     ) -> Box<CmdPool> {
-        trace!("UploadScheduler::schedule(frame_num: {})", frame_num);
+        trace!("UploadScheduler::schedule()");
 
         assert_eq!(self.avail_batch(), self.pending_batch);
-        assert_lt!(self.pending_batch, frame_num);
         if self.tasks.is_empty() { return pool; }
 
-        // TODO: Maybe this should should just inc by 1 each time?
-        self.pending_batch = frame_num;
+        self.pending_batch += 1;
 
         let mut cmds = XferCmds::new(CmdBuffer::new_primary(pool));
         self.tasks.process_tasks(
@@ -182,7 +178,26 @@ impl UploadScheduler {
         pool
     }
 
-    crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
-        self.sem.wait(self.pending_batch, timeout)
+    crate fn wait_with_timeout(&mut self, timeout: u64) -> WaitResult {
+        let res = self.sem.wait(self.pending_batch, timeout);
+        if res == WaitResult::Success {
+            self.avail_batch = self.pending_batch;
+        }
+        res
+    }
+
+    crate fn flush(
+        &mut self,
+        queue: &Queue,
+        resources: &mut ResourceStateTable,
+        heap: &ImageHeap,
+        mut pool: Box<CmdPool>,
+    ) -> Box<CmdPool> {
+        let _ = self.wait_with_timeout(u64::MAX);
+        while !self.tasks.is_empty() {
+            pool = self.schedule(queue, resources, heap, pool);
+            let _ = self.wait_with_timeout(u64::MAX);
+        }
+        pool
     }
 }

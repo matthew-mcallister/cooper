@@ -60,24 +60,34 @@ impl ResourceSystem {
         self.state.get_image(image, self.sched.avail_batch())
     }
 
-    crate fn schedule(&mut self, frame_num: u64, heap: &ImageHeap) {
+    crate fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
+        self.state.invalidate_image(image);
+    }
+
+    crate fn schedule(&mut self, heap: &ImageHeap) {
         if self.sched.query_tasks() != SchedulerStatus::Idle {
-            debug!("[frame {}] resource scheduler busy", frame_num);
+            debug!("resource scheduler busy");
             return;
         }
 
         let mut cmd_pool = self.cmd_pool.take().unwrap();
         unsafe { cmd_pool.reset(); }
         self.cmd_pool = Some(self.sched.schedule(
-            frame_num, &self.queue, &mut self.state, heap, cmd_pool));
+            &self.queue, &mut self.state, heap, cmd_pool));
     }
 
-    crate fn wait(&self, timeout: u64) -> WaitResult {
+    crate fn wait(&mut self, timeout: u64) -> WaitResult {
         self.sched.wait_with_timeout(timeout)
     }
 
-    // TODO:
-    // crate fn flush(...)
+    crate fn flush(&mut self, heap: &ImageHeap) {
+        self.cmd_pool = Some(self.sched.flush(
+            &self.queue,
+            &mut self.state,
+            heap,
+            self.cmd_pool.take().unwrap(),
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -106,11 +116,12 @@ mod tests {
         let queue = vars.gfx_queue();
 
         let state = SystemState::new(Arc::clone(&device));
+        let heap = &state.heap;
+        let mut resources = ResourceSystem::new(queue);
+
         let images: Vec<_> = (0..7)
             .map(|n| test_image(&device, 2 << n, 2 << n))
             .collect();
-        let mut resources = ResourceSystem::new(queue);
-
         for image in images.iter() {
             assert_eq!(
                 resources.get_image_state(image),
@@ -122,25 +133,10 @@ mod tests {
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
-        // Simulate uploading N images, one at a time, and waiting on
-        // them in a loop.
-        let mut frame = 1;
+        // Upload images one at a time
         for image in images.iter() {
             resources.upload_image(image, Arc::clone(&data), 0x1000);
-
-            loop {
-                frame += 1;
-                resources.schedule(frame as _, &state.heap);
-
-                let state = resources.get_image_state(image);
-                if state == ResourceState::Available {
-                    break;
-                } else {
-                    assert_eq!(state, ResourceState::Pending);
-                }
-
-                let _ = resources.wait(1_000_000);
-            }
+            resources.flush(heap);
         }
 
         for image in images.iter() {
@@ -149,6 +145,18 @@ mod tests {
                 ResourceState::Available,
             );
         }
+
+        // Upload several images at once
+        for image in images.iter() {
+            resources.invalidate_image(image);
+            assert_eq!(
+                resources.get_image_state(image),
+                ResourceState::Unavailable,
+            );
+
+            resources.upload_image(image, Arc::clone(&data), 0x1000);
+        }
+        resources.flush(heap);
     }
 
     unit::declare_tests![upload];

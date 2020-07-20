@@ -78,4 +78,8 @@ impl ResourceStateTable {
         guard(info.state(avail_batch) == ResourceState::Available)?;
         info.resource.as_ref()
     }
+
+    crate fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
+        self.images.remove(ByPtr::by_ptr(image));
+    }
 }

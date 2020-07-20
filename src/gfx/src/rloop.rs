@@ -151,7 +151,7 @@ impl RenderLoop {
         debug!("beginning frame {}", self.frame_num);
         self.state_mut().frame_over();
         let heap = &self.state.as_ref().unwrap().heap;
-        self.resources.schedule(self.frame_num, heap);
+        self.resources.schedule(heap);
     }
 
     crate fn wait_for_render(&self) {
@@ -161,6 +161,7 @@ impl RenderLoop {
     crate fn render(&mut self, world: RenderWorldData) {
         self.wait_for_render();
         self.new_frame();
+
         unsafe { self.swapchain.acquire(); }
 
         let state = Arc::new(self.state.take().unwrap());
