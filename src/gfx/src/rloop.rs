@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use log::debug;
+use log::{debug, trace};
 use prelude::*;
 
 use crate::*;
@@ -10,15 +10,26 @@ pub struct RenderLoop {
     device: Arc<Device>,
     gfx_queue: Arc<Queue>,
     globals: Arc<Globals>,
-    frame: FrameControl,
+    frame_num: u64,
+    swapchain: SwapchainControl,
     renderer: WorldRenderer,
     resources: ResourceSystem,
+    master_sem: TimelineSemaphore,
     // This is declared last so that it will be dropped last
     state: Option<Box<SystemState>>,
 }
 
+#[derive(Debug)]
+crate struct SwapchainControl {
+    swapchain: Swapchain,
+    acquired_image: Option<u32>,
+    crate acquire_sem: BinarySemaphore,
+    crate present_sem: BinarySemaphore,
+}
+
 impl Drop for RenderLoop {
     fn drop(&mut self) {
+        self.wait_for_render();
         // For good measure
         self.device.wait_idle();
     }
@@ -45,15 +56,20 @@ impl RenderLoop {
             Arc::clone(&gfx_queue),
         );
 
-        let frame = FrameControl::new(swapchain);
+        let frame_num = 1;
+        let swapchain = SwapchainControl::new(swapchain);
+        let master_sem = TimelineSemaphore::new(
+            Arc::clone(&device), frame_num);
 
         Ok(Self {
             device,
             gfx_queue,
+            frame_num,
+            swapchain,
             globals,
             renderer,
             resources,
-            frame,
+            master_sem,
             state: Some(state),
         })
     }
@@ -75,7 +91,7 @@ impl RenderLoop {
     }
 
     crate fn frame_num(&self) -> u64 {
-        self.frame.frame_num()
+        self.frame_num
     }
 
     pub fn define_image(
@@ -131,20 +147,21 @@ impl RenderLoop {
     }
 
     crate fn new_frame(&mut self) {
-        // FIXME: This is called prior to frame.acquire() to occupy time
-        // that might otherwise be spent waiting on the swapchain, but
-        // frame_num doesn't update until after frame.acquire().
-        let frame_num = self.frame_num() + 1;
-        debug!("beginning frame {}", frame_num);
+        self.frame_num += 1;
+        debug!("beginning frame {}", self.frame_num);
         self.state_mut().frame_over();
-        self.resources.schedule(frame_num, &self.state.as_ref().unwrap().heap);
+        let heap = &self.state.as_ref().unwrap().heap;
+        self.resources.schedule(self.frame_num, heap);
     }
 
-    // TODO: Allowing doing a frame without rendering anything
+    crate fn wait_for_render(&self) {
+        let _ = self.master_sem.wait(self.frame_num, u64::MAX);
+    }
+
     crate fn render(&mut self, world: RenderWorldData) {
-        self.frame.wait();
+        self.wait_for_render();
         self.new_frame();
-        self.frame.acquire();
+        unsafe { self.swapchain.acquire(); }
 
         let state = Arc::new(self.state.take().unwrap());
         self.renderer.run(
@@ -152,13 +169,57 @@ impl RenderLoop {
             &self.resources,
             world,
             self.frame_num(),
-            self.frame.image_index(),
-            &mut self.frame.acquire_sem,
-            &mut self.frame.present_sem,
-            &mut self.frame.master_sem,
+            self.swapchain.image_index(),
+            &mut self.swapchain.acquire_sem,
+            &mut self.swapchain.present_sem,
+            &mut self.master_sem,
         );
         self.state = Some(Arc::try_unwrap(state).unwrap());
 
-        unsafe { self.frame.present(&self.gfx_queue); }
+        unsafe { self.swapchain.present(&self.gfx_queue); }
+    }
+}
+
+impl SwapchainControl {
+    crate fn new(swapchain: Swapchain) -> Self {
+        let device = || Arc::clone(swapchain.device());
+        let acquire_sem = BinarySemaphore::new(device());
+        let present_sem = BinarySemaphore::new(device());
+        Self {
+            swapchain,
+            acquired_image: None,
+            acquire_sem,
+            present_sem,
+        }
+    }
+
+    crate fn image_index(&self) -> u32 {
+        self.acquired_image.unwrap()
+    }
+
+    crate fn swapchain_mut(&mut self) -> &mut Swapchain {
+        &mut self.swapchain
+    }
+
+    crate unsafe fn acquire(&mut self) {
+        trace!("SwapchainControl::acquire()");
+        assert!(self.acquired_image.is_none());
+        self.acquired_image = self.swapchain
+            .acquire_next_image(&mut self.acquire_sem)
+            .unwrap().into();
+    }
+
+    crate unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
+        trace!(
+            "SwapchainControl::present(present_queue: {:?})",
+            fmt_named(&**present_queue),
+        );
+        let index = self.image_index();
+        present_queue.present(
+            &[&mut self.present_sem],
+            &mut self.swapchain,
+            index,
+        ).check().unwrap();
+        self.acquired_image = None;
     }
 }
