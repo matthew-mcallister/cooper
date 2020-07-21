@@ -2,6 +2,7 @@ use std::ptr;
 use std::sync::{Arc, Weak};
 
 use base::impl_bin_ops;
+use derivative::Derivative;
 use derive_more::*;
 use enum_map::{EnumMap, enum_map};
 use log::trace;
@@ -31,13 +32,16 @@ crate struct DescriptorSetLayout {
     flags: vk::DescriptorSetLayoutCreateFlags,
     bindings: Box<[vk::DescriptorSetLayoutBinding]>,
     counts: Counts,
+    name: Option<String>,
 }
 
 // This alias is appropriate to use anywhere.
 crate type SetLayout = DescriptorSetLayout;
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct DescriptorSet {
+    #[derivative(Debug(format_with = "write_named::<DescriptorSetLayout>"))]
     layout: Arc<DescriptorSetLayout>,
     pool: Weak<Mutex<DescriptorPool>>,
     inner: vk::DescriptorSet,
@@ -105,12 +109,13 @@ impl Layout {
         let mut inner = vk::null();
         dt.create_descriptor_set_layout(&create_info, ptr::null(), &mut inner)
             .check().unwrap();
-        DescriptorSetLayout {
+        Self {
             device,
             inner,
             flags,
             bindings: bindings.into(),
             counts,
+            name: None,
         }
     }
 
@@ -151,6 +156,18 @@ impl Layout {
         }
 
         flags
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner(), name); }
+    }
+}
+
+impl Named for Layout {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 
@@ -358,7 +375,7 @@ impl Named for Set {
 }
 
 // Begin boilerplate
-// TODO: Aren't there already have macros for this stuff somewhere?
+// TODO: Don't we already have macros for this stuff somewhere?
 
 impl Default for DescriptorCounts {
     fn default() -> Self {
@@ -561,7 +578,13 @@ impl Pool {
         layout: &Arc<DescriptorSetLayout>,
         count: u32,
     ) -> Vec<DescriptorSet> {
-        trace!("allocating {} descriptor set(s): layout: {:?}", count, layout);
+        trace!(
+            concat!(
+                "DescriptorPool::alloc_many(lifetime: {:?}, layout: {:?}, ",
+                "count: {})",
+            ),
+            self.lifetime, fmt_named(&**layout), count,
+        );
 
         assert!(self.flags.contains(layout.required_pool_flags()));
 
@@ -599,7 +622,8 @@ impl Pool {
 
     unsafe fn free(&mut self, set: &Set) {
         // TODO: Maybe assert this is the correct VkDescriptorPool
-        trace!("freeing descriptor set: {:?}", set);
+        trace!("DescriptorPool::free(lifetime: {:?}, set: {:?})",
+            self.lifetime, set);
 
         self.used_sets -= 1;
         self.used_descriptors -= set.layout.counts();

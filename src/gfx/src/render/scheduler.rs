@@ -64,7 +64,8 @@ impl RenderScheduler {
     crate fn new(gfx_queue: Arc<Queue>) -> Self {
         assert!(gfx_queue.family().supports_graphics());
         let flags = vk::CommandPoolCreateFlags::TRANSIENT_BIT;
-        let pool = Box::new(CmdPool::new(gfx_queue.family(), flags));
+        let mut pool = Box::new(CmdPool::new(gfx_queue.family(), flags));
+        pool.set_name("render_scheduler.pool");
         Self {
             pool: Some(pool),
             buffers: Vec::new(),

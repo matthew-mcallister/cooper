@@ -51,9 +51,10 @@ impl SceneDescriptors {
                 ..Default::default()
             },
         ];
-        unsafe {
-            Arc::new(DescriptorSetLayout::from_bindings(device, &bindings))
-        }
+        let mut layout =
+            unsafe { DescriptorSetLayout::from_bindings(device, &bindings) };
+        layout.set_name("scene_descriptors");
+        Arc::new(layout)
     }
 
     pub(super) fn new(state: &SystemState, globals: &Globals) -> Self {
@@ -61,7 +62,7 @@ impl SceneDescriptors {
             Lifetime::Frame,
             &globals.scene_desc_layout,
         );
-        inner.set_name("SceneDescriptors::inner");
+        inner.set_name("scene_descriptors.inner");
         SceneDescriptors { inner }
     }
 

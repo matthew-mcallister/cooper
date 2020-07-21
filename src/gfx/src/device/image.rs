@@ -119,7 +119,7 @@ impl Drop for Image {
 
 impl Image {
     crate fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
-        trace!("Image::new(def: {:?})", def);
+        trace!("Image::new(def: {:?})", fmt_named(&*def));
 
         let device = Arc::clone(heap.device());
         let dt = &*device.table;

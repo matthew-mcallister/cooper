@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use derive_more::From;
-use log::trace;
+use log::{debug, trace};
 
 use crate::device::{
     CmdBuffer, CmdPool, Device, ImageDef, ImageFlags, ImageHeap,
     ImageSubresources, Queue, SignalInfo, SubmitInfo, TimelineSemaphore,
-    WaitResult, XferCmds,
+    WaitResult, XferCmds, fmt_named,
 };
 use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 
@@ -115,9 +115,11 @@ fn upload_image(
 
 impl UploadScheduler {
     crate fn new(device: Arc<Device>) -> Self {
+        let mut sem = TimelineSemaphore::new(Arc::clone(&device), 0);
+        sem.set_name("upload_scheduler.sem");
         Self {
-            tasks: TaskProcessor::new(Arc::clone(&device)),
-            sem: TimelineSemaphore::new(device, 0),
+            tasks: TaskProcessor::new(device),
+            sem,
             avail_batch: 0,
             pending_batch: 0,
         }
@@ -137,11 +139,14 @@ impl UploadScheduler {
 
     crate fn query_tasks(&mut self) -> SchedulerStatus {
         self.avail_batch = self.sem.get_value();
-        if self.avail_batch() < self.pending_batch {
+        let status = if self.avail_batch() < self.pending_batch {
             SchedulerStatus::Busy
         } else {
             SchedulerStatus::Idle
-        }
+        };
+        debug!("UploadScheduler::query_tasks: avail_batch = {}, status = {:?}",
+            self.avail_batch, status);
+        status
     }
 
     crate fn schedule(
@@ -195,6 +200,7 @@ impl UploadScheduler {
         heap: &ImageHeap,
         mut pool: Box<CmdPool>,
     ) -> Box<CmdPool> {
+        trace!("ResourceScheduler::flush(queue: {:?})", fmt_named(queue));
         let _ = self.wait_with_timeout(u64::MAX);
         while !self.tasks.is_empty() {
             pool = self.schedule(queue, resources, heap, pool);

@@ -26,9 +26,12 @@ crate fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
     fmt::Result
 {
     if let Some(name) = named.name() {
-        // TODO: Would prefer <TypeName:debug object name>
+        // TODO: Would prefer to include the type name
         write!(f, "<{}>", name)
     } else {
+        // TODO for structured logging: Generate numeric IDs for unnamed
+        // variables that appear in logs, like how LLVM IR uses IDs for
+        // unnamed SSA variables. Not at runtime, of course.
         write!(f, "{:?}", named)
     }
 }

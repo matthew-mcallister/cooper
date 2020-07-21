@@ -165,7 +165,6 @@ impl RenderLoop {
         self.new_frame();
 
         unsafe { self.swapchain.acquire(); }
-
         let state = Arc::new(self.state.take().unwrap());
         self.renderer.run(
             Arc::clone(&state),

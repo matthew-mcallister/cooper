@@ -23,6 +23,7 @@ crate struct CmdPool {
     inner: vk::CommandPool,
     flags: vk::CommandPoolCreateFlags,
     queue_family: u32,
+    name: Option<String>,
 }
 
 // TODO: Should probably contain Arc<SystemState>
@@ -112,6 +113,7 @@ impl CmdPool {
             inner: pool,
             flags,
             queue_family: queue_family.index(),
+            name: None,
         }
     }
 
@@ -142,7 +144,8 @@ impl CmdPool {
     }
 
     crate fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
-        trace!("CmdPool::alloc(self: {:?}, level: {:?})", self, level);
+        trace!("CmdPool::alloc(self: {:?}, level: {:?})",
+            fmt_named(&*self), level);
         let dt = &*self.device.table;
         let mut buffer = vk::null();
         let buffers = std::slice::from_mut(&mut buffer);
@@ -160,8 +163,8 @@ impl CmdPool {
     }
 
     crate unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
-        trace!("freeing command buffers: queue_family: {}, {:?}, count: {}",
-            self.queue_family, self.flags, cmds.len());
+        trace!("CmdPool::free(self: {:?}, queue_family: {}, {:?}, count: {})",
+            fmt_named(&*self), self.queue_family, self.flags, cmds.len());
         let dt = &*self.device.table;
         dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
     }
@@ -169,6 +172,18 @@ impl CmdPool {
     crate unsafe fn reset(&mut self) {
         let dt = &*self.device.table;
         dt.reset_command_pool(self.inner, Default::default());
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.inner, name); }
+    }
+}
+
+impl Named for CmdPool {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 
