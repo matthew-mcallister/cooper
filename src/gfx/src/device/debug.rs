@@ -17,13 +17,13 @@ crate trait DebugHandle: vk::traits::HandleType + Copy {
     fn object_type() -> vk::ObjectType;
 }
 
-crate trait Named: std::fmt::Debug {
+crate trait Named: fmt::Debug {
     /// Returns the debugging name of the object.
     fn name(&self) -> Option<&str>;
 }
 
-crate fn write_named(named: &impl Named, f: &mut std::fmt::Formatter) ->
-    std::fmt::Result
+crate fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
+    fmt::Result
 {
     if let Some(name) = named.name() {
         // TODO: Would prefer <TypeName:debug object name>
@@ -34,7 +34,7 @@ crate fn write_named(named: &impl Named, f: &mut std::fmt::Formatter) ->
 }
 
 crate fn fmt_named<'a>(named: &'a impl Named) -> impl fmt::Debug + 'a {
-    struct FmtNamed<'n, N: Named>(&'n N);
+    struct FmtNamed<'a, N: Named>(&'a N);
     impl<N: Named> fmt::Debug for FmtNamed<'_, N> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write_named(self.0, f)

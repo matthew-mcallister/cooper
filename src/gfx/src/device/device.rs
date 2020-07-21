@@ -150,7 +150,7 @@ impl Device {
         -> Result<Swapchain, AnyError>
     {
         let mut swapchain = Swapchain::new(surface, self)?;
-        swapchain.set_name("swapchain");
+        set_name!(swapchain);
         Ok(swapchain)
     }
 

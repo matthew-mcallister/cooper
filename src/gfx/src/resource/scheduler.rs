@@ -3,10 +3,10 @@ use std::sync::Arc;
 use derive_more::From;
 use log::trace;
 
-use crate::{
+use crate::device::{
     CmdBuffer, CmdPool, Device, ImageDef, ImageFlags, ImageHeap,
-    ImageSubresources, Queue, SubmitInfo, TimelineSemaphore, WaitResult,
-    XferCmds,
+    ImageSubresources, Queue, SignalInfo, SubmitInfo, TimelineSemaphore,
+    WaitResult, XferCmds,
 };
 use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 
@@ -169,11 +169,13 @@ impl UploadScheduler {
 
         let submissions = [SubmitInfo {
             cmds: &[cmds],
-            sig_sems: &[self.sem.inner()],
-            sig_values: &[self.pending_batch],
+            sig_sems: &[SignalInfo {
+                semaphore: self.sem.inner_mut(),
+                value: self.pending_batch
+            }],
             ..Default::default()
         }];
-        unsafe { queue.submit(&submissions, None); }
+        unsafe { queue.submit(&submissions); }
 
         pool
     }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use derivative::Derivative;
 use log::trace;
 use more_asserts::assert_lt;
 use parking_lot::Mutex;
@@ -32,13 +33,27 @@ crate struct Queue {
     name: Option<String>,
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
+crate struct WaitInfo<'a> {
+    #[derivative(Debug(format_with = "write_named::<SemaphoreInner>"))]
+    crate semaphore: &'a mut SemaphoreInner,
+    crate value: u64,
+    crate stages: vk::PipelineStageFlags,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+crate struct SignalInfo<'a> {
+    #[derivative(Debug(format_with = "write_named::<SemaphoreInner>"))]
+    crate semaphore: &'a mut SemaphoreInner,
+    crate value: u64,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 crate struct SubmitInfo<'a> {
-    crate wait_sems: &'a [SemaphoreInner<'a>],
-    crate wait_values: &'a [u64],
-    crate wait_stages: &'a [vk::PipelineStageFlags],
-    crate sig_sems: &'a [SemaphoreInner<'a>],
-    crate sig_values: &'a [u64],
+    crate wait_sems: &'a [WaitInfo<'a>],
+    crate sig_sems: &'a [SignalInfo<'a>],
     crate cmds: &'a [vk::CommandBuffer],
 }
 
@@ -114,43 +129,67 @@ impl Queue {
 
     // TODO: Verify that submitted commands are executable by this type
     // of queue.
-    crate unsafe fn submit(
-        &self,
-        submissions: &[SubmitInfo],
-        fence: Option<&mut Fence>,
-    ) {
+    crate unsafe fn submit(&self, submissions: &[SubmitInfo<'_>]) {
         trace!(
-            "Queue::submit(self: {:?}, submissions: {:?}, fence: {:?})",
-            fmt_named(self), submissions, fence,
+            "Queue::submit(self: {:?}, submissions: {:?}",
+            fmt_named(self), submissions,
         );
 
         let _lock = self.mutex.lock();
 
-        let mut timelines: SmallVec<_, 8> =
-            SmallVec::with_capacity(submissions.len());
-        let mut infos: SmallVec<_, 8> =
-            SmallVec::with_capacity(submissions.len());
+        const MAX_SEMS: usize = 16;
+        const MAX_SUBMITS: usize = 8;
+
+        type VecSem<T> = SmallVec<T, MAX_SEMS>;
+        type VecSubmit<T> = SmallVec<T, MAX_SEMS>;
+
+        let wait_count: usize = submissions.iter()
+            .map(|submit| submit.wait_sems.len())
+            .sum();
+        let sig_count: usize = submissions.iter()
+            .map(|submit| submit.sig_sems.len())
+            .sum();
+
+        let mut wait_sems = VecSem::with_capacity(wait_count);
+        let mut wait_values = VecSem::with_capacity(wait_count);
+        let mut wait_stages = VecSem::with_capacity(wait_count);
+        let mut sig_sems = VecSem::with_capacity(sig_count);
+        let mut sig_values = VecSem::with_capacity(sig_count);
+        let mut timelines = VecSubmit::with_capacity(submissions.len());
+        let mut infos = VecSubmit::with_capacity(submissions.len());
         for info in submissions.iter() {
-            // The lengths don't have to be equal but it doens't hurt to
-            // enforce that they are.
-            assert_eq!(info.wait_sems.len(), info.wait_values.len());
-            assert_eq!(info.sig_sems.len(), info.sig_values.len());
-            let wait_sems = SemaphoreInner::slice_as_raw(info.wait_sems);
-            let sig_sems = SemaphoreInner::slice_as_raw(info.sig_sems);
+            let wait_offset = wait_sems.len();
+            for wait in info.wait_sems.iter() {
+                wait_sems.push(wait.semaphore.raw());
+                wait_values.push(wait.value);
+                wait_stages.push(wait.stages);
+            }
+
+            let sig_offset = sig_sems.len();
+            for sig in info.sig_sems.iter() {
+                sig_sems.push(sig.semaphore.raw());
+                sig_values.push(sig.value);
+            }
+
+            let wait_values = &wait_values[wait_offset..];
+            let sig_values = &sig_values[sig_offset..];
             let timeline_info = vk::TimelineSemaphoreSubmitInfo {
-                wait_semaphore_value_count: info.wait_values.len() as _,
-                p_wait_semaphore_values: info.wait_values.as_ptr(),
-                signal_semaphore_value_count: info.sig_values.len() as _,
-                p_signal_semaphore_values: info.sig_values.as_ptr(),
+                wait_semaphore_value_count: wait_values.len() as _,
+                p_wait_semaphore_values: wait_values.as_ptr(),
+                signal_semaphore_value_count: sig_values.len() as _,
+                p_signal_semaphore_values: sig_values.as_ptr(),
                 ..Default::default()
             };
             timelines.push(timeline_info);
 
+            let wait_sems = &wait_sems[wait_offset..];
+            let wait_stages = &wait_stages[wait_offset..];
+            let sig_sems = &sig_sems[sig_offset..];
             let info = vk::SubmitInfo {
                 p_next: timelines.last().unwrap() as *const _ as _,
                 wait_semaphore_count: wait_sems.len() as _,
                 p_wait_semaphores: wait_sems.as_ptr(),
-                p_wait_dst_stage_mask: info.wait_stages.as_ptr(),
+                p_wait_dst_stage_mask: wait_stages.as_ptr(),
                 command_buffer_count: info.cmds.len() as _,
                 p_command_buffers: info.cmds.as_ptr(),
                 signal_semaphore_count: sig_sems.len() as _,
@@ -164,7 +203,7 @@ impl Queue {
             self.inner,
             infos.len() as _,
             infos.as_ptr(),
-            tryopt!(fence?.inner()).unwrap_or(vk::null()),
+            vk::null(),
         ).check().unwrap();
     }
 
@@ -179,7 +218,9 @@ impl Queue {
                 "Queue::present(self: {:?}, wait_sems: {:?}, ",
                 "swapchain: {:?}, image: {})",
             ),
-            fmt_named(self), wait_sems, fmt_named(swapchain), image,
+            fmt_named(self),
+            DebugIter::new(wait_sems.iter().map(|sem| fmt_named(&**sem))),
+            fmt_named(swapchain), image,
         );
 
         let _lock = self.mutex.lock();
@@ -204,16 +245,16 @@ impl Queue {
         let mut inner = vk::null();
         device.table().get_device_queue(0, 0, &mut inner);
 
-        let mut queue = Queue {
+        let mut gfx_queue = Queue {
             device: Arc::clone(device),
             inner,
             family: 0,
             mutex: Mutex::new(()),
             name: None,
         };
-        queue.set_name("gfx_queue");
+        set_name!(gfx_queue);
 
-        vec![vec![Arc::new(queue)]]
+        vec![vec![Arc::new(gfx_queue)]]
     }
 
     crate fn set_name(&mut self, name: impl Into<String>) {

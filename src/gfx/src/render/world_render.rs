@@ -175,12 +175,21 @@ impl WorldRenderer {
 
         self.scheduler.schedule_pass(
             pass,
-            &[acquire_sem.inner()],
-            &[0],
-            &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT],
-            &[present_sem.inner(), render_sem.inner()],
-            &[0, frame_num],
-            None,
+            &[WaitInfo {
+                semaphore: acquire_sem.inner_mut(),
+                value: 0,
+                stages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT,
+            }],
+            &[
+                SignalInfo {
+                    semaphore: present_sem.inner_mut(),
+                    value: 0,
+                },
+                SignalInfo {
+                    semaphore: render_sem.inner_mut(),
+                    value: frame_num,
+                },
+            ],
         );
     }
 }

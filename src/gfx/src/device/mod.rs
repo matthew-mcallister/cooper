@@ -9,6 +9,7 @@ mod image;
 mod instance;
 mod memory;
 mod pipeline;
+#[macro_use]
 mod queue;
 mod render_pass;
 mod sampler;

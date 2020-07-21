@@ -1,7 +1,9 @@
 use std::convert::{TryFrom, TryInto};
-use std::marker::PhantomData;
 use std::ptr;
 use std::sync::Arc;
+
+use derivative::Derivative;
+use log::trace;
 
 use crate::*;
 
@@ -12,31 +14,40 @@ crate enum WaitResult {
     Timeout,
 }
 
+impl TryFrom<vk::Result> for WaitResult {
+    type Error = vk::Result;
+    fn try_from(res: vk::Result) -> Result<Self, Self::Error> {
+        match res {
+            vk::Result::SUCCESS => Ok(Self::Success),
+            vk::Result::TIMEOUT => Ok(Self::Timeout),
+            _ => Err(res),
+        }
+    }
+}
+
+// TODO: Get rid of this type?
 #[derive(Debug)]
 crate struct Fence {
     device: Arc<Device>,
     inner: vk::Fence,
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
+crate struct SemaphoreInner {
+    device: Arc<Device>,
+    raw: vk::Semaphore,
+    name: Option<String>,
+}
+
 #[derive(Debug)]
 crate struct BinarySemaphore {
-    device: Arc<Device>,
-    inner: vk::Semaphore,
+    inner: SemaphoreInner,
 }
 
 #[derive(Debug)]
 crate struct TimelineSemaphore {
-    device: Arc<Device>,
-    inner: vk::Semaphore,
-}
-
-// Basically a raw VkSemaphore but it borrows the owning object, thus
-// ensuring that the user has unique access to the underlying semaphore.
-#[derive(Debug)]
-#[repr(transparent)]
-crate struct SemaphoreInner<'sem> {
-    raw: vk::Semaphore,
-    _ph: PhantomData<&'sem mut BinarySemaphore>,
+    inner: SemaphoreInner,
 }
 
 impl Drop for Fence {
@@ -70,7 +81,7 @@ impl Fence {
         self.device.table()
     }
 
-    crate fn inner(&self) -> vk::Fence {
+    crate fn raw(&self) -> vk::Fence {
         self.inner
     }
 
@@ -111,12 +122,34 @@ impl Fence {
     }
 }
 
-impl Drop for BinarySemaphore {
+impl Drop for SemaphoreInner {
     fn drop(&mut self) {
         let dt = self.device.table();
         unsafe {
-            dt.destroy_semaphore(self.inner, ptr::null());
+            dt.destroy_semaphore(self.raw, ptr::null());
         }
+    }
+}
+
+impl SemaphoreInner {
+    crate fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    crate fn raw(&self) -> vk::Semaphore {
+        self.raw
+    }
+
+    fn set_name(&mut self, name: impl Into<String>) {
+        let name: String = name.into();
+        self.name = Some(name.clone());
+        unsafe { self.device().set_name(self.raw, name); }
+    }
+}
+
+impl Named for SemaphoreInner {
+    fn name(&self) -> Option<&str> {
+        Some(&self.name.as_ref()?)
     }
 }
 
@@ -124,32 +157,38 @@ impl BinarySemaphore {
     crate fn new(device: Arc<Device>) -> Self {
         let dt = device.table();
         let create_info = vk::SemaphoreCreateInfo::default();
-        let mut inner = vk::null();
+        let mut sem = vk::null();
         unsafe {
-            dt.create_semaphore(&create_info, ptr::null(), &mut inner)
+            dt.create_semaphore(&create_info, ptr::null(), &mut sem)
                 .check().unwrap();
         }
-        Self {
+        Self { inner: SemaphoreInner {
             device,
-            inner,
-        }
+            raw: sem,
+            name: None,
+        } }
+    }
+
+    crate fn device(&self) -> &Arc<Device> {
+        self.inner.device()
     }
 
     crate fn raw(&self) -> vk::Semaphore {
-        self.inner
+        self.inner.raw()
     }
 
-    crate fn inner(&mut self) -> SemaphoreInner<'_> {
-        SemaphoreInner { raw: self.inner, _ph: PhantomData }
+    crate fn inner_mut(&mut self) -> &mut SemaphoreInner {
+        &mut self.inner
+    }
+
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        self.inner.set_name(name);
     }
 }
 
-impl Drop for TimelineSemaphore {
-    fn drop(&mut self) {
-        let dt = self.device.table();
-        unsafe {
-            dt.destroy_semaphore(self.inner, ptr::null());
-        }
+impl Named for BinarySemaphore {
+    fn name(&self) -> Option<&str> {
+        self.inner.name()
     }
 }
 
@@ -165,42 +204,51 @@ impl TimelineSemaphore {
             p_next: &ty_create_info as *const _ as _,
             ..Default::default()
         };
-        let mut inner = vk::null();
+        let mut sem = vk::null();
         unsafe {
-            dt.create_semaphore(&create_info, ptr::null(), &mut inner)
+            dt.create_semaphore(&create_info, ptr::null(), &mut sem)
                 .check().unwrap();
         }
-        Self {
+        Self { inner: SemaphoreInner {
             device,
-            inner,
-        }
+            raw: sem,
+            name: None,
+        } }
     }
 
     crate fn device(&self) -> &Arc<Device> {
-        &self.device
+        self.inner.device()
     }
 
     fn dt(&self) -> &vkl::DeviceTable {
-        self.device.table()
+        self.device().table()
     }
 
     crate fn raw(&self) -> vk::Semaphore {
-        self.inner
+        self.inner.raw()
+    }
+
+    crate fn inner_mut(&mut self) -> &mut SemaphoreInner {
+        &mut self.inner
     }
 
     crate unsafe fn signal(&self, value: u64) {
+        trace!("TimelineSemaphore::signal(self: {:?}, value: {})",
+            fmt_named(self), value);
         self.dt().signal_semaphore(&vk::SemaphoreSignalInfo {
-            semaphore: self.inner,
+            semaphore: self.raw(),
             value,
             ..Default::default()
         });
     }
 
     crate fn wait(&self, value: u64, timeout: u64) -> WaitResult {
+        trace!("TimelineSemaphore::wait(self: {:?}, value: {}, timeout: {})",
+            fmt_named(self), value, timeout);
         unsafe {
             self.dt().wait_semaphores(&vk::SemaphoreWaitInfo {
                 semaphore_count: 1,
-                p_semaphores: &self.inner,
+                p_semaphores: &self.raw(),
                 p_values: &value,
                 ..Default::default()
             }, timeout).try_into().unwrap()
@@ -210,37 +258,20 @@ impl TimelineSemaphore {
     crate fn get_value(&self) -> u64 {
         let mut value = 0;
         unsafe {
-            self.dt().get_semaphore_counter_value(self.inner, &mut value)
+            self.dt().get_semaphore_counter_value(self.raw(), &mut value)
                 .check().unwrap();
         }
         value
     }
 
-    crate fn inner(&mut self) -> SemaphoreInner<'_> {
-        SemaphoreInner { raw: self.inner, _ph: PhantomData }
+    crate fn set_name(&mut self, name: impl Into<String>) {
+        self.inner.set_name(name);
     }
 }
 
-impl<'sem> From<SemaphoreInner<'sem>> for vk::Semaphore {
-    fn from(inner: SemaphoreInner<'sem>) -> Self {
-        inner.raw
-    }
-}
-
-impl<'sem> SemaphoreInner<'sem> {
-    crate fn slice_as_raw(slice: &[Self]) -> &[vk::Semaphore] {
-        unsafe { std::mem::transmute(slice) }
-    }
-}
-
-impl TryFrom<vk::Result> for WaitResult {
-    type Error = vk::Result;
-    fn try_from(res: vk::Result) -> Result<Self, Self::Error> {
-        match res {
-            vk::Result::SUCCESS => Ok(Self::Success),
-            vk::Result::TIMEOUT => Ok(Self::Timeout),
-            _ => Err(res),
-        }
+impl Named for TimelineSemaphore {
+    fn name(&self) -> Option<&str> {
+        self.inner.name()
     }
 }
 
@@ -267,8 +298,9 @@ mod tests {
         std::thread::spawn(move || {
             sem2.signal(80);
         });
-
         assert_eq!(sem.wait(80, 2_000_000), WaitResult::Success);
+
+        assert_eq!(sem.wait(9999, 1000), WaitResult::Timeout);
     }
 
     unit::declare_tests![

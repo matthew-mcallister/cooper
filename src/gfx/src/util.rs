@@ -3,7 +3,6 @@
 #![allow(deprecated)]
 #![allow(unused_macros)]
 
-use std::cell::Cell;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
@@ -11,6 +10,7 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::ptr;
 
+use derive_more::{Constructor, From};
 use math::{Matrix4, Matrix4x3};
 use prelude::*;
 
@@ -115,27 +115,18 @@ crate fn flatten_arrays<T, const N: usize>(arrays: &[[T; N]]) -> &[T] {
     }
 }
 
-crate struct DebugIter<I: IntoIterator>
-    where I::Item: std::fmt::Debug
-{
-    inner: Cell<Option<I>>,
+#[derive(Constructor, From)]
+crate struct DebugIter<I> {
+    inner: I,
 }
 
-impl<I: IntoIterator> std::fmt::Debug for DebugIter<I>
-    where I::Item: std::fmt::Debug
+impl<I> std::fmt::Debug for DebugIter<I>
+where
+    I: IntoIterator + Clone,
+    I::Item: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_list().entries(self.inner.take().unwrap()).finish()
-    }
-}
-
-impl<I: IntoIterator> DebugIter<I>
-    where I::Item: std::fmt::Debug
-{
-    fn new(iter: I) -> Self {
-        Self {
-            inner: Cell::new(Some(iter)),
-        }
+        f.debug_list().entries(self.inner.clone()).finish()
     }
 }
 
@@ -273,5 +264,13 @@ macro_rules! add_to_pnext {
     ($pnext:expr, $struct:expr) => {
         $struct.p_next = $pnext;
         $pnext = &$struct as *const _ as _;
+    }
+}
+
+macro_rules! set_name {
+    ($($var:expr),*$(,)?) => {
+        {
+            $($var.set_name(stringify!($var));)*
+        }
     }
 }

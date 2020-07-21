@@ -23,8 +23,8 @@ pub struct RenderLoop {
 crate struct SwapchainControl {
     swapchain: Swapchain,
     acquired_image: Option<u32>,
-    crate acquire_sem: BinarySemaphore,
-    crate present_sem: BinarySemaphore,
+    acquire_sem: BinarySemaphore,
+    present_sem: BinarySemaphore,
 }
 
 impl Drop for RenderLoop {
@@ -58,8 +58,10 @@ impl RenderLoop {
 
         let frame_num = 1;
         let swapchain = SwapchainControl::new(swapchain);
-        let master_sem = TimelineSemaphore::new(
+
+        let mut master_sem = TimelineSemaphore::new(
             Arc::clone(&device), frame_num);
+        set_name!(master_sem);
 
         Ok(Self {
             device,
@@ -182,10 +184,11 @@ impl RenderLoop {
 }
 
 impl SwapchainControl {
-    crate fn new(swapchain: Swapchain) -> Self {
+    fn new(swapchain: Swapchain) -> Self {
         let device = || Arc::clone(swapchain.device());
-        let acquire_sem = BinarySemaphore::new(device());
-        let present_sem = BinarySemaphore::new(device());
+        let mut acquire_sem = BinarySemaphore::new(device());
+        let mut present_sem = BinarySemaphore::new(device());
+        set_name!(acquire_sem, present_sem);
         Self {
             swapchain,
             acquired_image: None,
@@ -194,15 +197,15 @@ impl SwapchainControl {
         }
     }
 
-    crate fn image_index(&self) -> u32 {
+    fn image_index(&self) -> u32 {
         self.acquired_image.unwrap()
     }
 
-    crate fn swapchain_mut(&mut self) -> &mut Swapchain {
+    fn swapchain_mut(&mut self) -> &mut Swapchain {
         &mut self.swapchain
     }
 
-    crate unsafe fn acquire(&mut self) {
+    unsafe fn acquire(&mut self) {
         trace!("SwapchainControl::acquire()");
         assert!(self.acquired_image.is_none());
         self.acquired_image = self.swapchain
@@ -210,7 +213,7 @@ impl SwapchainControl {
             .unwrap().into();
     }
 
-    crate unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
+    unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
         trace!(
             "SwapchainControl::present(present_queue: {:?})",
             fmt_named(&**present_queue),

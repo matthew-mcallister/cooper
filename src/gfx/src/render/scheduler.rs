@@ -76,12 +76,8 @@ impl RenderScheduler {
         &mut self,
         pass: RenderPassNode,
         // TODO: Ought to abstract over these arguments
-        wait_sems: &[SemaphoreInner<'_>],
-        wait_values: &[u64],
-        wait_stages: &[vk::PipelineStageFlags],
-        sig_sems: &[SemaphoreInner<'_>],
-        sig_values: &[u64],
-        fence: Option<&mut Fence>,
+        wait_sems: &[WaitInfo<'_>],
+        sig_sems: &[SignalInfo<'_>],
     ) {
         let pool = self.pool.take().unwrap();
         let cmds = RenderPassCmds::new(
@@ -112,12 +108,9 @@ impl RenderScheduler {
         unsafe {
             self.gfx_queue.submit(&[SubmitInfo {
                 wait_sems,
-                wait_values,
-                wait_stages,
                 sig_sems,
-                sig_values,
                 cmds: &[cmds],
-            }], fence);
+            }]);
         }
 
         self.pool = Some(pool);
@@ -164,7 +157,7 @@ mod tests {
         pass.add_task(0, Box::new(move |cmds| trivial.render(&state_, cmds)));
 
         let mut scheduler = RenderScheduler::new(Arc::clone(&vars.gfx_queue));
-        scheduler.schedule_pass(pass, &[], &[], &[], &[], &[], None);
+        scheduler.schedule_pass(pass, &[], &[]);
 
         device.wait_idle();
     }
