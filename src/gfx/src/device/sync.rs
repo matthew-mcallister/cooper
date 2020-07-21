@@ -25,13 +25,6 @@ impl TryFrom<vk::Result> for WaitResult {
     }
 }
 
-// TODO: Get rid of this type?
-#[derive(Debug)]
-crate struct Fence {
-    device: Arc<Device>,
-    inner: vk::Fence,
-}
-
 #[derive(Derivative)]
 #[derivative(Debug)]
 crate struct SemaphoreInner {
@@ -48,78 +41,6 @@ crate struct BinarySemaphore {
 #[derive(Debug)]
 crate struct TimelineSemaphore {
     inner: SemaphoreInner,
-}
-
-impl Drop for Fence {
-    fn drop(&mut self) {
-        let dt = self.device.table();
-        unsafe {
-            dt.destroy_fence(self.inner, ptr::null());
-        }
-    }
-}
-
-impl Fence {
-    crate fn new(device: Arc<Device>, signaled: bool) -> Self {
-        let dt = device.table();
-        let mut create_info = vk::FenceCreateInfo::default();
-        if signaled {
-            create_info.flags |= vk::FenceCreateFlags::SIGNALED_BIT;
-        }
-        let mut inner = vk::null();
-        unsafe {
-            dt.create_fence(&create_info, ptr::null(), &mut inner)
-                .check().unwrap();
-        }
-        Self {
-            device,
-            inner,
-        }
-    }
-
-    fn dt(&self) -> &vkl::DeviceTable {
-        self.device.table()
-    }
-
-    crate fn raw(&self) -> vk::Fence {
-        self.inner
-    }
-
-    crate fn wait(&self) {
-        let _ = self.wait_with_timeout(u64::MAX);
-    }
-
-    crate fn wait_with_timeout(&self, timeout: u64) -> WaitResult {
-        unsafe {
-            let fences = [self.inner];
-            self.dt().wait_for_fences(
-                fences.len() as _,
-                fences.as_ptr(),
-                bool32(false),
-                timeout,
-            ).try_into().unwrap()
-        }
-    }
-
-    crate fn check_signaled(&self) -> bool {
-        unsafe {
-            let res = self.dt().get_fence_status(self.inner);
-            if res == vk::Result::SUCCESS {
-                true
-            } else {
-                assert_eq!(res, vk::Result::NOT_READY);
-                false
-            }
-        }
-    }
-
-    // TODO: This function hangs randomly---driver bug?
-    crate fn reset(&self) {
-        unsafe {
-            let fences = [self.inner];
-            self.dt().reset_fences(fences.len() as _, fences.as_ptr());
-        }
-    }
 }
 
 impl Drop for SemaphoreInner {
