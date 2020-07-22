@@ -8,15 +8,15 @@ use prelude::*;
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
-#[derivative(Default)]
-crate enum CmdBufferState {
-    #[derivative(Default)]
+enum CmdBufferState {
     Initial,
     Recording,
     Executable,
     Pending,
 }
 
+// TODO: Keep track of how many live command buffer objects there are;
+// it's too easy to leak command buffers.
 #[derive(Debug)]
 crate struct CmdPool {
     device: Arc<Device>,
@@ -163,8 +163,8 @@ impl CmdPool {
     }
 
     crate unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
-        trace!("CmdPool::free(self: {:?}, queue_family: {}, {:?}, count: {})",
-            fmt_named(&*self), self.queue_family, self.flags, cmds.len());
+        trace!("CmdPool::free(self: {:?}, queue_family: {}, cmds: {:?})",
+            fmt_named(&*self), self.queue_family, cmds);
         let dt = &*self.device.table;
         dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
     }
@@ -195,14 +195,15 @@ impl Drop for CmdBuffer {
     }
 }
 
+// TODO: This API hardly supports reusing command buffers.
 impl CmdBuffer {
     crate fn new(mut pool: Box<CmdPool>, level: CmdBufferLevel) -> Self {
-        CmdBuffer {
-            device: Arc::clone(&pool.device),
+        Self {
+            device: Arc::clone(pool.device()),
             inner: pool.alloc(level),
             level,
             pool,
-            state: Default::default(),
+            state: CmdBufferState::Initial,
         }
     }
 
@@ -210,19 +211,36 @@ impl CmdBuffer {
         Self::new(pool, CmdBufferLevel::Primary)
     }
 
-    fn ensure_recording(&self) {
-        assert_eq!(self.state, CmdBufferState::Recording);
+    /// Creates a command buffer from a raw Vulkan command buffer
+    /// handle. The underlying command buffer object *must* be in the
+    /// initial state.
+    crate unsafe fn from_initial(
+        pool: Box<CmdPool>,
+        cmds: vk::CommandBuffer,
+        level: CmdBufferLevel,
+    ) -> Self {
+        Self {
+            device: Arc::clone(pool.device()),
+            inner: cmds,
+            pool,
+            level,
+            state: CmdBufferState::Initial,
+        }
+    }
+
+    crate fn device(&self) -> &Arc<Device> {
+        self.pool.device()
     }
 
     fn dt(&self) -> &vkl::DeviceTable {
-        &self.device.table
+        &self.device().table
     }
 
     crate fn inner(&self) -> vk::CommandBuffer {
         self.inner
     }
 
-    crate fn state(&self) -> CmdBufferState {
+    fn state(&self) -> CmdBufferState {
         self.state
     }
 
@@ -240,6 +258,10 @@ impl CmdBuffer {
 
     crate fn supports_xfer(&self) -> bool {
         self.pool.supports_xfer()
+    }
+
+    fn ensure_recording(&self) {
+        assert_eq!(self.state, CmdBufferState::Recording);
     }
 
     unsafe fn begin(
@@ -262,9 +284,9 @@ impl CmdBuffer {
         self.state = CmdBufferState::Recording;
     }
 
-    unsafe fn do_end(&mut self) {
+    crate unsafe fn do_end(&mut self) {
         let dt = &*self.device.table;
-        assert_eq!(self.state, CmdBufferState::Recording);
+        self.ensure_recording();
         dt.end_command_buffer(self.inner).check().unwrap();
         self.state = CmdBufferState::Executable;
     }
@@ -379,10 +401,6 @@ impl SubpassCmds {
 
     crate fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
-    }
-
-    crate fn state(&self) -> CmdBufferState {
-        self.inner.state()
     }
 
     crate fn subpass(&self) -> &Subpass {
@@ -620,10 +638,6 @@ impl RenderPassCmds {
 
     crate fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
-    }
-
-    crate fn state(&self) -> CmdBufferState {
-        self.inner.state()
     }
 
     crate fn level(&self) -> CmdBufferLevel {

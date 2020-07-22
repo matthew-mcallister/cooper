@@ -1,28 +1,19 @@
 use std::sync::Arc;
 
-use crate::device::{CmdPool, Device, Image, ImageDef, ImageHeap, Queue};
+use crate::device::{Device, Image, ImageDef, ImageHeap, Queue};
 use super::*;
 
 #[derive(Debug)]
 crate struct ResourceSystem {
     state: ResourceStateTable,
     sched: UploadScheduler,
-    queue: Arc<Queue>,
-    cmd_pool: Option<Box<CmdPool>>,
 }
 
 impl ResourceSystem {
     crate fn new(queue: &Arc<Queue>) -> Self {
-        let mut cmd_pool = Box::new(CmdPool::new(
-            queue.family(),
-            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-        ));
-        cmd_pool.set_name("ResourceSystem::cmd_pool");
         Self {
             state: ResourceStateTable::new(),
-            sched: UploadScheduler::new(Arc::clone(queue.device())),
-            queue: Arc::clone(queue),
-            cmd_pool: Some(cmd_pool),
+            sched: UploadScheduler::new(Arc::clone(queue)),
         }
     }
 
@@ -62,23 +53,13 @@ impl ResourceSystem {
     }
 
     crate fn schedule(&mut self, heap: &ImageHeap) {
-        if self.sched.query_tasks() != SchedulerStatus::Idle {
-            return;
+        if self.sched.query_tasks() == SchedulerStatus::Idle {
+            self.sched.schedule(&mut self.state, heap);
         }
-
-        let mut cmd_pool = self.cmd_pool.take().unwrap();
-        unsafe { cmd_pool.reset(); }
-        self.cmd_pool = Some(self.sched.schedule(
-            &self.queue, &mut self.state, heap, cmd_pool));
     }
 
     crate fn flush(&mut self, heap: &ImageHeap) {
-        self.cmd_pool = Some(self.sched.flush(
-            &self.queue,
-            &mut self.state,
-            heap,
-            self.cmd_pool.take().unwrap(),
-        ));
+        self.sched.flush(&mut self.state, heap);
     }
 }
 

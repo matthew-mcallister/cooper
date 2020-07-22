@@ -4,18 +4,21 @@ use derive_more::From;
 use log::{debug, trace};
 
 use crate::device::{
-    CmdBuffer, CmdPool, Device, ImageDef, ImageFlags, ImageHeap,
-    ImageSubresources, Queue, SignalInfo, SubmitInfo, TimelineSemaphore,
-    WaitResult, XferCmds, fmt_named,
+    CmdBuffer, CmdBufferLevel, CmdPool, Device, ImageDef, ImageFlags,
+    ImageHeap, ImageSubresources, Queue, SignalInfo, SubmitInfo,
+    TimelineSemaphore, WaitResult, XferCmds,
 };
 use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 
 #[derive(Debug)]
 pub(super) struct UploadScheduler {
+    queue: Arc<Queue>,
     tasks: TaskProcessor,
     sem: TimelineSemaphore,
     avail_batch: u64,   // Memoized sem.get_value()
     pending_batch: u64,
+    pool: Option<Box<CmdPool>>,
+    cmds: vk::CommandBuffer,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,14 +117,26 @@ fn upload_image(
 }
 
 impl UploadScheduler {
-    crate fn new(device: Arc<Device>) -> Self {
-        let mut sem = TimelineSemaphore::new(Arc::clone(&device), 0);
+    crate fn new(queue: Arc<Queue>) -> Self {
+        let mut sem = TimelineSemaphore::new(Arc::clone(queue.device()), 0);
         sem.set_name("upload_scheduler.sem");
+
+        let mut pool = Box::new(CmdPool::new(
+            queue.family(),
+            vk::CommandPoolCreateFlags::TRANSIENT_BIT,
+        ));
+        pool.set_name("resource_system.pool");
+
+        let cmds = pool.alloc(CmdBufferLevel::Primary);
+
         Self {
-            tasks: TaskProcessor::new(device),
+            tasks: TaskProcessor::new(Arc::clone(queue.device())),
+            queue,
             sem,
             avail_batch: 0,
             pending_batch: 0,
+            pool: Some(pool),
+            cmds,
         }
     }
 
@@ -151,38 +166,37 @@ impl UploadScheduler {
 
     crate fn schedule(
         &mut self,
-        queue: &Queue,
         resources: &mut ResourceStateTable,
         heap: &ImageHeap,
-        pool: Box<CmdPool>,
-    ) -> Box<CmdPool> {
+    ) {
         trace!("UploadScheduler::schedule()");
 
         assert_eq!(self.avail_batch(), self.pending_batch);
-        if self.tasks.is_empty() { return pool; }
+        if self.tasks.is_empty() { return; }
 
         self.pending_batch += 1;
 
-        let mut cmds = XferCmds::new(CmdBuffer::new_primary(pool));
+        let mut pool = self.pool.take().unwrap();
+        let mut cmds = unsafe {
+            pool.reset();
+            XferCmds::new(CmdBuffer::from_initial(
+                pool, self.cmds, CmdBufferLevel::Primary))
+        };
         self.tasks.process_tasks(
-            self.pending_batch,
-            resources,
-            heap,
-            &mut cmds,
-        );
+            self.pending_batch, resources, heap, &mut cmds);
         let (cmds, pool) = cmds.end();
+        self.cmds = cmds;
+        self.pool = Some(pool);
 
         let submissions = [SubmitInfo {
-            cmds: &[cmds],
+            cmds: &[self.cmds],
             sig_sems: &[SignalInfo {
                 semaphore: self.sem.inner_mut(),
                 value: self.pending_batch
             }],
             ..Default::default()
         }];
-        unsafe { queue.submit(&submissions); }
-
-        pool
+        unsafe { self.queue.submit(&submissions); }
     }
 
     crate fn wait_with_timeout(&mut self, timeout: u64) -> WaitResult {
@@ -195,17 +209,14 @@ impl UploadScheduler {
 
     crate fn flush(
         &mut self,
-        queue: &Queue,
         resources: &mut ResourceStateTable,
         heap: &ImageHeap,
-        mut pool: Box<CmdPool>,
-    ) -> Box<CmdPool> {
-        trace!("ResourceScheduler::flush(queue: {:?})", fmt_named(queue));
+    ) {
+        trace!("ResourceScheduler::flush()");
         let _ = self.wait_with_timeout(u64::MAX);
         while !self.tasks.is_empty() {
-            pool = self.schedule(queue, resources, heap, pool);
+            self.schedule(resources, heap);
             let _ = self.wait_with_timeout(u64::MAX);
         }
-        pool
     }
 }
