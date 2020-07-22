@@ -13,7 +13,7 @@ use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
 #[derive(Debug)]
 pub(super) struct UploadScheduler {
     queue: Arc<Queue>,
-    tasks: TaskProcessor,
+    tasks: TaskList,
     sem: TimelineSemaphore,
     avail_batch: u64,   // Memoized sem.get_value()
     pending_batch: u64,
@@ -29,7 +29,7 @@ pub(super) enum SchedulerStatus {
 
 /// Schedules the execution of GPU transfer commands.
 #[derive(Debug)]
-struct TaskProcessor {
+struct TaskList {
     staging: UploadStage,
     tasks: Vec<UploadTask>,
 }
@@ -47,7 +47,7 @@ crate enum UploadTask {
     Image(ImageUploadTask),
 }
 
-impl TaskProcessor {
+impl TaskList {
     fn new(device: Arc<Device>) -> Self {
         let staging_buffer_size = 0x100_0000;
         let staging = UploadStage::new(device, staging_buffer_size);
@@ -57,7 +57,7 @@ impl TaskProcessor {
         }
     }
 
-    fn add_task(&mut self, task: impl Into<UploadTask>) {
+    fn push(&mut self, task: impl Into<UploadTask>) {
         self.tasks.push(task.into());
     }
 
@@ -80,8 +80,7 @@ impl TaskProcessor {
         for i in (0..self.tasks.len()).rev() {
             let res = match &self.tasks[i] {
                 UploadTask::Image(task) => upload_image(
-                    batch_num, &mut self.staging, resources, heap, &task,
-                ),
+                    batch_num, &mut self.staging, resources, heap, &task),
             };
             if res.is_ok() {
                 self.tasks.remove(i);
@@ -130,7 +129,7 @@ impl UploadScheduler {
         let cmds = pool.alloc(CmdBufferLevel::Primary);
 
         Self {
-            tasks: TaskProcessor::new(Arc::clone(queue.device())),
+            tasks: TaskList::new(Arc::clone(queue.device())),
             queue,
             sem,
             avail_batch: 0,
@@ -145,7 +144,7 @@ impl UploadScheduler {
     }
 
     crate fn add_task(&mut self, task: impl Into<UploadTask>) {
-        self.tasks.add_task(task);
+        self.tasks.push(task);
     }
 
     crate fn avail_batch(&self) -> u64 {

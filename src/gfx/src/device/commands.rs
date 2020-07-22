@@ -26,12 +26,13 @@ crate struct CmdPool {
     name: Option<String>,
 }
 
-// TODO: Should probably contain Arc<SystemState>
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 crate struct CmdBuffer {
     device: Arc<Device>,
     inner: vk::CommandBuffer,
     level: CmdBufferLevel,
+    #[derivative(Debug(format_with = "write_named::<CmdPool>"))]
     pool: Box<CmdPool>,
     state: CmdBufferState,
 }
@@ -268,6 +269,9 @@ impl CmdBuffer {
         &mut self,
         inheritance_info: Option<&vk::CommandBufferInheritanceInfo>,
     ) {
+        trace!("CmdBuffer::begin(self: {:?}, inheritance_info: {:?})",
+            self, inheritance_info);
+
         let dt = &*self.device.table;
 
         assert_eq!(self.state, CmdBufferState::Initial);
@@ -285,6 +289,7 @@ impl CmdBuffer {
     }
 
     crate unsafe fn do_end(&mut self) {
+        trace!("CmdBuffer::end(self.inner: {:?})", self.inner);
         let dt = &*self.device.table;
         self.ensure_recording();
         dt.end_command_buffer(self.inner).check().unwrap();
