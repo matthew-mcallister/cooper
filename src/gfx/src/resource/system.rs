@@ -52,8 +52,12 @@ impl ResourceSystem {
         self.state.invalidate_image(image);
     }
 
+    crate fn query_status(&mut self) -> SchedulerStatus {
+        self.sched.query_tasks()
+    }
+
     crate fn schedule(&mut self, heap: &ImageHeap) {
-        if self.sched.query_tasks() == SchedulerStatus::Idle {
+        if self.query_status() == SchedulerStatus::Idle {
             self.sched.schedule(&mut self.state, heap);
         }
     }
@@ -88,8 +92,7 @@ mod tests {
         let device = vars.device();
         let queue = vars.gfx_queue();
 
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = &state.heap;
+        let heap = &ImageHeap::new(Arc::clone(&device));
         let mut resources = ResourceSystem::new(queue);
 
         let images: Vec<_> = (0..7)

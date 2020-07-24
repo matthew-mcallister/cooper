@@ -48,14 +48,17 @@ impl TestVars {
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
 impl VulkanTestContext {
-    // TODO: Only helpful in the device module
     unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
         const NAME: &'static str = "cooper unit test";
+
+        let show_window = std::env::var("TESTING_SHOW_WINDOW")
+            .map_or(false, |val| val == "1");
+
         let info = window::CreateInfo {
             title: NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
             hints: window::CreationHints {
-                hidden: true,
+                hidden: !show_window,
                 ..Default::default()
             },
         };

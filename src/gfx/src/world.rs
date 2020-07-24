@@ -32,10 +32,6 @@ impl RenderWorld {
         self.rloop.state()
     }
 
-    crate fn renderer(&self) -> &WorldRenderer {
-        self.rloop.renderer()
-    }
-
     pub fn view(&self) -> &SceneView {
         &self.data.view
     }

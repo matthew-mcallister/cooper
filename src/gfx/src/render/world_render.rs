@@ -20,14 +20,14 @@ impl BasicPass {
 
     crate fn create_framebuffers(
         &self,
-        state: &SystemState,
+        heap: &ImageHeap,
         swapchain: &Swapchain,
     ) -> Vec<Arc<Framebuffer>> {
         unsafe {
             swapchain.create_views().into_iter()
                 .map(|view| {
                     let depth_view = create_render_target(
-                        state,
+                        heap,
                         &self.pass,
                         1,
                         swapchain.extent(),
@@ -95,13 +95,14 @@ crate struct WorldRenderer {
 impl WorldRenderer {
     crate fn new(
         state: &SystemState,
+        heap: &ImageHeap,
         globals: Arc<Globals>,
         swapchain: &Swapchain,
         gfx_queue: Arc<Queue>,
     ) -> Self {
         let scheduler = RenderScheduler::new(gfx_queue);
         let basic_pass = BasicPass::new(Arc::clone(&state.device));
-        let framebuffers = basic_pass.create_framebuffers(state, &swapchain);
+        let framebuffers = basic_pass.create_framebuffers(&heap, &swapchain);
         let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
         let materials = MaterialSystem::new(state, &globals);
         Self {

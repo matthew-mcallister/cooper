@@ -884,7 +884,8 @@ mod tests {
         let device = Arc::clone(vars.device());
 
         let state = SystemState::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state));
+        let heap = ImageHeap::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state, &heap));
         let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
         let pass = TrivialPass::new(Arc::clone(&device));
@@ -951,20 +952,22 @@ mod tests {
         cmds.execute_cmds(&[vk::null()]);
     }
 
-    unsafe fn copy_common(vars: &testing::TestVars) -> (SystemState, XferCmds)
+    unsafe fn copy_common(vars: &testing::TestVars) ->
+        (SystemState, ImageHeap, XferCmds)
     {
         let device = Arc::clone(vars.device());
         let state = SystemState::new(Arc::clone(&device));
+        let heap = ImageHeap::new(Arc::clone(&device));
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
         let cmds = CmdBuffer::new(pool, CmdBufferLevel::Primary);
-        (state, XferCmds::new(cmds))
+        (state, heap, XferCmds::new(cmds))
     }
 
     unsafe fn copy_buffer(vars: testing::TestVars) {
-        let (state, mut cmds) = copy_common(&vars);
+        let (state, _, mut cmds) = copy_common(&vars);
         let src = state.buffers.alloc(
             BufferBinding::Storage,
             Lifetime::Frame,
@@ -993,7 +996,7 @@ mod tests {
     }
 
     unsafe fn copy_intra_buffer(vars: testing::TestVars) {
-        let (state, mut cmds) = copy_common(&vars);
+        let (state, _, mut cmds) = copy_common(&vars);
         let buf = state.buffers.alloc(
             BufferBinding::Storage,
             Lifetime::Frame,
@@ -1016,7 +1019,7 @@ mod tests {
     }
 
     unsafe fn copy_image(vars: testing::TestVars) {
-        let (state, mut cmds) = copy_common(&vars);
+        let (state, heap, mut cmds) = copy_common(&vars);
         let format = Format::RGBA8;
         let src = state.buffers.alloc(
             BufferBinding::Storage,
@@ -1025,7 +1028,7 @@ mod tests {
             (64 * 64 * format.size()) as _,
         );
         let dst = Arc::new(Image::with(
-            &state.heap,
+            &heap,
             ImageFlags::NO_SAMPLE,
             ImageType::Dim2,
             format,

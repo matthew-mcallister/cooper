@@ -677,8 +677,7 @@ mod tests {
     unsafe fn creation(vars: testing::TestVars) {
         use ImageFlags as Flags;
 
-        let state = SystemState::new(Arc::clone(vars.device()));
-        let heap = &state.heap;
+        let heap = &ImageHeap::new(Arc::clone(vars.device()));
 
         // Create some render targets
         let extent = Extent3D::new(320, 200, 1);

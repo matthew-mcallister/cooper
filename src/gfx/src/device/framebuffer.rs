@@ -169,7 +169,7 @@ fn validate_framebuffer_creation(
 }
 
 crate fn create_render_target(
-    state: &SystemState,
+    heap: &ImageHeap,
     render_pass: &Arc<RenderPass>,
     index: usize,
     extent: Extent2D,
@@ -188,7 +188,7 @@ crate fn create_render_target(
         flags |= ImageFlags::INPUT_ATTACHMENT;
     }
     Arc::new(Image::with(
-        &state.heap,
+        &heap,
         flags,
         ImageType::Dim2,
         attch.format,
@@ -202,15 +202,15 @@ crate fn create_render_target(
 #[cfg(test)]
 crate unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
     let device = Arc::clone(&swapchain.device);
-    let state = SystemState::new(device);
+    let heap = ImageHeap::new(device);
 
     let pass = create_test_pass(Arc::clone(&swapchain.device));
 
     let extent = swapchain.extent;
-    let hdr = create_render_target(&state, &pass, 1, extent, false);
-    let depth = create_render_target(&state, &pass, 2, extent, false);
-    let normal = create_render_target(&state, &pass, 3, extent, false);
-    let albedo = create_render_target(&state, &pass, 4, extent, false);
+    let hdr = create_render_target(&heap, &pass, 1, extent, false);
+    let depth = create_render_target(&heap, &pass, 2, extent, false);
+    let normal = create_render_target(&heap, &pass, 3, extent, false);
+    let albedo = create_render_target(&heap, &pass, 4, extent, false);
 
     let views = swapchain.create_views();
     let back = Arc::clone(&views[0]);

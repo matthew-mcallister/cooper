@@ -149,7 +149,8 @@ mod tests {
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let state = SystemState::new(Arc::clone(vars.device()));
-        let globals = Arc::new(Globals::new(&state));
+        let heap = ImageHeap::new(Arc::clone(vars.device()));
+        let globals = Arc::new(Globals::new(&state, &heap));
         let _ = TrivialRenderer::new(&state, globals);
     }
 

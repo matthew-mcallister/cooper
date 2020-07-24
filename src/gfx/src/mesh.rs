@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use base::PartialEnumMap;
 use itertools::Itertools;
 
@@ -26,7 +28,7 @@ crate struct IndexBuffer {
 /// Allows building a mesh without directly using the device interface.
 #[derive(Debug)]
 pub struct RenderMeshBuilder<'a> {
-    state: &'a SystemState,
+    buffers: &'a Arc<BufferHeap>,
     lifetime: Lifetime,
     mesh: RenderMesh,
 }
@@ -69,7 +71,7 @@ impl RenderMesh {
 impl<'a> RenderMeshBuilder<'a> {
     pub fn from_world(world: &'a RenderWorld) -> Self {
         Self {
-            state: world.state(),
+            buffers: &world.state().buffers,
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -77,7 +79,7 @@ impl<'a> RenderMeshBuilder<'a> {
 
     pub fn from_loop(rloop: &'a RenderLoop) -> Self {
         Self {
-            state: rloop.state(),
+            buffers: &rloop.state().buffers,
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -93,7 +95,7 @@ impl<'a> RenderMeshBuilder<'a> {
         let binding = BufferBinding::Index;
         let lifetime = self.lifetime;
         let alloc = BufferBox::into_inner(
-            self.state.buffers.box_slice(binding, lifetime, data));
+            self.buffers.box_slice(binding, lifetime, data));
         self.mesh.index = Some(IndexBuffer { alloc, ty });
         self
     }
@@ -105,7 +107,7 @@ impl<'a> RenderMeshBuilder<'a> {
         let binding = BufferBinding::Vertex;
         let lifetime = self.lifetime;
         let alloc = BufferBox::into_inner(
-            self.state.buffers.box_slice(binding, lifetime, data));
+            self.buffers.box_slice(binding, lifetime, data));
         self.mesh.bindings.insert(attr, AttrBuffer { alloc, format });
         self
     }
@@ -161,7 +163,7 @@ mod tests {
             0, 2, 3,
         ];
         let mut builder = RenderMeshBuilder {
-            state: &state,
+            buffers: &state.buffers,
             lifetime: Lifetime::Frame,
             mesh: Default::default(),
         };

@@ -2,14 +2,11 @@ use std::sync::Arc;
 
 use log::trace;
 
-use crate::{
-    BufferHeap, DescriptorHeap, Device, ImageHeap, PipelineCache, SamplerCache,
-};
+use crate::{BufferHeap, DescriptorHeap, Device, PipelineCache, SamplerCache};
 
 #[derive(Debug)]
 crate struct SystemState {
     crate device: Arc<Device>,
-    crate heap: ImageHeap,
     crate buffers: Arc<BufferHeap>,
     crate descriptors: Arc<DescriptorHeap>,
     crate pipelines: PipelineCache,
@@ -20,14 +17,12 @@ crate struct SystemState {
 impl SystemState {
     crate fn new(device: Arc<Device>) -> Self {
         let dev = || Arc::clone(&device);
-        let heap = ImageHeap::new(dev());
         let buffers = BufferHeap::new(dev());
         let descriptors = Arc::new(DescriptorHeap::new(&device));
         let pipelines = PipelineCache::new(&device);
         let samplers = SamplerCache::new(dev());
         SystemState {
             device,
-            heap,
             buffers,
             descriptors,
             pipelines,

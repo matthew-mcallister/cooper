@@ -15,6 +15,12 @@ pub enum ResourceState {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+crate enum SchedulerStatus {
+    Busy,
+    Idle,
+}
+
 unit::collect_tests![
     staging,
     system,

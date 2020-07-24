@@ -180,16 +180,12 @@ impl<'a> VertexData<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use base::partial_map;
     use crate::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         use VertexAttr as Attr;
-
-        let state = SystemState::new(Arc::clone(vars.device()));
-        let globals = Globals::new(&state);
 
         let attr = |format| VertexLayoutAttr { format };
         let layout = VertexLayout {
@@ -203,7 +199,9 @@ mod tests {
             },
             ..Default::default()
         };
-        let _input = layout.to_input_layout(&globals.shaders.static_vert);
+
+        let shaders = GlobalShaders::new(vars.device());
+        let _input = layout.to_input_layout(&shaders.static_vert);
     }
 
     unit::declare_tests![

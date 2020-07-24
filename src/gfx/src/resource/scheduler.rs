@@ -8,7 +8,7 @@ use crate::device::{
     ImageHeap, ImageSubresources, Queue, SignalInfo, SubmitInfo,
     TimelineSemaphore, WaitResult, XferCmds,
 };
-use super::{ResourceStateTable, StagingOutOfMemory, UploadStage};
+use super::*;
 
 #[derive(Debug)]
 pub(super) struct UploadScheduler {
@@ -19,12 +19,6 @@ pub(super) struct UploadScheduler {
     pending_batch: u64,
     pool: Option<Box<CmdPool>>,
     cmds: vk::CommandBuffer,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum SchedulerStatus {
-    Busy,
-    Idle,
 }
 
 /// Schedules the execution of GPU transfer commands.

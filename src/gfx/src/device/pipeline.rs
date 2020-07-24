@@ -508,7 +508,8 @@ mod tests {
     unsafe fn create_test(vars: testing::TestVars) {
         let device = vars.device();
         let state = SystemState::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state));
+        let heap = ImageHeap::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state, &heap));
         let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 
@@ -524,7 +525,8 @@ mod tests {
     unsafe fn cache_test(vars: crate::testing::TestVars) {
         let device = Arc::clone(vars.device());
         let mut state = SystemState::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state));
+        let heap = ImageHeap::new(Arc::clone(&device));
+        let globals = Arc::new(Globals::new(&state, &heap));
         let pass = TrivialPass::new(Arc::clone(&device));
         let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
 

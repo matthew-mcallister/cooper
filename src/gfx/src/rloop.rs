@@ -13,6 +13,7 @@ pub struct RenderLoop {
     frame_num: u64,
     swapchain: SwapchainControl,
     renderer: WorldRenderer,
+    image_heap: ImageHeap,
     resources: ResourceSystem,
     master_sem: TimelineSemaphore,
     // This is declared last so that it will be dropped last
@@ -44,13 +45,15 @@ impl RenderLoop {
         let gfx_queue = Arc::clone(&queues[0][0]);
 
         let state = Box::new(SystemState::new(Arc::clone(&device)));
-        let globals = Arc::new(Globals::new(&state));
-
+        let image_heap = ImageHeap::new(Arc::clone(&device));
         let mut resources = ResourceSystem::new(&gfx_queue);
+
+        let globals = Arc::new(Globals::new(&state, &image_heap));
         globals.upload_images(&mut resources);
 
         let renderer = WorldRenderer::new(
             &state,
+            &image_heap,
             Arc::clone(&globals),
             &swapchain,
             Arc::clone(&gfx_queue),
@@ -70,6 +73,7 @@ impl RenderLoop {
             swapchain,
             globals,
             renderer,
+            image_heap,
             resources,
             master_sem,
             state: Some(state),
@@ -126,6 +130,10 @@ impl RenderLoop {
         self.resources.get_image_state(image)
     }
 
+    pub fn uploader_busy(&mut self) -> bool {
+        self.resources.query_status() == SchedulerStatus::Busy
+    }
+
     pub fn upload_image(
         &mut self,
         image: &Arc<ImageDef>,
@@ -152,8 +160,7 @@ impl RenderLoop {
         self.frame_num += 1;
         debug!("beginning frame {}", self.frame_num);
         self.state_mut().frame_over();
-        let heap = &self.state.as_ref().unwrap().heap;
-        self.resources.schedule(heap);
+        self.resources.schedule(&self.image_heap);
     }
 
     crate fn wait_for_render(&self) {

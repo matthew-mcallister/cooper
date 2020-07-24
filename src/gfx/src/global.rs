@@ -34,15 +34,14 @@ crate enum ShaderConst {
 }
 
 impl Globals {
-    crate fn new(state: &SystemState) -> Self {
-        unsafe { Self::unsafe_new(state) }
+    crate fn new(state: &SystemState, heap: &ImageHeap) -> Self {
+        unsafe { Self::unsafe_new(state, heap) }
     }
 
-    unsafe fn unsafe_new(state: &SystemState) -> Self {
+    unsafe fn unsafe_new(state: &SystemState, heap: &ImageHeap) -> Self {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
-        let heap = &state.heap;
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
@@ -200,7 +199,7 @@ mod shader_sources {
 }
 
 impl GlobalShaders {
-    unsafe fn new(device: &Arc<Device>) -> Self {
+    crate unsafe fn new(device: &Arc<Device>) -> Self {
         let to_words = |bytes: &[u8]| {
             assert_eq!(bytes.len() % 4, 0);
             let mut words = Vec::with_capacity(bytes.len() / 4);
@@ -240,13 +239,15 @@ mod tests {
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let state = SystemState::new(Arc::clone(vars.device()));
-        let _ = Globals::new(&state);
+        let heap = ImageHeap::new(Arc::clone(vars.device()));
+        let _ = Globals::new(&state, &heap);
     }
 
     unsafe fn empty_descriptors_test(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
         let state = SystemState::new(Arc::clone(&device));
-        let globals = Globals::new(&state);
+        let heap = ImageHeap::new(Arc::clone(&device));
+        let globals = Globals::new(&state, &heap);
 
         let bindings = set_layout_bindings![
             (0, UNIFORM_BUFFER),

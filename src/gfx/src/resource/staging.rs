@@ -217,30 +217,30 @@ mod tests {
         let device = vars.device();
         let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 
-        let state = SystemState::new(Arc::clone(&device));
+        let heap = ImageHeap::new(Arc::clone(&device));
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
 
         // Run test, clear, and run it again
-        let (_, mut pool) = staging_inner(&state.heap, &mut staging, pool);
+        let (_, mut pool) = staging_inner(&heap, &mut staging, pool);
         staging.clear();
         pool.reset();
-        let (_, _) = staging_inner(&state.heap, &mut staging, pool);
+        let (_, _) = staging_inner(&heap, &mut staging, pool);
     }
 
     unsafe fn stage_validation_error(vars: testing::TestVars) {
         let device = vars.device();
         let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 
-        let state = SystemState::new(Arc::clone(&device));
+        let heap = ImageHeap::new(Arc::clone(&device));
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
 
-        staging_inner_with_fail(&state.heap, &mut staging, pool, true);
+        staging_inner_with_fail(&heap, &mut staging, pool, true);
     }
 
     unit::declare_tests![

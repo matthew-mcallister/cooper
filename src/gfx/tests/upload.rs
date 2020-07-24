@@ -13,22 +13,39 @@ fn main() {
     common::run_tests();
 }
 
-unsafe fn upload(mut rloop: Box<RenderLoop>) {
-    let data = vec![0; 1024];
-
-    let image = rloop.define_image(
+fn test_image(rloop: &mut RenderLoop, width: u32, height: u32) -> Arc<ImageDef>
+{
+    let extent = Extent3D::new(width, height, 1);
+    rloop.define_image(
         Default::default(),
         ImageType::Dim2,
         Format::RGBA8,
-        (16, 16).into(),
+        extent,
         1,
         1,
-        Some("test_image"),
-    );
-    rloop.upload_image(&image, Arc::new(data), 0);
+        Some(format!("{}x{}", width, height)),
+    )
+}
 
-    while rloop.get_image_state(&image) != ResourceState::Available {
+unsafe fn upload(mut rloop: Box<RenderLoop>) {
+    let data = Arc::new(vec![0u8; 0x2_0000]);
+    let images: Vec<_> = (0..7).map(|n| {
+        let image = test_image(&mut rloop, 2 << n, 2 << n);
+        rloop.upload_image(&image, Arc::clone(&data), 0);
+        image
+    }).collect();
+
+    for image in images.iter() {
+        assert_eq!(rloop.get_image_state(image), ResourceState::Unavailable);
+    }
+
+    loop {
         rloop = RenderWorld::new(rloop).render();
+        if !rloop.uploader_busy() { break; }
+    }
+
+    for image in images.iter() {
+        assert_eq!(rloop.get_image_state(image), ResourceState::Available);
     }
 }
 

@@ -23,11 +23,15 @@ pub(crate) struct TestContext {
 impl TestContext {
     unsafe fn test_input(&self) -> AnyResult<Box<RenderLoop>> {
         const NAME: &'static str = "cooper integration test";
+
+        let show_window = std::env::var("TESTING_SHOW_WINDOW")
+            .map_or(false, |val| val == "1");
+
         let info = window::CreateInfo {
             title: NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
             hints: window::CreationHints {
-                hidden: true,
+                hidden: !show_window,
                 ..Default::default()
             },
         };
