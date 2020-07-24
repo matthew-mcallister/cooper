@@ -6,22 +6,25 @@
 //! - Bails out on testing if there is an error initializing Vulkan
 //! - Requires tests to pass validation layers
 
-#![cfg(test)]
-
 use std::os::raw::c_int;
 use std::sync::Arc;
 use std::thread;
 
-use derive_more::*;
 use prelude::*;
 
 use crate::*;
 
-crate type VulkanTestData = unsafe fn(TestVars);
-crate type VulkanTest = unit::Test<VulkanTestData>;
+pub type TestData<T> = unsafe fn(T);
+pub type Test<T> = unit::Test<TestData<T>>;
 
-#[derive(Constructor, Debug)]
-crate struct VulkanTestContext {
+crate type UnitTestInput = TestVars;
+crate type UnitTest = Test<UnitTestInput>;
+
+pub type IntegrationTestInput = Box<RenderLoop>;
+pub type IntegrationTest = Test<IntegrationTestInput>;
+
+#[derive(Debug)]
+pub struct TestContext {
     proxy: window::EventLoopProxy,
 }
 
@@ -45,32 +48,38 @@ impl TestVars {
     }
 }
 
+const WINDOW_NAME: &'static str = "cooper test";
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
-impl VulkanTestContext {
-    unsafe fn init_vars(&self) -> Result<TestVars, AnyError> {
-        const NAME: &'static str = "cooper unit test";
+fn app_info() -> AppInfo {
+    AppInfo {
+        name: WINDOW_NAME.to_owned(),
+        version: [0, 1, 0],
+        debug: true,
+        test: true,
+        ..Default::default()
+    }
+}
 
+impl TestContext {
+    fn create_window(&self) -> Result<Arc<window::Window>, AnyError> {
         let show_window = std::env::var("TESTING_SHOW_WINDOW")
             .map_or(false, |val| val == "1");
 
         let info = window::CreateInfo {
-            title: NAME.to_owned(),
+            title: WINDOW_NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
             hints: window::CreationHints {
                 hidden: !show_window,
                 ..Default::default()
             },
         };
-        let window = Arc::new(self.proxy.create_window(info)?);
+        Ok(Arc::new(self.proxy.create_window(info)?))
+    }
 
-        let app_info = AppInfo {
-            name: NAME.to_owned(),
-            version: [0, 1, 0],
-            debug: true,
-            test: true,
-            ..Default::default()
-        };
+    unsafe fn create_swapchain(&self) -> Result<TestVars, AnyError> {
+        let window = self.create_window()?;
+        let app_info = app_info();
         let vk_platform = window.vk_platform().clone();
         let instance = Arc::new(Instance::new(vk_platform, app_info)?);
         let surface = instance.create_surface(&window)?;
@@ -83,32 +92,45 @@ impl VulkanTestContext {
             gfx_queue,
         })
     }
-}
 
-impl unit::PanicTestInvoker<VulkanTestData> for VulkanTestContext {
-    fn invoke(&self, test: &unit::Test<VulkanTestData>) {
-        // Recreate the full state so that every test has a clean slate.
-        unsafe {
-            // Poke the event loop to refresh the timeout.
-            self.proxy.poke();
-
-            let vars = self.init_vars().unwrap_or_else(|e| {
-                panic!("failed to initialize video: {}", e);
-            });
-            (test.data())(vars);
-        }
+    unsafe fn create_render_loop(&self) -> Result<Box<RenderLoop>, AnyError> {
+        Ok(Box::new(RenderLoop::new(app_info(), self.create_window()?)?))
     }
 }
 
-crate fn run_tests() {
+impl unit::PanicTestInvoker<TestData<UnitTestInput>> for TestContext {
+    fn invoke(&self, test: &UnitTest) {
+        self.proxy.poke();  // Refresh timeout
+        let vars = unsafe { self.create_swapchain() }.unwrap_or_else(|e| {
+            panic!("failed to initialize: {}", e);
+        });
+        unsafe { (test.data())(vars); }
+    }
+}
+
+impl unit::PanicTestInvoker<TestData<IntegrationTestInput>> for TestContext {
+    fn invoke(&self, test: &IntegrationTest) {
+        self.proxy.poke();
+        let vars = unsafe { self.create_render_loop() }.unwrap_or_else(|e| {
+            panic!("failed to initialize: {}", e);
+        });
+        unsafe { (test.data())(vars); }
+    }
+}
+
+pub fn run_tests<T>(collect: fn(&mut unit::TestDriverBuilder<Test<T>>))
+where
+    T: 'static,
+    TestContext: unit::PanicTestInvoker<TestData<T>>,
+{
     let (mut evt, proxy) = unsafe { window::init().unwrap() };
 
     let builder = thread::Builder::new().name("test_0".into());
     builder.spawn(move || {
-        let context = VulkanTestContext::new(proxy);
+        let context = TestContext { proxy };
         let context = unit::PanicTestContext::new(context);
-        let mut builder = unit::TestDriverBuilder::<VulkanTest>::parse_args();
-        crate::__collect_tests(&mut builder);
+        let mut builder = unit::TestDriverBuilder::<Test<T>>::parse_args();
+        collect(&mut builder);
         let mut driver = builder.build(Box::new(context));
         driver.run();
     }).unwrap();

@@ -29,7 +29,7 @@
 
 #[cfg(test)]
 macro_rules! test_type {
-    () => { crate::testing::VulkanTest }
+    () => { crate::testing::UnitTest }
 }
 
 #[macro_use]
@@ -84,11 +84,12 @@ pub struct AppInfo {
     pub test: bool,
 }
 
-#[cfg(test)]
-mod testing;
+// TODO: This module should really, really not be public, but it has to
+// be for integration tests. Waiting for a solution from Cargo.
+pub mod testing;
 
 #[cfg(test)]
 fn main() {
     env_logger::init();
-    testing::run_tests();
+    testing::run_tests(crate::__collect_tests);
 }
