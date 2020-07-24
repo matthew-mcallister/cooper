@@ -81,30 +81,26 @@ impl RenderScheduler {
         sig_sems: &[SignalInfo<'_>],
     ) {
         let pool = self.pool.take().unwrap();
-        let cmds = RenderPassCmds::new(
+        let mut pass_cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             pass.framebuffer,
             &pass.clear_values,
             SubpassContents::Inline,
         );
 
-        let mut pass_cmds = Some(cmds);
         for (i, subpass) in pass.tasks.into_iter().enumerate() {
-            let cmds = pass_cmds.take().unwrap().enter_subpass();
-            let mut cmds = if i > 0 {
-                let mut cmds = cmds.exit_subpass();
-                cmds.next_subpass(SubpassContents::Inline);
-                cmds.enter_subpass()
-            } else { cmds };
+            if i > 0 {
+                pass_cmds.next_subpass(SubpassContents::Inline);
+            }
 
+            let mut cmds = pass_cmds.enter_subpass();
             for task in subpass.into_iter() {
                 task(&mut cmds);
             }
-
-            pass_cmds = Some(cmds.exit_subpass());
+            pass_cmds = cmds.exit_subpass();
         }
 
-        let (cmds, pool) = pass_cmds.unwrap().end().end();
+        let (cmds, pool) = pass_cmds.end().end();
         self.buffers.push(cmds);
         unsafe {
             self.gfx_queue.submit(&[SubmitInfo {
