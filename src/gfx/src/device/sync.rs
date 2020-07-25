@@ -224,8 +224,49 @@ mod tests {
         assert_eq!(sem.wait(9999, 1000), WaitResult::Timeout);
     }
 
+    unsafe fn timeline_semaphore_queue_signal(vars: testing::TestVars) {
+        let queue = vars.gfx_queue();
+        let pool = Box::new(CmdPool::new_transient(queue.family()));
+
+        let make_cmds = |pool|
+            XferCmds::new(CmdBuffer::new_primary(pool)).end();
+        let mut semaphore = TimelineSemaphore::new(
+            Arc::clone(vars.device()), 0);
+
+        // Test wait
+        let (cmds, pool) = make_cmds(pool);
+        let value = 1;
+        queue.submit(&[SubmitInfo {
+            sig_sems: &[SignalInfo {
+                semaphore: semaphore.inner_mut(),
+                value,
+            }],
+            cmds: &[cmds],
+            ..Default::default()
+        }]);
+        let _ = semaphore.wait(value, u64::MAX);
+
+        // Test get
+        let (cmds, _pool) = make_cmds(pool);
+        let value = 2;
+        queue.submit(&[SubmitInfo {
+            sig_sems: &[SignalInfo {
+                semaphore: semaphore.inner_mut(),
+                value,
+            }],
+            cmds: &[cmds],
+            ..Default::default()
+        }]);
+        while semaphore.get_value() != value {
+            std::thread::sleep(std::time::Duration::from_micros(100));
+        }
+
+        queue.device().wait_idle();
+    }
+
     unit::declare_tests![
         timeline_semaphore_host_ops,
+        timeline_semaphore_queue_signal,
     ];
 }
 

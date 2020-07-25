@@ -96,7 +96,7 @@ mod tests {
         let mut resources = ResourceSystem::new(queue);
 
         let images: Vec<_> = (0..7)
-            .map(|n| test_image(&device, 2 << n, 2 << n))
+            .map(|n| test_image(device, 2 << n, 2 << n))
             .collect();
         for image in images.iter() {
             assert_eq!(
@@ -109,18 +109,22 @@ mod tests {
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
+        macro_rules! check_available { () => {
+            for image in images.iter() {
+                assert_eq!(
+                    resources.get_image_state(image),
+                    ResourceState::Available,
+                );
+            }
+        } };
+
         // Upload images one at a time
         for image in images.iter() {
             resources.upload_image(image, Arc::clone(&data), 0x1000);
             resources.flush(heap);
         }
 
-        for image in images.iter() {
-            assert_eq!(
-                resources.get_image_state(image),
-                ResourceState::Available,
-            );
-        }
+        check_available!();
 
         // Upload several images at once
         for image in images.iter() {
@@ -133,6 +137,8 @@ mod tests {
             resources.upload_image(image, Arc::clone(&data), 0x1000);
         }
         resources.flush(heap);
+
+        check_available!();
     }
 
     unit::declare_tests![upload];

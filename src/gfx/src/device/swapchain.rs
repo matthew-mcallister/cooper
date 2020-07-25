@@ -63,6 +63,10 @@ impl Surface {
             inner,
         })
     }
+
+    crate fn window(&self) -> &Arc<window::Window> {
+        &self.window
+    }
 }
 
 impl Drop for Swapchain {
@@ -95,6 +99,10 @@ impl Swapchain {
 
     crate fn inner(&self) -> vk::SwapchainKHR {
         self.inner
+    }
+
+    crate fn window(&self) -> &Arc<window::Window> {
+        self.surface.window()
     }
 
     crate fn extent(&self) -> Extent2D {

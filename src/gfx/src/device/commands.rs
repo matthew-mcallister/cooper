@@ -118,6 +118,10 @@ impl CmdPool {
         }
     }
 
+    crate fn new_transient(queue_family: QueueFamily<'_>) -> Self {
+        Self::new(queue_family, vk::CommandPoolCreateFlags::TRANSIENT_BIT)
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }
