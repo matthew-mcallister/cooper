@@ -123,7 +123,7 @@ unsafe fn render_mesh(
     });
 }
 
-type MeshMaterials = [Arc<MaterialDef>; 4];
+type MeshMaterials = [Arc<MaterialDef>; 6];
 
 fn mesh_materials(rl: &mut RenderLoop, meshes: &[Mesh]) -> Vec<MeshMaterials> {
     use MaterialProgram::*;
@@ -134,11 +134,16 @@ fn mesh_materials(rl: &mut RenderLoop, meshes: &[Mesh]) -> Vec<MeshMaterials> {
 
     meshes.iter().map(|mesh| {
         let albedo_mat = rl.define_material(Albedo, mesh.images.clone());
+        let normal_mat = rl.define_material(NormalMap, mesh.images.clone());
+        let met_rough_mat = rl.define_material(
+            MetallicRoughness, mesh.images.clone());
         [
             Arc::clone(&checker_mat),
             Arc::clone(&geom_depth_mat),
             Arc::clone(&geom_normal_mat),
             albedo_mat,
+            normal_mat,
+            met_rough_mat,
         ]
     }).collect()
 }
