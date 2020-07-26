@@ -172,7 +172,6 @@ unsafe fn unsafe_main_with_proxy(proxy: window::EventLoopProxy) ->
         debug: true,
         ..Default::default()
     };
-
     let mut rloop = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
 
     let path = std::env::var("GLTF_PATH")?;

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::ptr;
 use std::sync::Arc;
@@ -54,7 +53,6 @@ pub enum CullMode {
 crate struct GraphicsPipelineDesc {
     crate subpass: Subpass,
     crate layout: PipelineLayoutDesc,
-    // TODO: This needs encapsulation so it can be auto-computed
     crate vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
@@ -72,57 +70,6 @@ crate struct GraphicsPipelineDesc {
     crate blend_consts: [f32; 4],
 }
 impl Eq for GraphicsPipelineDesc {}
-
-#[derive(Debug)]
-crate struct PipelineLayoutCache {
-    device: Arc<Device>,
-    inner: StagedCache<PipelineLayoutDesc, Arc<PipelineLayout>>,
-}
-
-macro_rules! pipeline_cache {
-    (
-        name: $name:ident,
-        pipeline: $pipeline:ident,
-        desc: $desc:ident,
-    ) => {
-        #[derive(Debug)]
-        crate struct $name {
-            inner: StagedCache<$desc, Arc<$pipeline>>,
-        }
-
-        impl $name {
-            fn new() -> Self {
-                Self {
-                    inner: Default::default(),
-                }
-            }
-
-            fn commit(&mut self) {
-                self.inner.commit();
-            }
-
-            fn get_committed(&self, desc: &$desc) -> Option<&Arc<$pipeline>> {
-                self.inner.get_committed(desc)
-            }
-
-            unsafe fn get_or_create(
-                &self,
-                layout: Arc<PipelineLayout>,
-                desc: &$desc,
-            ) -> Cow<Arc<$pipeline>> {
-                self.inner.get_or_insert_with(desc, || {
-                    Arc::new($pipeline::new(layout, desc.clone()))
-                })
-            }
-        }
-    }
-}
-
-pipeline_cache! {
-    name: GraphicsPipelineCache,
-    pipeline: GraphicsPipeline,
-    desc: GraphicsPipelineDesc,
-}
 
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
@@ -302,9 +249,10 @@ unsafe fn create_graphics_pipeline(
     let vertex_shader = desc.vertex_stage().shader();
     let vertex_layout = &desc.vertex_layout;
 
-    for &input in vertex_shader.inputs().iter() {
+    for &location in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty
-        assert!(vertex_layout.attrs.contains_key(input.try_into().unwrap()));
+        assert!(vertex_layout.attributes.iter()
+            .find(|attr| attr.location == location).is_some());
     }
 
     let bindings = vertex_layout.vk_bindings();
@@ -414,6 +362,75 @@ unsafe fn create_graphics_pipeline(
     }
 }
 
+impl From<CullMode> for vk::CullModeFlags {
+    fn from(mode: CullMode) -> Self {
+        match mode {
+            CullMode::None => Self::NONE,
+            CullMode::Front => Self::FRONT_BIT,
+            CullMode::Back => Self::BACK_BIT,
+            CullMode::FrontAndBack => Self::FRONT_AND_BACK,
+        }
+    }
+}
+
+#[derive(Debug)]
+crate struct PipelineLayoutCache {
+    device: Arc<Device>,
+    inner: StagedCache<PipelineLayoutDesc, Arc<PipelineLayout>>,
+}
+
+/// Manages the creation, destruction, and lifetime of pipelines.
+#[derive(Debug)]
+crate struct PipelineCache {
+    layouts: PipelineLayoutCache,
+    gfx: GraphicsPipelineCache,
+}
+
+macro_rules! pipeline_cache {
+    (
+        name: $name:ident,
+        pipeline: $pipeline:ident,
+        desc: $desc:ident,
+    ) => {
+        #[derive(Debug)]
+        crate struct $name {
+            inner: StagedCache<$desc, Arc<$pipeline>>,
+        }
+
+        impl $name {
+            fn new() -> Self {
+                Self {
+                    inner: Default::default(),
+                }
+            }
+
+            fn commit(&mut self) {
+                self.inner.commit();
+            }
+
+            fn get_committed(&self, desc: &$desc) -> Option<&Arc<$pipeline>> {
+                self.inner.get_committed(desc)
+            }
+
+            unsafe fn get_or_create(
+                &self,
+                layout: Arc<PipelineLayout>,
+                desc: &$desc,
+            ) -> Cow<Arc<$pipeline>> {
+                self.inner.get_or_insert_with(desc, || {
+                    Arc::new($pipeline::new(layout, desc.clone()))
+                })
+            }
+        }
+    }
+}
+
+pipeline_cache! {
+    name: GraphicsPipelineCache,
+    pipeline: GraphicsPipeline,
+    desc: GraphicsPipelineDesc,
+}
+
 impl PipelineLayoutCache {
     crate fn new(device: Arc<Device>) -> Self {
         Self {
@@ -440,24 +457,6 @@ impl PipelineLayoutCache {
             desc.clone(),
         )))
     }
-}
-
-impl From<CullMode> for vk::CullModeFlags {
-    fn from(mode: CullMode) -> Self {
-        match mode {
-            CullMode::None => Self::NONE,
-            CullMode::Front => Self::FRONT_BIT,
-            CullMode::Back => Self::BACK_BIT,
-            CullMode::FrontAndBack => Self::FRONT_AND_BACK,
-        }
-    }
-}
-
-/// Manages the creation, destruction, and lifetime of pipelines.
-#[derive(Debug)]
-crate struct PipelineCache {
-    layouts: PipelineLayoutCache,
-    gfx: GraphicsPipelineCache,
 }
 
 impl PipelineCache {

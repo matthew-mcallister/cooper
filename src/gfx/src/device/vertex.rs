@@ -6,62 +6,14 @@ use enum_map::Enum;
 
 use crate::*;
 
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-crate struct VertexLayout {
-    crate topology: PrimitiveTopology,
-    crate packing: VertexPacking,
-    crate attrs: PartialEnumMap<VertexAttr, VertexLayoutAttr>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate struct VertexLayoutAttr {
-    crate format: Format,
-}
-
-/// A limited choice of schemes for storing vertex attributes in memory.
-#[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
-#[derivative(Default)]
-crate enum VertexPacking {
-    /// Each vertex attribute is stored in a separate buffer.
-    #[derivative(Default)]
-    Unpacked,
-    // All vertex attributes are stored in a single buffer.
-    //Packed,
-}
-
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum PrimitiveTopology {
-        PointList = POINT_LIST,
-        LineList = LINE_LIST,
-        LineStrip = LINE_STRIP,
+    pub enum IndexType {
         #[derivative(Default)]
-        TriangleList = TRIANGLE_LIST,
-        TriangleStrip = TRIANGLE_STRIP,
-        TriangleFan = TRIANGLE_FAN,
-        LineListWithAdjacency = LINE_LIST_WITH_ADJACENCY,
-        LineStripWithAdjacency = LINE_STRIP_WITH_ADJACENCY,
-        TriangleListWithAdjacency = TRIANGLE_LIST_WITH_ADJACENCY,
-        TriangleStripWithAdjacency = TRIANGLE_STRIP_WITH_ADJACENCY,
-        PatchList = PATCH_LIST,
+        U16 = UINT16,
+        U32 = UINT32,
     }
-}
-
-/// Opaque object used in pipeline creation and vertex buffer binding.
-// TODO: maybe it would have been fine to use fixed vertex buffer
-// positions and bind dummy buffers for attributes not present
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-crate struct VertexInputLayout {
-    pub(super) topology: PrimitiveTopology,
-    pub(super) packing: VertexPacking,
-    pub(super) attrs: PartialEnumMap<VertexAttr, VertexInputAttr>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) struct VertexInputAttr {
-    pub(super) location: u32,
-    pub(super) format: Format,
 }
 
 primitive_enum! {
@@ -83,20 +35,52 @@ primitive_enum! {
     }
 }
 
-// TODO: Index buffer!
-#[derive(Clone, Copy, Debug)]
-crate enum VertexData<'a> {
-    Unpacked(PartialEnumMap<VertexAttr, BufferRange<'a>>),
-}
-
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    pub enum IndexType {
+    pub enum PrimitiveTopology {
+        PointList = POINT_LIST,
+        LineList = LINE_LIST,
+        LineStrip = LINE_STRIP,
         #[derivative(Default)]
-        U16 = UINT16,
-        U32 = UINT32,
+        TriangleList = TRIANGLE_LIST,
+        TriangleStrip = TRIANGLE_STRIP,
+        TriangleFan = TRIANGLE_FAN,
+        LineListWithAdjacency = LINE_LIST_WITH_ADJACENCY,
+        LineStripWithAdjacency = LINE_STRIP_WITH_ADJACENCY,
+        TriangleListWithAdjacency = TRIANGLE_LIST_WITH_ADJACENCY,
+        TriangleStripWithAdjacency = TRIANGLE_STRIP_WITH_ADJACENCY,
+        PatchList = PATCH_LIST,
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+crate struct VertexData<'a> {
+    crate attributes: PartialEnumMap<VertexAttr, BufferRange<'a>>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct VertexStreamLayout {
+    pub topology: PrimitiveTopology,
+    pub attributes: PartialEnumMap<VertexAttr, VertexStreamAttr>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VertexStreamAttr {
+    pub format: Format,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct VertexInputLayout {
+    crate topology: PrimitiveTopology,
+    crate attributes: SmallVec<VertexAttributeBinding, 6>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct VertexAttributeBinding {
+    crate location: u32,
+    crate attribute: VertexAttr,
+    crate format: Format,
 }
 
 impl IndexType {
@@ -108,73 +92,62 @@ impl IndexType {
     }
 }
 
-impl VertexLayout {
-    crate fn to_input_layout(&self, shader: &Shader) -> VertexInputLayout {
-        VertexInputLayout::new(self, shader)
+impl<'a> VertexData<'a> {
+    pub(super) fn map_bindings<'b>(&'b self, layout: &'b VertexInputLayout) ->
+        impl Iterator<Item = (u32, BufferRange<'a>)> + 'b
+    {
+        layout.attributes.iter().map(move |binding| {
+            (binding.location, self.attributes[binding.attribute])
+        })
+    }
+}
+
+impl VertexStreamLayout {
+    crate fn input_layout_for_shader(&self, shader: &Shader) ->
+        VertexInputLayout
+    {
+        assert_eq!(shader.stage(), ShaderStage::Vertex);
+        let mut attrs = SmallVec::with_capacity(shader.inputs().len());
+        for &location in shader.inputs().iter() {
+            let name: VertexAttr = location.try_into().unwrap();
+            let attr = *self.attributes.get(name).unwrap_or_else(||
+                panic!("missing attribute: {:?}", name));
+            attrs.push(VertexAttributeBinding {
+                location,
+                attribute: name,
+                format: attr.format,
+            });
+        }
+        VertexInputLayout {
+            topology: self.topology,
+            attributes: attrs,
+        }
     }
 }
 
 impl VertexInputLayout {
-    crate fn new(layout: &VertexLayout, shader: &Shader) -> Self {
-        assert_eq!(shader.stage(), ShaderStage::Vertex);
-        let mut attrs = PartialEnumMap::new();
-        for &location in shader.inputs().iter() {
-            let name = location.try_into().unwrap();
-            let attr = &layout.attrs.get(name).unwrap_or_else(||
-                panic!("missing attribute: {:?}", name));
-            assert!(!attrs.contains_key(name));
-            attrs.insert(name, VertexInputAttr {
-                location,
-                format: attr.format,
-            });
-        }
-
-        let packing = if shader.inputs().len() < 2 { VertexPacking::Unpacked }
-            else { layout.packing };
-
-        Self {
-            topology: layout.topology,
-            packing,
-            attrs,
-        }
-    }
-
     pub(super) fn vk_bindings(&self) -> Vec<vk::VertexInputBindingDescription>
     {
-        match self.packing {
-            VertexPacking::Unpacked => self.attrs.values()
-                .enumerate()
-                .map(|(i, attr)| vk::VertexInputBindingDescription {
-                    binding: i as _,
-                    stride: attr.format.size() as _,
-                    input_rate: vk::VertexInputRate::VERTEX,
-                })
-                .collect(),
-        }
+        self.attributes.iter()
+            .enumerate()
+            .map(|(i, attr)| vk::VertexInputBindingDescription {
+                binding: i as _,
+                stride: attr.format.size() as _,
+                input_rate: vk::VertexInputRate::VERTEX,
+            })
+            .collect()
     }
 
     pub(super) fn vk_attrs(&self) -> Vec<vk::VertexInputAttributeDescription> {
-        match self.packing {
-            VertexPacking::Unpacked => self.attrs.values()
-                .enumerate()
-                .map(|(i, attr)| vk::VertexInputAttributeDescription {
-                    location: attr.location,
-                    binding: i as _,
-                    format: attr.format.into(),
-                    offset: 0,
-                })
-                .collect(),
-        }
-    }
-}
-
-impl<'a> VertexData<'a> {
-    pub(super) fn map_bindings<'b>(&'b self, layout: &'b VertexInputLayout) ->
-        impl Iterator<Item = BufferRange<'a>> + 'b
-    {
-        match self {
-            Self::Unpacked(data) => layout.attrs.keys().map(move |k| data[k])
-        }
+        self.attributes.iter()
+            .enumerate()
+            .map(|(i, attr)| vk::VertexInputAttributeDescription {
+                location: attr.location,
+                binding: i as _,
+                format: attr.format.into(),
+                offset: 0,
+            })
+            .collect()
     }
 }
 
@@ -187,9 +160,9 @@ mod tests {
     unsafe fn smoke_test(vars: testing::TestVars) {
         use VertexAttr as Attr;
 
-        let attr = |format| VertexLayoutAttr { format };
-        let layout = VertexLayout {
-            attrs: partial_map! {
+        let attr = |format| VertexStreamAttr { format };
+        let layout = VertexStreamLayout {
+            attributes: partial_map! {
                 Attr::Position  => attr(Format::RGB32F),
                 Attr::Normal    => attr(Format::RGB32F),
                 Attr::Texcoord0 => attr(Format::RG16),
@@ -201,7 +174,7 @@ mod tests {
         };
 
         let shaders = GlobalShaders::new(vars.device());
-        let _input = layout.to_input_layout(&shaders.static_vert);
+        let _input = layout.input_layout_for_shader(&shaders.static_vert);
     }
 
     unit::declare_tests![

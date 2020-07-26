@@ -5,7 +5,6 @@ use itertools::Itertools;
 
 use crate::*;
 
-// TODO: Might need bbox property
 #[derive(Debug, Default)]
 pub struct RenderMesh {
     vertex_count: u32,
@@ -15,14 +14,14 @@ pub struct RenderMesh {
 
 #[derive(Debug)]
 crate struct AttrBuffer {
-    crate alloc: BufferAlloc,
-    crate format: Format,
+    alloc: BufferAlloc,
+    format: Format,
 }
 
 #[derive(Debug)]
 crate struct IndexBuffer {
-    crate alloc: BufferAlloc,
-    crate ty: IndexType,
+    alloc: BufferAlloc,
+    ty: IndexType,
 }
 
 /// Allows building a mesh without directly using the device interface.
@@ -39,32 +38,31 @@ impl RenderMesh {
         self.vertex_count
     }
 
-    crate fn index(&self) -> Option<&IndexBuffer> {
-        self.index.as_ref()
-    }
-
     crate fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer> {
         &self.bindings
     }
 
-    crate fn vertex_layout(&self) -> VertexLayout {
-        VertexLayout {
+    crate fn vertex_layout(&self) -> VertexStreamLayout {
+        VertexStreamLayout {
             topology: PrimitiveTopology::TriangleList,
-            packing: VertexPacking::Unpacked,
-            attrs: self.bindings.iter()
+            attributes: self.bindings.iter()
                 .map(|(name, binding)| {
-                    (name, VertexLayoutAttr { format: binding.format })
+                    (name, VertexStreamAttr { format: binding.format })
                 })
                 .collect(),
         }
     }
 
     crate fn data(&self) -> VertexData<'_> {
-        VertexData::Unpacked(
-            self.bindings.iter()
+        VertexData {
+            attributes: self.bindings.iter()
                 .map(|(name, binding)| (name, binding.alloc.range()))
                 .collect()
-        )
+        }
+    }
+
+    crate fn index(&self) -> Option<&IndexBuffer> {
+        self.index.as_ref()
     }
 }
 
@@ -129,6 +127,14 @@ impl<'a> RenderMeshBuilder<'a> {
 }
 
 impl AttrBuffer {
+    crate fn data(&self) -> BufferRange<'_> {
+        self.alloc.range()
+    }
+
+    crate fn format(&self) -> Format {
+        self.format
+    }
+
     /// The number of elements in the buffer.
     crate fn count(&self) -> u32 {
         (self.alloc.size() / self.format.size() as vk::DeviceSize) as _
@@ -136,6 +142,14 @@ impl AttrBuffer {
 }
 
 impl IndexBuffer {
+    crate fn data(&self) -> BufferRange<'_> {
+        self.alloc.range()
+    }
+
+    crate fn ty(&self) -> IndexType {
+        self.ty
+    }
+
     /// The number of elements in the buffer.
     crate fn count(&self) -> u32 {
         (self.alloc.size() / self.ty.size() as vk::DeviceSize) as _

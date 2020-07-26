@@ -30,8 +30,6 @@ impl InstanceRenderer {
     }
 }
 
-// TODO: Sort meshes by pipeline, or at least display type
-// TODO: Instance sorted meshes.
 unsafe fn render_instances(
     state: &SystemState,
     view: &SceneViewState,
@@ -61,8 +59,8 @@ unsafe fn render_instances(
         };
 
         let vertex_shader = desc.vertex_stage().shader();
-        desc.vertex_layout =
-            VertexInputLayout::new(&mesh.vertex_layout(), &vertex_shader);
+        desc.vertex_layout = mesh.vertex_layout()
+            .input_layout_for_shader(&vertex_shader);
 
         let pipeline = state.pipelines.get_or_create_gfx(&desc);
         cmds.bind_gfx_pipe(&pipeline);
@@ -77,9 +75,9 @@ unsafe fn render_instances(
 
         let fst_inst = i as u32;
         cmds.bind_vertex_buffers(&mesh.data());
-        if let Some(ref index) = mesh.index() {
+        if let Some(index) = mesh.index() {
             let vert_count = index.count();
-            cmds.bind_index_buffer(index.alloc.range(), index.ty);
+            cmds.bind_index_buffer(index.data(), index.ty());
             cmds.draw_indexed_offset(vert_count, 1, 0, 0, fst_inst);
         } else {
             let vert_count = mesh.vertex_count();

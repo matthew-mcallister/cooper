@@ -35,6 +35,7 @@ crate struct ShaderSpec {
 }
 impl Eq for ShaderSpec {}
 
+// Probably should know the type and dimension too...
 crate type ShaderLocation = u32;
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]

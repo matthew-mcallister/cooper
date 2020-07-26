@@ -4,7 +4,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use derivative::Derivative;
-use log::{debug, info};
+use log::{debug, info, trace};
 use more_asserts::assert_ge;
 use prelude::*;
 
@@ -29,6 +29,7 @@ impl Drop for Instance {
             for messenger in self.debug_messengers.iter_mut() {
                 messenger.destroy(&self.table);
             }
+            trace!("Instance::drop()");
             self.table.destroy_instance(ptr::null());
         }
 
@@ -41,10 +42,9 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    crate unsafe fn new(
-        vk: window::VulkanPlatform,
-        app_info: AppInfo,
-    ) -> Result<Self, AnyError> {
+    crate unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) ->
+        Result<Self, AnyError>
+    {
         if !vk.supported() { Err("vulkan not available")?; }
 
         let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
@@ -74,6 +74,7 @@ impl Instance {
 
         if app_info.debug {
             layers.push(c_str!("VK_LAYER_KHRONOS_validation"));
+            layers.push(c_str!("VK_LAYER_LUNARG_gfxreconstruct"));
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
