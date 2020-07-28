@@ -1,7 +1,12 @@
 #![feature(
     arbitrary_self_types,
     bool_to_option,
+    const_fn,
     const_generics,
+    const_panic,
+    const_raw_ptr_deref,
+    const_raw_ptr_to_usize_cast,
+    const_slice_from_raw_parts,
     cow_is_borrowed,
     crate_visibility_modifier,
     entry_insert,

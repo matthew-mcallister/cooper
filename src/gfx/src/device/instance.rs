@@ -74,7 +74,6 @@ impl Instance {
 
         if app_info.debug {
             layers.push(c_str!("VK_LAYER_KHRONOS_validation"));
-            layers.push(c_str!("VK_LAYER_LUNARG_gfxreconstruct"));
             extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 

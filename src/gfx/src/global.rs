@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use log::trace;
-use prelude::*;
 
 use crate::*;
 
@@ -177,10 +176,9 @@ impl Globals {
 }
 
 mod shader_sources {
-    // TODO: Hot reloading
     macro_rules! include_shaders {
         ($($ident:ident = $name:expr;)*) => {
-            $(crate const $ident: &'static [u8] = include_bytes!(
+            $(crate static $ident: &'static [u32] = include_u32!(
                 concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/generated/shaders/", $name, ".spv",
@@ -200,21 +198,13 @@ mod shader_sources {
 
 impl GlobalShaders {
     crate unsafe fn new(device: &Arc<Device>) -> Self {
-        let to_words = |bytes: &[u8]| {
-            assert_eq!(bytes.len() % 4, 0);
-            let mut words = Vec::with_capacity(bytes.len() / 4);
-            words.set_len(words.capacity());
-            words.as_bytes_mut().copy_from_slice(bytes);
-            words
-        };
-
         macro_rules! build {
             ($($field:ident => $shader:ident,)*) => {
                 GlobalShaders {
                     $($field: {
                         let shader = Arc::new(Shader::new(
                             Arc::clone(&device),
-                            to_words(shader_sources::$shader),
+                            shader_sources::$shader.into(),
                         ));
                         shader
                     },)*
