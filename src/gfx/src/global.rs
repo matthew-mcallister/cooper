@@ -178,46 +178,50 @@ impl Globals {
 mod shader_sources {
     macro_rules! include_shaders {
         ($($ident:ident = $name:expr;)*) => {
-            $(crate static $ident: &'static [u32] = include_u32!(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/generated/shaders/", $name, ".spv",
-                )
-            );)*
+            $(crate mod $ident {
+                macro_rules! name {
+                    () => {
+                        concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/generated/shaders/", $name, ".spv",
+                        )
+                    }
+                }
+                crate const NAME: &'static str = name!();
+                crate static CODE: &'static [u32] = include_u32!(name!());
+            })*
         }
     }
 
     include_shaders! {
-        TRIVIAL_VERT = "trivial_vert";
-        TRIVIAL_FRAG = "trivial_frag";
-        STATIC_VERT = "static_vert";
-        GEOM_VIS_FRAG = "geom_vis_frag";
-        TEXTURE_VIS_FRAG = "texture_vis_frag";
+        trivial_vert = "trivial_vert";
+        trivial_frag = "trivial_frag";
+        static_vert = "static_vert";
+        geom_vis_frag = "geom_vis_frag";
+        texture_vis_frag = "texture_vis_frag";
     }
 }
 
 impl GlobalShaders {
     crate unsafe fn new(device: &Arc<Device>) -> Self {
         macro_rules! build {
-            ($($field:ident => $shader:ident,)*) => {
+            ($($name:ident,)*) => {
                 GlobalShaders {
-                    $($field: {
-                        let shader = Arc::new(Shader::new(
-                            Arc::clone(&device),
-                            shader_sources::$shader.into(),
-                        ));
-                        shader
-                    },)*
+                    $($name: Arc::new(Shader::new(
+                        Arc::clone(&device),
+                        shader_sources::$name::CODE.into(),
+                        Some(shader_sources::$name::NAME.to_owned()),
+                    )),)*
                 }
             }
         }
 
         build! {
-            trivial_vert => TRIVIAL_VERT,
-            trivial_frag => TRIVIAL_FRAG,
-            static_vert => STATIC_VERT,
-            geom_vis_frag => GEOM_VIS_FRAG,
-            texture_vis_frag => TEXTURE_VIS_FRAG,
+            trivial_vert,
+            trivial_frag,
+            static_vert,
+            geom_vis_frag,
+            texture_vis_frag,
         }
     }
 }

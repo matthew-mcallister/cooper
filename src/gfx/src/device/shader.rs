@@ -6,8 +6,6 @@ use std::sync::Arc;
 use derivative::Derivative;
 use enum_map::Enum;
 use prelude::*;
-use spirv_headers as spv;
-use spirv_reflect::types::ReflectInterfaceVariable;
 
 use crate::*;
 
@@ -17,7 +15,7 @@ crate struct Shader {
     module: vk::ShaderModule,
     code: Vec<u32>,
     stage: ShaderStage,
-    source_file: String,
+    source_file: Option<String>,
     inputs: Vec<ShaderLocation>,
     outputs: Vec<ShaderLocation>,
 }
@@ -58,7 +56,11 @@ impl Drop for Shader {
 }
 
 impl Shader {
-    crate unsafe fn new(device: Arc<Device>, code: Vec<u32>) -> Self {
+    crate unsafe fn new(
+        device: Arc<Device>,
+        code: Vec<u32>,
+        source_file: Option<String>,
+    ) -> Self {
         let dt = &device.table;
         let create_info = vk::ShaderModuleCreateInfo {
             code_size: 4 * code.len(),
@@ -69,14 +71,14 @@ impl Shader {
         dt.create_shader_module(&create_info, ptr::null(), &mut module)
             .check().unwrap();
 
-        let data = code.as_bytes();
-        let reflected = spirv_reflect::ShaderModule::load_u8_data(data)
-            .unwrap();
-        let stage = reflected.get_spirv_execution_model().try_into().unwrap();
-        let (inputs, outputs) = get_shader_interface(&reflected);
+        let reflected = spv::parse_words(&code);
+        let entry = reflected.get_entry_point(&"main").unwrap();
+        let stage = entry.execution_model().try_into().unwrap();
+        let (inputs, outputs) = get_shader_interface(&entry);
 
-        let source_file = reflected.get_source_file();
-        device.set_name(module, source_file.clone());
+        if let Some(source) = &source_file {
+            device.set_name(module, source.clone());
+        }
 
         Shader {
             device,
@@ -120,7 +122,7 @@ impl Shader {
 
 impl Named for Shader {
     fn name(&self) -> Option<&str> {
-        Some(&self.source_file)
+        Some(&self.source_file.as_ref()?)
     }
 }
 
@@ -160,18 +162,15 @@ impl ShaderSpec {
     }
 }
 
-fn get_shader_interface(reflected: &spirv_reflect::ShaderModule) ->
+fn get_shader_interface(entry: &spv::EntryPoint<'_>) ->
     (Vec<ShaderLocation>, Vec<ShaderLocation>)
 {
-    let vars = |vars: Vec<ReflectInterfaceVariable>| {
-        let mut vars: Vec<_> = vars.into_iter()
-            .filter_map(|var| (var.location != !0).then_some(var.location))
-            .collect();
-        vars.sort_unstable();
-        vars
-    };
-    let inputs = vars(reflected.enumerate_input_variables(None).unwrap());
-    let outputs = vars(reflected.enumerate_output_variables(None).unwrap());
+    let mut inputs: Vec<_> = entry.inputs().map(|input| input.location())
+        .collect();
+    inputs.sort();
+    let mut outputs: Vec<_> = entry.outputs().map(|output| output.location())
+        .collect();
+    outputs.sort();
     (inputs, outputs)
 }
 

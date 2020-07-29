@@ -94,11 +94,10 @@ impl IndexType {
 
 impl<'a> VertexData<'a> {
     pub(super) fn map_bindings<'b>(&'b self, layout: &'b VertexInputLayout) ->
-        impl Iterator<Item = (u32, BufferRange<'a>)> + 'b
+        impl Iterator<Item = BufferRange<'a>> + 'b
     {
-        layout.attributes.iter().map(move |binding| {
-            (binding.location, self.attributes[binding.attribute])
-        })
+        layout.attributes.iter()
+            .map(move |binding| self.attributes[binding.attribute])
     }
 }
 
