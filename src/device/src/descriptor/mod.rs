@@ -45,8 +45,8 @@ fn is_storage_buffer(ty: vk::DescriptorType) -> bool {
 mod tests {
     use std::sync::Arc;
     use vk::traits::*;
-    use crate::device::*;
-    use crate::{Globals, SystemState};
+    use crate::*;
+    use crate::testing::*;
     use super::*;
 
     unsafe fn constant_buffer_layout(device: &Arc<Device>) ->
@@ -80,8 +80,8 @@ mod tests {
         DescriptorSetLayout::from_bindings(device, &bindings).into()
     }
 
-    unsafe fn alloc_test(vars: crate::testing::TestVars) {
-        let device = Arc::clone(&vars.swapchain.device);
+    unsafe fn alloc_test(vars: TestVars) {
+        let device = vars.device();
 
         let (max_sets, descriptor_counts) = frame_descriptor_counts();
         let mut pool = DescriptorPool::new(
@@ -112,31 +112,30 @@ mod tests {
         assert_eq!(used[vk::DescriptorType::STORAGE_BUFFER], 0);
     }
 
-    unsafe fn write_test(vars: crate::testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Globals::new(&state, &heap);
+    unsafe fn write_test(vars: TestVars) {
+        let device = vars.device();
+        let resources = TestResources::new(&device);
+        let descriptors = &resources.descriptors;
 
-        // crate::globals tests possibilities more thoroughly
         let bindings = set_layout_bindings![
             (0, UNIFORM_BUFFER[2]),
             (1, SAMPLED_IMAGE),
             (2, COMBINED_IMAGE_SAMPLER[2]),
         ];
-        let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
+        let layout = Arc::new(SetLayout::from_bindings(
+            Arc::clone(&device), &bindings));
 
-        let mut desc = state.descriptors.alloc(Lifetime::Static, &layout);
-        let buffers = vec![globals.empty_uniform_buffer.range(); 2];
+        let mut desc = descriptors.alloc(Lifetime::Static, &layout);
+        let buffers = vec![resources.empty_uniform_buffer.range(); 2];
         let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
         desc.write_buffers(0, 0, &buffers);
-        desc.write_image(1, &globals.immediate_image_2d, layout, None);
+        desc.write_image(1, &resources.empty_image_2d, layout, None);
         desc.write_images(
             2,
             0,
-            &vec![&globals.immediate_image_2d; 2],
+            &vec![&resources.empty_image_2d; 2],
             layout,
-            Some(&vec![&globals.empty_sampler; 2]),
+            Some(&vec![&resources.empty_sampler; 2]),
         );
     }
 

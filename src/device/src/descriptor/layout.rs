@@ -4,7 +4,7 @@
 use std::ptr;
 use std::sync::Arc;
 
-use crate::device::*;
+use crate::*;
 use super::*;
 
 #[derive(Clone, Debug)]

@@ -1,14 +1,25 @@
 use base::impl_bin_ops;
-use derive_more::*;
 use math::Vector;
 use num::Zero;
 
-#[derive(Clone, Copy, Debug, Eq, From, Into, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 crate struct DescriptorCounts(Vector<u32, 11>);
 
 impl Default for DescriptorCounts {
     fn default() -> Self {
         Self(Zero::zero())
+    }
+}
+
+impl From<Vector<u32, 11>> for DescriptorCounts {
+    fn from(vec: Vector<u32, 11>) -> Self {
+        Self(vec)
+    }
+}
+
+impl From<DescriptorCounts> for Vector<u32, 11> {
+    fn from(counts: DescriptorCounts) -> Self {
+        counts.0
     }
 }
 

@@ -502,15 +502,14 @@ impl PipelineCache {
 mod tests {
     use std::sync::Arc;
     use crate::*;
+    use crate::testing::*;
     use super::*;
 
     unsafe fn create_test(vars: testing::TestVars) {
         let device = vars.device();
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state, &heap));
-        let pass = TrivialPass::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
+        let resources = TestResources::new(device);
+        let pass = TrivialPass::new(device);
+        let trivial = TrivialRenderer::new(&resources);
 
         let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
         trivial.init_pipe_desc(&mut desc);
@@ -522,14 +521,11 @@ mod tests {
     }
 
     unsafe fn cache_test(vars: crate::testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let mut state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state, &heap));
-        let pass = TrivialPass::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
-
-        let cache = &mut state.pipelines;
+        let device = vars.device();
+        let resources = TestResources::new(device);
+        let pass = TrivialPass::new(device);
+        let trivial = TrivialRenderer::new(&resources);
+        let mut cache = PipelineCache::new(device);
 
         let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
         trivial.init_pipe_desc(&mut desc);

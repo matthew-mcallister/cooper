@@ -5,7 +5,7 @@ use derivative::Derivative;
 use parking_lot::Mutex;
 use vk::traits::*;
 
-use crate::device::*;
+use crate::*;
 use super::*;
 
 #[derive(Derivative)]

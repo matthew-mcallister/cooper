@@ -135,32 +135,3 @@ where
     let g: SubpassTask = Box::new(move |x| { ret2.store(Some(f(x).into())); });
     (ret, g)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    unsafe fn smoke_test(vars: testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let state = Arc::new(SystemState::new(Arc::clone(&device)));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state, &heap));
-        let pass = TrivialPass::new(Arc::clone(&device));
-        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
-
-        let framebuffers = pass.create_framebuffers(&vars.swapchain);
-
-        let mut pass = RenderPassNode::new(Arc::clone(&framebuffers[0]));
-        let state_ = Arc::clone(&state);
-        pass.add_task(0, Box::new(move |cmds| trivial.render(&state_, cmds)));
-
-        let mut scheduler = RenderScheduler::new(Arc::clone(&vars.gfx_queue));
-        scheduler.schedule_pass(pass, &[], &[]);
-
-        device.wait_idle();
-    }
-
-    unit::declare_tests![smoke_test];
-}
-
-unit::collect_tests![tests];

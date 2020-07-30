@@ -5,7 +5,7 @@ use enum_map::{EnumMap, enum_map};
 use log::trace;
 use parking_lot::Mutex;
 
-use crate::device::*;
+use crate::*;
 use super::*;
 
 /// Fixed-size general-purpose descriptor pool.

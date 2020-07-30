@@ -154,6 +154,7 @@ impl VertexInputLayout {
 mod tests {
     use base::partial_map;
     use crate::*;
+    use crate::testing::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
@@ -172,7 +173,7 @@ mod tests {
             ..Default::default()
         };
 
-        let shaders = GlobalShaders::new(vars.device());
+        let shaders = TestShaders::new(vars.device());
         let _input = layout.input_layout_for_shader(&shaders.static_vert);
     }
 

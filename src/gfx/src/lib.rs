@@ -81,14 +81,6 @@ unit::collect_tests![
     world,
 ];
 
-#[derive(Clone, Debug, Default)]
-pub struct AppInfo {
-    pub name: String,
-    pub version: [u32; 3],
-    pub debug: bool,
-    pub test: bool,
-}
-
 // TODO: This module should really, really not be public, but it has to
 // be for integration tests. Waiting for a solution from Cargo.
 pub mod testing;

@@ -879,52 +879,51 @@ fn validate_buffer_image_copy(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use super::*;
+    use crate::*;
+    use crate::testing::*;
 
     unsafe fn test_common(vars: &testing::TestVars) -> (
-        SystemState, TrivialRenderer, TrivialPass, Vec<Arc<Framebuffer>>,
-        Box<CmdPool>,
+        TestResources, PipelineCache, TrivialRenderer, TrivialPass,
+        Vec<Arc<Framebuffer>>, Box<CmdPool>,
     ) {
-        let device = Arc::clone(vars.device());
-
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Arc::new(Globals::new(&state, &heap));
-        let trivial = TrivialRenderer::new(&state, Arc::clone(&globals));
-
-        let pass = TrivialPass::new(Arc::clone(&device));
-        let framebuffers = pass.create_framebuffers(&vars.swapchain);
-
+        let device = vars.device();
+        let resources = TestResources::new(device);
+        let pipelines = PipelineCache::new(device);
+        let trivial = TrivialRenderer::new(&resources);
+        let pass = TrivialPass::new(device);
+        let framebuffers = pass.create_framebuffers(vars.swapchain());
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
-        (state, trivial, pass, framebuffers, pool)
+        (resources, pipelines, trivial, pass, framebuffers, pool)
     }
 
     unsafe fn record_subpass(vars: testing::TestVars) {
-        let (state, trivial, pass, framebuffers, pool) = test_common(&vars);
+        let (_res, pipelines, trivial, pass, framebuffers, pool) =
+            test_common(&vars);
         let mut cmds = SubpassCmds::secondary(
             Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
-        trivial.render(&state, &mut cmds);
+        trivial.render(&pipelines, &mut cmds);
         let (_, _) = cmds.end_secondary();
     }
 
     unsafe fn record_render_pass(vars: testing::TestVars) {
         // TODO: Test next_subpass()
-        let (state, trivial, _, framebuffers, pool) = test_common(&vars);
+        let (_res, pipelines, trivial, _, framebuffers, pool) =
+            test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
             &[],
             SubpassContents::Inline,
         ).enter_subpass();
-        trivial.render(&state, &mut cmds);
+        trivial.render(&pipelines, &mut cmds);
         let (_, _) = cmds.exit_subpass().end().end();
     }
 
     unsafe fn subpass_out_of_bounds(vars: testing::TestVars) {
-        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
+        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
@@ -935,7 +934,7 @@ mod tests {
     }
 
     unsafe fn inline_in_secondary_subpass(vars: testing::TestVars) {
-        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
+        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
         let cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
@@ -946,7 +945,7 @@ mod tests {
     }
 
     unsafe fn exec_in_inline_subpass(vars: testing::TestVars) {
-        let (_a, _b, _c, framebuffers, pool) = test_common(&vars);
+        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
@@ -957,28 +956,26 @@ mod tests {
     }
 
     unsafe fn copy_common(vars: &testing::TestVars) ->
-        (SystemState, ImageHeap, XferCmds)
+        (TestResources, XferCmds)
     {
-        let device = Arc::clone(vars.device());
-        let state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
+        let resources = TestResources::new(vars.device());
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
         ));
         let cmds = CmdBuffer::new(pool, CmdBufferLevel::Primary);
-        (state, heap, XferCmds::new(cmds))
+        (resources, XferCmds::new(cmds))
     }
 
     unsafe fn copy_buffer(vars: testing::TestVars) {
-        let (state, _, mut cmds) = copy_common(&vars);
-        let src = state.buffers.alloc(
+        let (resources, mut cmds) = copy_common(&vars);
+        let src = resources.buffer_heap.alloc(
             BufferBinding::Storage,
             Lifetime::Frame,
             MemoryMapping::Mapped,
             1024,
         );
-        let dst = state.buffers.alloc(
+        let dst = resources.buffer_heap.alloc(
             BufferBinding::Vertex,
             Lifetime::Frame,
             MemoryMapping::DeviceLocal,
@@ -1000,8 +997,8 @@ mod tests {
     }
 
     unsafe fn copy_intra_buffer(vars: testing::TestVars) {
-        let (state, _, mut cmds) = copy_common(&vars);
-        let buf = state.buffers.alloc(
+        let (resources, mut cmds) = copy_common(&vars);
+        let buf = resources.buffer_heap.alloc(
             BufferBinding::Storage,
             Lifetime::Frame,
             MemoryMapping::Mapped,
@@ -1023,16 +1020,16 @@ mod tests {
     }
 
     unsafe fn copy_image(vars: testing::TestVars) {
-        let (state, heap, mut cmds) = copy_common(&vars);
+        let (resources, mut cmds) = copy_common(&vars);
         let format = Format::RGBA8;
-        let src = state.buffers.alloc(
+        let src = resources.buffer_heap.alloc(
             BufferBinding::Storage,
             Lifetime::Frame,
             MemoryMapping::Mapped,
             (64 * 64 * format.size()) as _,
         );
         let dst = Arc::new(Image::with(
-            &heap,
+            &resources.image_heap,
             ImageFlags::NO_SAMPLE,
             ImageType::Dim2,
             format,

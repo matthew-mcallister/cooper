@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/base",
+    "src/device",
     "src/gfx",
     "src/math",
     "src/prelude",

@@ -91,6 +91,22 @@ impl Shader {
         }
     }
 
+    /// A convenience method for loading a shader off the disk.
+    crate unsafe fn from_path(device: Arc<Device>, path: impl Into<String>) ->
+        std::io::Result<Self>
+    {
+        use byteorder::{ByteOrder, NativeEndian};
+        let path = path.into();
+        let bytes = std::fs::read(&path)?;
+        if bytes.len() % 4 != 0 {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        }
+        let mut words = Vec::with_capacity(bytes.len() / 4);
+        words.set_len(words.capacity());
+        NativeEndian::read_u32_into(&bytes, &mut words);
+        Ok(Self::new(device, words, Some(path)))
+    }
+
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }

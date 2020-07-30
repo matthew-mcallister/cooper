@@ -558,7 +558,7 @@ impl<A: Allocator> Drop for BufferPool<A> {
                     "allocator destroyed while chunk in use: {:?};\n",
                     "make sure all resources are destroyed before the\n",
                     "render loop is destroyed",
-                ), chunk);
+                ), fmt_named(&**chunk));
         }
     }
 }

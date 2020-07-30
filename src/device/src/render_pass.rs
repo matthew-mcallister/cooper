@@ -373,7 +373,7 @@ unsafe fn create_render_pass(
 
 // Simplified render pass with G-buffer.
 #[cfg(test)]
-crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
+crate unsafe fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
     use vk::AccessFlags as Af;
     use vk::ImageLayout as Il;
     use vk::PipelineStageFlags as Pf;
@@ -381,7 +381,7 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
     // Defining render passes is rather technical and so is done
     // manually rather than via a half-baked algorithm.
     RenderPass::new(
-        device,
+        Arc::clone(device),
         vec![
             // Screen
             AttachmentDescription {
@@ -504,14 +504,15 @@ crate unsafe fn create_test_pass(device: Arc<Device>) -> Arc<RenderPass> {
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use crate::testing::*;
     use super::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
-        let _trivial_pass = TrivialPass::new(Arc::clone(&vars.device()));
+        let _trivial_pass = TrivialPass::new(vars.device());
     }
 
     unsafe fn deferred_test(vars: testing::TestVars) {
-        let _pass = create_test_pass(Arc::clone(vars.device()));
+        let _pass = create_test_pass(vars.device());
     }
 
     unit::declare_tests![

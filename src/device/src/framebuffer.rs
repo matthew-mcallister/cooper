@@ -201,10 +201,10 @@ crate fn create_render_target(
 
 #[cfg(test)]
 crate unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
-    let device = Arc::clone(&swapchain.device);
+    let device = Arc::clone(swapchain.device());
     let heap = ImageHeap::new(device);
 
-    let pass = create_test_pass(Arc::clone(&swapchain.device));
+    let pass = create_test_pass(swapchain.device());
 
     let extent = swapchain.extent;
     let hdr = create_render_target(&heap, &pass, 1, extent, false);
@@ -230,7 +230,7 @@ mod tests {
     use super::*;
 
     unsafe fn create(vars: testing::TestVars) {
-        let _fb = create_test_framebuffer(&vars.swapchain);
+        let _fb = create_test_framebuffer(vars.swapchain());
     }
 
     unit::declare_tests![create];

@@ -35,6 +35,9 @@ use derive_more::*;
 use prelude::*;
 use unit::*;
 
+// TODO: Should only be available in test configuration...
+pub mod testing;
+
 #[inline(always)]
 fn bool2int(b: bool) -> c_int {
     if b { glfw::TRUE } else { glfw::FALSE }

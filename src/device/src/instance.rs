@@ -23,6 +23,14 @@ crate struct Instance {
     debug_handler: Arc<DefaultDebugMessageHandler>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct AppInfo {
+    pub name: String,
+    pub version: [u32; 3],
+    pub debug: bool,
+    pub test: bool,
+}
+
 impl Drop for Instance {
     fn drop(&mut self) {
         unsafe {
