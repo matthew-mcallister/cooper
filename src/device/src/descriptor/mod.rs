@@ -3,17 +3,17 @@ use self::{
     DescriptorSet as Set, DescriptorSetLayout as Layout,
 };
 
-crate use self::DescriptorSetLayout as SetLayout;
+pub use self::DescriptorSetLayout as SetLayout;
 
 mod count;
 mod layout;
 mod pool;
 mod set;
 
-crate use count::*;
-crate use layout::*;
-crate use pool::*;
-crate use set::*;
+pub use count::*;
+pub use layout::*;
+pub use pool::*;
+pub use set::*;
 
 fn is_valid_type(ty: vk::DescriptorType) -> bool {
     // Not supported yet: texel buffers, dynamic buffers

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use base::partial_map;
+use device as dev;
 
 use crate::{Globals, ShaderConst, SystemState};
-use crate::device as dev;
 use crate::util::SmallVec;
 use super::*;
 

@@ -8,7 +8,7 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug)]
-crate struct RenderPass {
+pub struct RenderPass {
     device: Arc<Device>,
     inner: vk::RenderPass,
     attachments: Vec<AttachmentDescription>,
@@ -17,7 +17,7 @@ crate struct RenderPass {
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum Attachment {
+pub enum Attachment {
     /// SRGB screen buffer
     Backbuffer,
     DepthStencil,
@@ -29,26 +29,26 @@ crate enum Attachment {
 
 #[derive(Clone, Copy, Debug, Derivative)]
 #[derivative(Default)]
-crate struct AttachmentDescription {
+pub struct AttachmentDescription {
     // TODO: It's unfortunate that this has a default value. Maybe
     // default() should just panic?
     #[derivative(Default(value = "Attachment::Backbuffer"))]
-    crate name: Attachment,
+    pub name: Attachment,
     #[derivative(Default(value = "Format::R8"))]
-    crate format: Format,
-    crate samples: SampleCount,
+    pub format: Format,
+    pub samples: SampleCount,
     // These fields follow a possibly dumb but reasonable-sounding
     // convention: if you don't specify it, you don't care about it.
     #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
-    crate load_op: vk::AttachmentLoadOp,
+    pub load_op: vk::AttachmentLoadOp,
     #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
-    crate store_op: vk::AttachmentStoreOp,
+    pub store_op: vk::AttachmentStoreOp,
     #[derivative(Default(value = "vk::AttachmentLoadOp::DONT_CARE"))]
-    crate stencil_load_op: vk::AttachmentLoadOp,
+    pub stencil_load_op: vk::AttachmentLoadOp,
     #[derivative(Default(value = "vk::AttachmentStoreOp::DONT_CARE"))]
-    crate stencil_store_op: vk::AttachmentStoreOp,
-    crate initial_layout: vk::ImageLayout,
-    crate final_layout: vk::ImageLayout,
+    pub stencil_store_op: vk::AttachmentStoreOp,
+    pub initial_layout: vk::ImageLayout,
+    pub final_layout: vk::ImageLayout,
 }
 
 #[derive(Debug)]
@@ -63,7 +63,7 @@ struct SubpassState {
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
-crate struct Subpass {
+pub struct Subpass {
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     pass: Arc<RenderPass>,
@@ -72,14 +72,14 @@ crate struct Subpass {
 impl Eq for Subpass {}
 
 #[derive(Debug, Default)]
-crate struct SubpassDesc {
+pub struct SubpassDesc {
     // TODO: Name subpasses?
-    crate layouts: Vec<vk::ImageLayout>,
-    crate input_attchs: Vec<u32>,
-    crate color_attchs: Vec<u32>,
-    crate resolve_attchs: Vec<u32>,
-    crate preserve_attchs: Vec<u32>,
-    crate depth_stencil_attch: Option<u32>,
+    pub layouts: Vec<vk::ImageLayout>,
+    pub input_attchs: Vec<u32>,
+    pub color_attchs: Vec<u32>,
+    pub resolve_attchs: Vec<u32>,
+    pub preserve_attchs: Vec<u32>,
+    pub depth_stencil_attch: Option<u32>,
 }
 
 impl Drop for RenderPass {
@@ -92,7 +92,7 @@ impl Drop for RenderPass {
 }
 
 impl RenderPass {
-    crate unsafe fn new(
+    pub unsafe fn new(
         device: Arc<Device>,
         attachments: Vec<AttachmentDescription>,
         subpasses: Vec<SubpassDesc>,
@@ -101,35 +101,35 @@ impl RenderPass {
         create_render_pass(device, attachments, subpasses, dependencies)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::RenderPass {
+    pub fn inner(&self) -> vk::RenderPass {
         self.inner
     }
 
-    crate fn attachments(&self) -> &[AttachmentDescription] {
+    pub fn attachments(&self) -> &[AttachmentDescription] {
         &self.attachments
     }
 
-    crate fn dependencies(&self) -> &[vk::SubpassDependency] {
+    pub fn dependencies(&self) -> &[vk::SubpassDependency] {
         &self.dependencies
     }
 
-    crate fn subpasses<'a>(self: &'a Arc<Self>) ->
+    pub fn subpasses<'a>(self: &'a Arc<Self>) ->
         impl Iterator<Item = Subpass> + ExactSizeIterator + 'a
     {
         (0..self.subpasses.len())
             .map(move |index| Subpass { pass: Arc::clone(self), index })
     }
 
-    crate fn subpass(self: &Arc<Self>, index: usize) -> Subpass {
+    pub fn subpass(self: &Arc<Self>, index: usize) -> Subpass {
         assert!(index < self.subpasses.len());
         Subpass { pass: Arc::clone(self), index }
     }
 
-    crate fn is_input_attachment(&self, index: usize) -> bool {
+    pub fn is_input_attachment(&self, index: usize) -> bool {
         assert!(index < self.attachments.len());
         self.subpasses.iter()
             .flat_map(|subpass| subpass.input_attchs.iter())
@@ -138,7 +138,7 @@ impl RenderPass {
 }
 
 impl Subpass {
-    crate fn pass(&self) -> &Arc<RenderPass> {
+    pub fn pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
 
@@ -146,32 +146,32 @@ impl Subpass {
         &self.pass().subpasses[self.index]
     }
 
-    crate fn index(&self) -> u32 {
+    pub fn index(&self) -> u32 {
         self.index as _
     }
 
-    crate fn samples(&self) -> SampleCount {
+    pub fn samples(&self) -> SampleCount {
         self.state().samples
     }
 
-    crate fn input_attchs(&self) -> &[vk::AttachmentReference] {
+    pub fn input_attchs(&self) -> &[vk::AttachmentReference] {
         &self.state().input_attchs
     }
 
-    crate fn color_attchs(&self) -> &[vk::AttachmentReference] {
+    pub fn color_attchs(&self) -> &[vk::AttachmentReference] {
         &self.state().color_attchs
     }
 
-    crate fn resolve_attchs(&self) -> Option<&[vk::AttachmentReference]> {
+    pub fn resolve_attchs(&self) -> Option<&[vk::AttachmentReference]> {
         let attchs = &self.state().resolve_attchs;
         (!attchs.is_empty()).then_some(attchs)
     }
 
-    crate fn preserve_attchs(&self) -> &[u32] {
+    pub fn preserve_attchs(&self) -> &[u32] {
         &self.state().preserve_attchs
     }
 
-    crate fn depth_stencil_attch(&self) -> Option<&vk::AttachmentReference> {
+    pub fn depth_stencil_attch(&self) -> Option<&vk::AttachmentReference> {
         self.state().depth_stencil_attch.as_ref()
     }
 }
@@ -373,7 +373,7 @@ unsafe fn create_render_pass(
 
 // Simplified render pass with G-buffer.
 #[cfg(test)]
-crate unsafe fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
+pub unsafe fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
     use vk::AccessFlags as Af;
     use vk::ImageLayout as Il;
     use vk::PipelineStageFlags as Pf;

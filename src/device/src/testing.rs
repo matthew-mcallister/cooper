@@ -33,7 +33,6 @@ impl TestContext {
     fn create_window(&self) -> Result<Arc<window::Window>, AnyError> {
         let show_window = std::env::var("TESTING_SHOW_WINDOW")
             .map_or(false, |val| val == "1");
-
         let info = window::CreateInfo {
             title: WINDOW_NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
@@ -45,9 +44,7 @@ impl TestContext {
         Ok(Arc::new(self.proxy.create_window(info)?))
     }
 
-    unsafe fn create_swapchain(&self) ->
-        Result<TestVars, AnyError>
-    {
+    unsafe fn create_swapchain(&self) -> Result<TestVars, AnyError> {
         let window = self.create_window()?;
         let app_info = app_info();
         let vk_platform = window.vk_platform().clone();
@@ -61,6 +58,14 @@ impl TestContext {
             swapchain,
             gfx_queue,
         })
+    }
+}
+
+impl unit::PanicTestInvoker<TestData> for TestContext {
+    fn invoke(&self, test: &Test) {
+        let vars = unsafe { self.create_swapchain() }
+            .unwrap_or_else(|e| panic!("failed to initialize: {}", e); });
+        unsafe { (test.data())(vars); }
     }
 }
 
@@ -81,16 +86,6 @@ impl TestVars {
 
     crate fn gfx_queue(&self) -> &Arc<Queue> {
         &self.gfx_queue
-    }
-}
-
-impl unit::PanicTestInvoker<TestData> for TestContext {
-    fn invoke(&self, test: &Test) {
-        self.proxy.poke();  // Refresh timeout
-        let vars = unsafe { self.create_swapchain() }.unwrap_or_else(|e| {
-            panic!("failed to initialize: {}", e);
-        });
-        unsafe { (test.data())(vars); }
     }
 }
 

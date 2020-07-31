@@ -15,9 +15,9 @@ mod image;
 mod staging;
 
 pub(self) use alloc::*;
-crate use buffer::*;
-crate use image::*;
-crate use staging::*;
+pub use buffer::*;
+pub use image::*;
+pub use staging::*;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Block {
@@ -27,7 +27,7 @@ struct Block {
 }
 
 #[derive(Debug)]
-crate struct DeviceMemory {
+pub struct DeviceMemory {
     device: Arc<Device>,
     inner: vk::DeviceMemory,
     size: vk::DeviceSize,
@@ -41,7 +41,7 @@ crate struct DeviceMemory {
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum Tiling {
+pub enum Tiling {
     /// Denotes a linear image or a buffer.
     Linear,
     /// Denotes a nonlinear (a.k.a. optimal) image.
@@ -49,7 +49,7 @@ crate enum Tiling {
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, Ord, PartialEq, PartialOrd)]
-crate enum MemoryMapping {
+pub enum MemoryMapping {
     DeviceLocal,
     Mapped,
 }
@@ -66,13 +66,13 @@ pub enum Lifetime {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum DedicatedAllocContent {
+pub enum DedicatedAllocContent {
     Image(vk::Image),
     Buffer(vk::Buffer),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-crate struct HeapInfo {
+pub struct HeapInfo {
     reserved: vk::DeviceSize,
     used: vk::DeviceSize,
 }
@@ -119,7 +119,7 @@ fn find_memory_type_2(
 }
 
 #[inline(always)]
-crate fn visible_coherent_flags() -> vk::MemoryPropertyFlags {
+pub fn visible_coherent_flags() -> vk::MemoryPropertyFlags {
     vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
         vk::MemoryPropertyFlags::HOST_COHERENT_BIT
 }
@@ -245,7 +245,7 @@ impl Block {
     }
 }
 
-crate trait MemoryRegion {
+pub trait MemoryRegion {
     fn memory(&self) -> &Arc<DeviceMemory>;
 
     fn offset(&self) -> vk::DeviceSize;
@@ -308,40 +308,40 @@ impl Drop for DeviceMemory {
 }
 
 impl DeviceMemory {
-    crate fn inner(&self) -> vk::DeviceMemory {
+    pub fn inner(&self) -> vk::DeviceMemory {
         self.inner
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn size(&self) -> vk::DeviceSize {
+    pub fn size(&self) -> vk::DeviceSize {
         self.size
     }
 
-    crate fn type_index(&self) -> u32 {
+    pub fn type_index(&self) -> u32 {
         self.type_index
     }
 
     /// Memory-mapped pointer when host-visible.
-    crate fn ptr(&self) -> *mut c_void {
+    pub fn ptr(&self) -> *mut c_void {
         self.ptr
     }
 
-    crate fn tiling(&self) -> Tiling {
+    pub fn tiling(&self) -> Tiling {
         self.tiling
     }
 
-    crate fn mapped(&self) -> bool {
+    pub fn mapped(&self) -> bool {
         !self.ptr.is_null()
     }
 
-    crate fn lifetime(&self) -> Lifetime {
+    pub fn lifetime(&self) -> Lifetime {
         self.lifetime
     }
 
-    crate fn flags(&self) -> vk::MemoryPropertyFlags {
+    pub fn flags(&self) -> vk::MemoryPropertyFlags {
         self.device.mem_props.memory_types[self.type_index as usize]
             .property_flags
     }
@@ -380,7 +380,7 @@ impl From<vk::ImageTiling> for Tiling {
 }
 
 impl MemoryMapping {
-    crate fn memory_property_flags(self) -> vk::MemoryPropertyFlags {
+    pub fn memory_property_flags(self) -> vk::MemoryPropertyFlags {
         match self {
             Self::Mapped => visible_coherent_flags(),
             Self::DeviceLocal => vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT,

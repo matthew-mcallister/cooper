@@ -11,7 +11,7 @@ use log::trace;
 use crate::*;
 
 #[derive(Debug)]
-crate struct PipelineLayout {
+pub struct PipelineLayout {
     device: Arc<Device>,
     inner: vk::PipelineLayout,
     set_layouts: Vec<Arc<DescriptorSetLayout>>,
@@ -19,18 +19,18 @@ crate struct PipelineLayout {
 
 #[derive(Clone, Debug, Default, Derivative)]
 #[derivative(Hash, PartialEq)]
-crate struct PipelineLayoutDesc {
+pub struct PipelineLayoutDesc {
     #[derivative(Hash(hash_with = "slice_hash"))]
     #[derivative(PartialEq(compare_with = "slice_eq"))]
-    crate set_layouts: Vec<Arc<DescriptorSetLayout>>,
+    pub set_layouts: Vec<Arc<DescriptorSetLayout>>,
     push_constants: Option<()>,
 }
 impl Eq for PipelineLayoutDesc {}
 
-crate type ShaderStageMap = PartialEnumMap<ShaderStage, Arc<ShaderSpec>>;
+pub type ShaderStageMap = PartialEnumMap<ShaderStage, Arc<ShaderSpec>>;
 
 #[derive(Debug)]
-crate struct GraphicsPipeline {
+pub struct GraphicsPipeline {
     device: Arc<Device>,
     inner: vk::Pipeline,
     layout: Arc<PipelineLayout>,
@@ -50,24 +50,24 @@ pub enum CullMode {
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
-crate struct GraphicsPipelineDesc {
-    crate subpass: Subpass,
-    crate layout: PipelineLayoutDesc,
-    crate vertex_layout: VertexInputLayout,
+pub struct GraphicsPipelineDesc {
+    pub subpass: Subpass,
+    pub layout: PipelineLayoutDesc,
+    pub vertex_layout: VertexInputLayout,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
-    crate stages: ShaderStageMap,
-    crate cull_mode: CullMode,
-    crate wireframe: bool,
-    crate depth_test: bool,
-    crate depth_write: bool,
-    crate depth_cmp_op: vk::CompareOp,
-    crate depth_bias: bool,
+    pub stages: ShaderStageMap,
+    pub cull_mode: CullMode,
+    pub wireframe: bool,
+    pub depth_test: bool,
+    pub depth_write: bool,
+    pub depth_cmp_op: vk::CompareOp,
+    pub depth_bias: bool,
     // We have no use case yet for multiple color blending states.
-    crate blend_state: vk::PipelineColorBlendAttachmentState,
+    pub blend_state: vk::PipelineColorBlendAttachmentState,
     #[derivative(Hash(hash_with = "byte_hash"))]
     #[derivative(PartialEq(compare_with = "byte_eq"))]
-    crate blend_consts: [f32; 4],
+    pub blend_consts: [f32; 4],
 }
 impl Eq for GraphicsPipelineDesc {}
 
@@ -79,7 +79,7 @@ impl Drop for PipelineLayout {
 }
 
 impl PipelineLayout {
-    crate fn new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
+    pub fn new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
         unsafe { Self::unsafe_new(device, desc) }
     }
 
@@ -110,15 +110,15 @@ impl PipelineLayout {
         }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::PipelineLayout {
+    pub fn inner(&self) -> vk::PipelineLayout {
         self.inner
     }
 
-    crate fn set_layouts(&self) -> &[Arc<DescriptorSetLayout>] {
+    pub fn set_layouts(&self) -> &[Arc<DescriptorSetLayout>] {
         &self.set_layouts
     }
 }
@@ -137,35 +137,35 @@ impl GraphicsPipeline {
         create_graphics_pipeline(layout, desc)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::Pipeline {
+    pub fn inner(&self) -> vk::Pipeline {
         self.inner
     }
 
-    crate fn desc(&self) -> &GraphicsPipelineDesc {
+    pub fn desc(&self) -> &GraphicsPipelineDesc {
         &self.desc
     }
 
-    crate fn layout(&self) -> &Arc<PipelineLayout> {
+    pub fn layout(&self) -> &Arc<PipelineLayout> {
         &self.layout
     }
 
-    crate fn vertex_layout(&self) -> &VertexInputLayout {
+    pub fn vertex_layout(&self) -> &VertexInputLayout {
         &self.desc.vertex_layout
     }
 
-    crate fn pass(&self) -> &Arc<RenderPass> {
+    pub fn pass(&self) -> &Arc<RenderPass> {
         &self.desc.subpass.pass()
     }
 
-    crate fn subpass(&self) -> &Subpass {
+    pub fn subpass(&self) -> &Subpass {
         &self.desc.subpass
     }
 
-    crate fn vertex_stage(&self) -> &Arc<ShaderSpec> {
+    pub fn vertex_stage(&self) -> &Arc<ShaderSpec> {
         self.desc.vertex_stage()
     }
 }
@@ -178,7 +178,7 @@ fn color_write_mask_all() -> vk::ColorComponentFlags {
 }
 
 impl GraphicsPipelineDesc {
-    crate fn new(subpass: Subpass) -> Self {
+    pub fn new(subpass: Subpass) -> Self {
         Self {
             subpass,
             layout: Default::default(),
@@ -198,7 +198,7 @@ impl GraphicsPipelineDesc {
         }
     }
 
-    crate fn vertex_stage(&self) -> &Arc<ShaderSpec> {
+    pub fn vertex_stage(&self) -> &Arc<ShaderSpec> {
         &self.stages[ShaderStage::Vertex]
     }
 }
@@ -374,14 +374,14 @@ impl From<CullMode> for vk::CullModeFlags {
 }
 
 #[derive(Debug)]
-crate struct PipelineLayoutCache {
+pub struct PipelineLayoutCache {
     device: Arc<Device>,
     inner: StagedCache<PipelineLayoutDesc, Arc<PipelineLayout>>,
 }
 
 /// Manages the creation, destruction, and lifetime of pipelines.
 #[derive(Debug)]
-crate struct PipelineCache {
+pub struct PipelineCache {
     layouts: PipelineLayoutCache,
     gfx: GraphicsPipelineCache,
 }
@@ -393,7 +393,7 @@ macro_rules! pipeline_cache {
         desc: $desc:ident,
     ) => {
         #[derive(Debug)]
-        crate struct $name {
+        pub struct $name {
             inner: StagedCache<$desc, Arc<$pipeline>>,
         }
 
@@ -432,24 +432,24 @@ pipeline_cache! {
 }
 
 impl PipelineLayoutCache {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         Self {
             device,
             inner: Default::default(),
         }
     }
 
-    crate fn commit(&mut self) {
+    pub fn commit(&mut self) {
         self.inner.commit();
     }
 
-    crate fn get_committed(&self, desc: &PipelineLayoutDesc) ->
+    pub fn get_committed(&self, desc: &PipelineLayoutDesc) ->
         Option<&Arc<PipelineLayout>>
     {
         self.inner.get_committed(desc)
     }
 
-    crate unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) ->
+    pub unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) ->
         Cow<Arc<PipelineLayout>>
     {
         self.inner.get_or_insert_with(desc, || Arc::new(PipelineLayout::new(
@@ -460,37 +460,37 @@ impl PipelineLayoutCache {
 }
 
 impl PipelineCache {
-    crate fn new(device: &Arc<Device>) -> Self {
+    pub fn new(device: &Arc<Device>) -> Self {
         Self {
             layouts: PipelineLayoutCache::new(Arc::clone(device)),
             gfx: GraphicsPipelineCache::new(),
         }
     }
 
-    crate fn commit(&mut self) {
+    pub fn commit(&mut self) {
         self.layouts.commit();
         self.gfx.commit();
     }
 
-    crate fn get_committed_layout(&self, desc: &PipelineLayoutDesc) ->
+    pub fn get_committed_layout(&self, desc: &PipelineLayoutDesc) ->
         Option<&Arc<PipelineLayout>>
     {
         self.layouts.get_committed(desc)
     }
 
-    crate fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) ->
+    pub fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) ->
         Option<&Arc<GraphicsPipeline>>
     {
         self.gfx.get_committed(desc)
     }
 
-    crate unsafe fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) ->
+    pub unsafe fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) ->
         Cow<Arc<PipelineLayout>>
     {
         self.layouts.get_or_create(desc)
     }
 
-    crate unsafe fn get_or_create_gfx(&self, desc: &GraphicsPipelineDesc) ->
+    pub unsafe fn get_or_create_gfx(&self, desc: &GraphicsPipelineDesc) ->
         Cow<Arc<GraphicsPipeline>>
     {
         let layout = self.get_or_create_layout(&desc.layout);

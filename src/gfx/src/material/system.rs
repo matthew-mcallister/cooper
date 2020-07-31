@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use device::{DescriptorSet, ShaderStageMap};
 use enum_map::enum_map;
 
 use crate::{SystemState, Globals};
-use crate::device::{DescriptorSet, ShaderStageMap};
 use crate::resource::ResourceSystem;
 use super::*;
 

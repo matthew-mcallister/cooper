@@ -1,12 +1,12 @@
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 
+use device::{BufferBinding, BufferBox, Lifetime};
 use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
 
 use crate::{RenderMesh, ResourceUnavailable, SystemState};
-use crate::device::{BufferBinding, BufferBox, Lifetime};
 use crate::material::{Material, MaterialSystem};
 use crate::render::{PerInstanceData, SceneDescriptors, SceneViewUniforms};
 use crate::resource::ResourceSystem;

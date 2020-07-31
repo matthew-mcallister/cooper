@@ -6,14 +6,14 @@ use derive_more::*;
 use crate::*;
 
 #[derive(Debug)]
-crate struct Framebuffer {
+pub struct Framebuffer {
     pass: Arc<RenderPass>,
     attachments: Vec<AttachmentImage>,
     inner: vk::Framebuffer,
 }
 
 #[derive(Debug, From)]
-crate enum AttachmentImage {
+pub enum AttachmentImage {
     Image(Arc<ImageView>),
     Swapchain(Arc<SwapchainView>),
 }
@@ -28,7 +28,7 @@ impl Drop for Framebuffer {
 }
 
 impl Framebuffer {
-    crate unsafe fn new(
+    pub unsafe fn new(
         pass: Arc<RenderPass>,
         // TODO: Should be EnumMap<Attachment, AttachmentImage>
         attachments: Vec<AttachmentImage>,
@@ -36,31 +36,31 @@ impl Framebuffer {
         create_framebuffer(pass, attachments)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.pass.device()
     }
 
-    crate fn inner(&self) -> vk::Framebuffer {
+    pub fn inner(&self) -> vk::Framebuffer {
         self.inner
     }
 
-    crate fn pass(&self) -> &Arc<RenderPass> {
+    pub fn pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
 
-    crate fn attachments(&self) -> &[AttachmentImage] {
+    pub fn attachments(&self) -> &[AttachmentImage] {
         &self.attachments
     }
 
-    crate fn extent(&self) -> Extent2D {
+    pub fn extent(&self) -> Extent2D {
         self.attachments[0].extent()
     }
 
-    crate fn render_area(&self) -> vk::Rect2D {
+    pub fn render_area(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent().into())
     }
 
-    crate fn viewport(&self) -> vk::Viewport {
+    pub fn viewport(&self) -> vk::Viewport {
         let extent = self.extent();
         vk::Viewport {
             x: 0.0,
@@ -72,41 +72,41 @@ impl Framebuffer {
         }
     }
 
-    crate fn is_swapchain_valid(&self) -> bool {
+    pub fn is_swapchain_valid(&self) -> bool {
         self.attachments.iter().all(|attch| attch.is_valid())
     }
 }
 
 impl AttachmentImage {
-    crate fn view(&self) -> vk::ImageView {
+    pub fn view(&self) -> vk::ImageView {
         match &self {
             Self::Image(view) => view.inner(),
             Self::Swapchain(view) => view.inner(),
         }
     }
 
-    crate fn extent(&self) -> Extent2D {
+    pub fn extent(&self) -> Extent2D {
         match &self {
             Self::Image(view) => view.extent().to_2d(),
             Self::Swapchain(view) => view.extent(),
         }
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         match &self {
             Self::Image(view) => view.format(),
             Self::Swapchain(view) => view.format(),
         }
     }
 
-    crate fn samples(&self) -> SampleCount {
+    pub fn samples(&self) -> SampleCount {
         match &self {
             Self::Image(img) => img.samples(),
             Self::Swapchain(_) => SampleCount::One,
         }
     }
 
-    crate fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         if let Self::Swapchain(sw) = self {
             sw.is_valid()
         } else { true }
@@ -168,7 +168,7 @@ fn validate_framebuffer_creation(
     }
 }
 
-crate fn create_render_target(
+pub fn create_render_target(
     heap: &ImageHeap,
     render_pass: &Arc<RenderPass>,
     index: usize,
@@ -200,7 +200,7 @@ crate fn create_render_target(
 }
 
 #[cfg(test)]
-crate unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
+pub unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
     let device = Arc::clone(swapchain.device());
     let heap = ImageHeap::new(device);
 

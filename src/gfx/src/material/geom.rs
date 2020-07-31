@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use base::partial_map;
+use device::*;
 
 use crate::*;
 use super::*;

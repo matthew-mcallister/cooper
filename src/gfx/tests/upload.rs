@@ -8,7 +8,8 @@ macro_rules! test_type {
 
 fn main() {
     env_logger::init();
-    gfx::testing::run_tests(crate::__collect_tests);
+    window::testing::run_tests::<gfx::testing::TestContext, _>(
+        crate::__collect_tests);
 }
 
 fn test_image(rloop: &mut gfx::RenderLoop, width: u32, height: u32) ->

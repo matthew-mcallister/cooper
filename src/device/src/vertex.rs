@@ -55,8 +55,8 @@ wrap_vk_enum! {
 }
 
 #[derive(Clone, Copy, Debug)]
-crate struct VertexData<'a> {
-    crate attributes: PartialEnumMap<VertexAttr, BufferRange<'a>>,
+pub struct VertexData<'a> {
+    pub attributes: PartialEnumMap<VertexAttr, BufferRange<'a>>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -72,15 +72,15 @@ pub struct VertexStreamAttr {
 
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct VertexInputLayout {
-    crate topology: PrimitiveTopology,
-    crate attributes: SmallVec<VertexAttributeBinding, 6>,
+    pub topology: PrimitiveTopology,
+    pub attributes: SmallVec<VertexAttributeBinding, 6>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct VertexAttributeBinding {
-    crate location: u32,
-    crate attribute: VertexAttr,
-    crate format: Format,
+    pub location: u32,
+    pub attribute: VertexAttr,
+    pub format: Format,
 }
 
 impl IndexType {
@@ -102,7 +102,7 @@ impl<'a> VertexData<'a> {
 }
 
 impl VertexStreamLayout {
-    crate fn input_layout_for_shader(&self, shader: &Shader) ->
+    pub fn input_layout_for_shader(&self, shader: &Shader) ->
         VertexInputLayout
     {
         assert_eq!(shader.stage(), ShaderStage::Vertex);

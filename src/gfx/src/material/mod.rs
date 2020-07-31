@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use base::PartialEnumMap;
-use enum_map::{Enum, EnumMap};
-
-use crate::SystemState;
-use crate::device::{
+use device::{
     DescriptorSet, Image, ImageDef, ImageSubresources, ImageView,
     ImageViewFlags, Sampler, ShaderStageMap,
 };
+use enum_map::{Enum, EnumMap};
+
+use crate::SystemState;
 
 mod geom;
 mod state;

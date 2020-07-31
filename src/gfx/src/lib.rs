@@ -41,9 +41,6 @@ macro_rules! test_type {
 mod util;
 crate use util::*;
 
-mod device;
-mod extent;
-mod format;
 mod global;
 mod material;
 mod mesh;
@@ -51,13 +48,9 @@ mod object;
 mod render;
 mod resource;
 mod rloop;
-mod staged_cache;
 mod state;
 mod world;
 
-pub use device::*;
-pub use extent::*;
-pub use format::*;
 crate use global::*;
 pub use material::*;
 pub use mesh::*;
@@ -65,19 +58,20 @@ pub use object::*;
 pub use render::*;
 pub use resource::*;
 pub use rloop::*;
-crate use staged_cache::*;
 crate use state::*;
 pub use world::*;
 
+// TODO: Put enums into a module device::enums for a glob re-export.
+pub use device::{
+    AnisotropyLevel, AppInfo, Extent2D, Extent3D, Filter, Format, ImageDef,
+    ImageType, IndexType, Lifetime, SamplerAddressMode, SamplerDesc,
+    SamplerMipmapMode, VertexAttr,
+};
+
 unit::collect_tests![
-    device,
-    extent,
-    format,
     global,
     mesh,
-    render,
     resource,
-    staged_cache,
     world,
 ];
 
@@ -88,5 +82,5 @@ pub mod testing;
 #[cfg(test)]
 fn main() {
     env_logger::init();
-    testing::run_tests(crate::__collect_tests);
+    window::testing::run_tests::<testing::TestContext, _>(__collect_tests);
 }

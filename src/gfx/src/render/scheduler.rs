@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use crossbeam::atomic::AtomicCell;
 use derivative::Derivative;
-
-use crate::*;
+use device::*;
 
 crate type SubpassTask = Box<dyn FnOnce(&mut SubpassCmds) + Send>;
 

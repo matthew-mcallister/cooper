@@ -14,6 +14,7 @@ bitflags = "1.2.1"
 crossbeam = "0.7.2"
 derive_more = "0.99.7"
 derivative = "2.1.1"
+device = { path = "../device", package = "cooper-device" }
 enum-map = "0.6.1"
 fnv = "1.0"
 log = "0.4.8"

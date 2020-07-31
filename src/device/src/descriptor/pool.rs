@@ -10,7 +10,7 @@ use super::*;
 
 /// Fixed-size general-purpose descriptor pool.
 #[derive(Debug)]
-pub(super) struct DescriptorPool {
+pub struct DescriptorPool {
     device: Arc<Device>,
     inner: vk::DescriptorPool,
     flags: vk::DescriptorPoolCreateFlags,
@@ -24,7 +24,7 @@ pub(super) struct DescriptorPool {
 }
 
 #[derive(Debug)]
-crate struct DescriptorHeap {
+pub struct DescriptorHeap {
     pools: EnumMap<Lifetime, Arc<Mutex<DescriptorPool>>>,
 }
 
@@ -44,7 +44,7 @@ impl Drop for Pool {
 }
 
 impl Pool {
-    crate fn new(
+    pub fn new(
         device: Arc<Device>,
         max_sets: u32,
         descriptor_counts: Counts,
@@ -82,31 +82,31 @@ impl Pool {
         }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::DescriptorPool {
+    pub fn inner(&self) -> vk::DescriptorPool {
         self.inner
     }
 
-    crate fn max_sets(&self) -> u32 {
+    pub fn max_sets(&self) -> u32 {
         self.max_sets
     }
 
-    crate fn used_sets(&self) -> u32 {
+    pub fn used_sets(&self) -> u32 {
         self.used_sets
     }
 
-    crate fn max_descriptors(&self) -> &Counts {
+    pub fn max_descriptors(&self) -> &Counts {
         &self.max_descriptors
     }
 
-    crate fn used_descriptors(&self) -> &Counts {
+    pub fn used_descriptors(&self) -> &Counts {
         &self.used_descriptors
     }
 
-    crate fn alloc_many(
+    pub fn alloc_many(
         &mut self,
         layout: &Arc<DescriptorSetLayout>,
         count: u32,
@@ -149,7 +149,7 @@ impl Pool {
         }).collect()
     }
 
-    crate fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set {
+    pub fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set {
         self.alloc_many(layout, 1).pop().unwrap()
     }
 
@@ -168,12 +168,12 @@ impl Pool {
             .check().unwrap();
     }
 
-    crate unsafe fn reset(&mut self) {
+    pub unsafe fn reset(&mut self) {
         let dt = &*self.device.table;
         dt.reset_descriptor_pool(self.inner(), Default::default());
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
@@ -187,7 +187,7 @@ impl Named for Pool {
 }
 
 impl Heap {
-    crate fn new(device: &Arc<Device>) -> Self {
+    pub fn new(device: &Arc<Device>) -> Self {
         let pools = enum_map! {
             Lifetime::Static => {
                 let (sets, sizes) = static_descriptor_counts();
@@ -207,7 +207,7 @@ impl Heap {
         Self { pools }
     }
 
-    crate fn alloc_many(
+    pub fn alloc_many(
         self: &Arc<Self>,
         lifetime: Lifetime,
         layout: &Arc<DescriptorSetLayout>,
@@ -222,7 +222,7 @@ impl Heap {
         sets
     }
 
-    crate fn alloc(
+    pub fn alloc(
         self: &Arc<Self>,
         lifetime: Lifetime,
         layout: &Arc<DescriptorSetLayout>,
@@ -230,7 +230,7 @@ impl Heap {
         self.alloc_many(lifetime, layout, 1).pop().unwrap()
     }
 
-    crate unsafe fn clear_frame(&self) {
+    pub unsafe fn clear_frame(&self) {
         self.pools[Lifetime::Frame].lock().reset();
     }
 }

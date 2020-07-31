@@ -10,7 +10,7 @@ use crate::*;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct Surface {
+pub struct Surface {
     crate window: Arc<window::Window>,
     #[derivative(Debug = "ignore")]
     crate instance: Arc<Instance>,
@@ -18,7 +18,7 @@ crate struct Surface {
 }
 
 #[derive(Debug)]
-crate struct Swapchain {
+pub struct Swapchain {
     crate surface: Arc<Surface>,
     crate device: Arc<Device>,
     crate inner: vk::SwapchainKHR,
@@ -30,7 +30,7 @@ crate struct Swapchain {
 
 /// Specialized image view for the swapchain.
 #[derive(Debug)]
-crate struct SwapchainView {
+pub struct SwapchainView {
     token: Token,
     device: Arc<Device>,
     extent: Extent2D,
@@ -53,7 +53,7 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    crate unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>)
+    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>)
         -> Result<Self, AnyError>
     {
         let inner = window.create_surface(instance.table.instance)?;
@@ -64,7 +64,7 @@ impl Surface {
         })
     }
 
-    crate fn window(&self) -> &Arc<window::Window> {
+    pub fn window(&self) -> &Arc<window::Window> {
         &self.window
     }
 }
@@ -76,7 +76,7 @@ impl Drop for Swapchain {
 }
 
 impl Swapchain {
-    crate unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
+    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
         Result<Self, AnyError>
     {
         let mut result = Swapchain {
@@ -93,27 +93,31 @@ impl Swapchain {
         Ok(result)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::SwapchainKHR {
+    pub fn inner(&self) -> vk::SwapchainKHR {
         self.inner
     }
 
-    crate fn window(&self) -> &Arc<window::Window> {
+    pub fn surface(&self) -> &Arc<Surface> {
+        &self.surface
+    }
+
+    pub fn window(&self) -> &Arc<window::Window> {
         self.surface.window()
     }
 
-    crate fn extent(&self) -> Extent2D {
+    pub fn extent(&self) -> Extent2D {
         self.extent
     }
 
-    crate fn rect(&self) -> vk::Rect2D {
+    pub fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent.into())
     }
 
-    crate fn viewport(&self) -> vk::Viewport {
+    pub fn viewport(&self) -> vk::Viewport {
         vk::Viewport {
             x: 0.0,
             y: 0.0,
@@ -128,7 +132,7 @@ impl Swapchain {
         self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
     }
 
-    crate unsafe fn recreate(&mut self) -> Result<(), AnyError> {
+    pub unsafe fn recreate(&mut self) -> Result<(), AnyError> {
         let dt = &*self.device.table;
         let it = &*self.device.instance.table;
         let pdev = self.device.pdev;
@@ -211,26 +215,26 @@ impl Swapchain {
         Ok(())
     }
 
-    crate fn create_views(&self) -> Vec<Arc<SwapchainView>> {
+    pub fn create_views(&self) -> Vec<Arc<SwapchainView>> {
         (0..self.images.len())
             .map(|index| Arc::new(SwapchainView::new(&self, index as _)))
             .collect()
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         Format::BGRA8_SRGB
     }
 
     /// Note: A suboptimal swapchain will just return an error with no
     /// swapchain index.
     // TODO: Use case for synchronizing with a fence?
-    crate fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) ->
+    pub fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) ->
         Result<u32, vk::Result>
     {
         self.acquire_next_image_with_timeout(sem, u64::max_value())
     }
 
-    crate fn acquire_next_image_with_timeout(
+    pub fn acquire_next_image_with_timeout(
         &mut self,
         sem: &mut BinarySemaphore,
         timeout: u64,
@@ -252,7 +256,7 @@ impl Swapchain {
         Ok(idx)
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
@@ -306,19 +310,19 @@ impl SwapchainView {
         }
     }
 
-    crate fn inner(&self) -> vk::ImageView {
+    pub fn inner(&self) -> vk::ImageView {
         self.inner
     }
 
-    crate fn extent(&self) -> Extent2D {
+    pub fn extent(&self) -> Extent2D {
         self.extent
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         Format::BGRA8_SRGB
     }
 
-    crate fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.token.is_valid()
     }
 }
@@ -340,7 +344,7 @@ impl Default for Token {
     }
 }
 
-crate unsafe fn device_for_surface(surface: &Surface) ->
+pub unsafe fn device_for_surface(surface: &Surface) ->
     Result<vk::PhysicalDevice, AnyError>
 {
     let instance = &*surface.instance;
@@ -366,7 +370,7 @@ crate unsafe fn device_for_surface(surface: &Surface) ->
     Err("no presentable graphics device".into())
 }
 
-crate unsafe fn init_swapchain(
+pub unsafe fn init_swapchain(
     app_info: AppInfo,
     window: Arc<window::Window>
 ) -> Result<(Swapchain, Vec<Vec<Arc<Queue>>>), AnyError> {

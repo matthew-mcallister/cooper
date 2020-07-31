@@ -2,13 +2,13 @@ use super::*;
 
 /// The staging buffer implementation used for transfer operations.
 #[derive(Debug)]
-crate struct StagingBuffer {
+pub struct StagingBuffer {
     buffer: DeviceBuffer,
     allocator: LinearAllocator,
 }
 
 impl StagingBuffer {
-    crate fn new(device: Arc<Device>, capacity: usize) -> Self {
+    pub fn new(device: Arc<Device>, capacity: usize) -> Self {
         let mut buffer = unsafe {
             DeviceBuffer::new(
                 device,
@@ -28,23 +28,23 @@ impl StagingBuffer {
         }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.buffer.device()
     }
 
-    crate fn inner(&self) -> &DeviceBuffer {
+    pub fn inner(&self) -> &DeviceBuffer {
         &self.buffer
     }
 
-    crate fn used(&self) -> usize {
+    pub fn used(&self) -> usize {
         self.allocator.used() as _
     }
 
-    crate fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.allocator.capacity() as _
     }
 
-    crate fn alloc(&mut self, size: usize) -> Option<BufferRange<'_>> {
+    pub fn alloc(&mut self, size: usize) -> Option<BufferRange<'_>> {
         let blk = self.allocator.alloc(size as _, 1)?;
         Some(BufferRange {
             buffer: &self.buffer,
@@ -53,7 +53,7 @@ impl StagingBuffer {
         })
     }
 
-    crate unsafe fn clear(&mut self) {
+    pub unsafe fn clear(&mut self) {
         self.allocator.clear();
     }
 }

@@ -9,7 +9,7 @@ use crate::*;
 
 /// Hierarchical queue capability classes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-crate enum QueueType {
+pub enum QueueType {
     /// Supports graphics, compute, transfer, and present operations.
     Graphics,
     /// Supports compute and transfer operations.
@@ -19,13 +19,13 @@ crate enum QueueType {
 }
 
 #[derive(Debug)]
-crate struct QueueFamily<'dev> {
+pub struct QueueFamily<'dev> {
     device: &'dev Arc<Device>,
     index: u32,
 }
 
 #[derive(Debug)]
-crate struct Queue {
+pub struct Queue {
     device: Arc<Device>,
     inner: vk::Queue,
     family: u32,
@@ -35,31 +35,31 @@ crate struct Queue {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct WaitInfo<'a> {
+pub struct WaitInfo<'a> {
     #[derivative(Debug(format_with = "write_named::<SemaphoreInner>"))]
-    crate semaphore: &'a mut SemaphoreInner,
-    crate value: u64,
-    crate stages: vk::PipelineStageFlags,
+    pub semaphore: &'a mut SemaphoreInner,
+    pub value: u64,
+    pub stages: vk::PipelineStageFlags,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct SignalInfo<'a> {
+pub struct SignalInfo<'a> {
     #[derivative(Debug(format_with = "write_named::<SemaphoreInner>"))]
-    crate semaphore: &'a mut SemaphoreInner,
-    crate value: u64,
+    pub semaphore: &'a mut SemaphoreInner,
+    pub value: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-crate struct SubmitInfo<'a> {
-    crate wait_sems: &'a [WaitInfo<'a>],
-    crate sig_sems: &'a [SignalInfo<'a>],
-    crate cmds: &'a [vk::CommandBuffer],
+pub struct SubmitInfo<'a> {
+    pub wait_sems: &'a [WaitInfo<'a>],
+    pub sig_sems: &'a [SignalInfo<'a>],
+    pub cmds: &'a [vk::CommandBuffer],
 }
 
 impl<'dev> QueueFamily<'dev> {
     // The encapsulation here is kind of bad...
-    crate fn new(device: &'dev Arc<Device>, index: u32) -> QueueFamily<'dev> {
+    pub fn new(device: &'dev Arc<Device>, index: u32) -> QueueFamily<'dev> {
         assert_lt!(index as usize, device.queue_families.len());
         QueueFamily {
             device,
@@ -67,23 +67,23 @@ impl<'dev> QueueFamily<'dev> {
         }
     }
 
-    crate fn device(&self) -> &'dev Arc<Device> {
+    pub fn device(&self) -> &'dev Arc<Device> {
         self.device
     }
 
-    crate fn index(&self) -> u32 {
+    pub fn index(&self) -> u32 {
         self.index
     }
 
-    crate fn properties(&self) -> &'dev vk::QueueFamilyProperties {
+    pub fn properties(&self) -> &'dev vk::QueueFamilyProperties {
         &self.device.queue_families[self.index as usize]
     }
 
-    crate fn flags(&self) -> vk::QueueFlags {
+    pub fn flags(&self) -> vk::QueueFlags {
         self.properties().queue_flags
     }
 
-    crate fn ty(&self) -> QueueType {
+    pub fn ty(&self) -> QueueType {
         let flags = self.flags();
         if flags.intersects(vk::QueueFlags::GRAPHICS_BIT) {
             debug_assert!(flags.intersects(vk::QueueFlags::COMPUTE_BIT));
@@ -97,39 +97,39 @@ impl<'dev> QueueFamily<'dev> {
         }
     }
 
-    crate fn supports_graphics(&self) -> bool {
+    pub fn supports_graphics(&self) -> bool {
         self.ty().supports(QueueType::Graphics)
     }
 
-    crate fn supports_xfer(&self) -> bool {
+    pub fn supports_xfer(&self) -> bool {
         self.ty().supports(QueueType::Xfer)
     }
 }
 
 impl Queue {
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::Queue {
+    pub fn inner(&self) -> vk::Queue {
         self.inner
     }
 
-    crate fn family(&self) -> QueueFamily<'_> {
+    pub fn family(&self) -> QueueFamily<'_> {
         self.device.queue_family(self.family)
     }
 
-    crate fn flags(&self) -> vk::QueueFlags {
+    pub fn flags(&self) -> vk::QueueFlags {
         self.family().flags()
     }
 
-    crate fn ty(&self) -> QueueType {
+    pub fn ty(&self) -> QueueType {
         self.family().ty()
     }
 
     // TODO: Verify that submitted commands are executable by this type
     // of queue.
-    crate unsafe fn submit(&self, submissions: &[SubmitInfo<'_>]) {
+    pub unsafe fn submit(&self, submissions: &[SubmitInfo<'_>]) {
         trace!(
             "Queue::submit(self: {:?}, submissions: {:?}",
             fmt_named(self), submissions,
@@ -207,7 +207,7 @@ impl Queue {
         ).check().unwrap();
     }
 
-    crate unsafe fn present(
+    pub unsafe fn present(
         &self,
         wait_sems: &[&mut BinarySemaphore],
         swapchain: &mut Swapchain,
@@ -257,7 +257,7 @@ impl Queue {
         vec![vec![Arc::new(gfx_queue)]]
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
@@ -274,7 +274,7 @@ impl QueueType {
     // TODO: This implementation seems overly clever. In particular,
     // graphics queues aren't *guaranteed* to support compute, though
     // they always do in practice.
-    crate fn supports(self, other: Self) -> bool {
+    pub fn supports(self, other: Self) -> bool {
         self <= other
     }
 }

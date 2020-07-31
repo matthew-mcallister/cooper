@@ -84,7 +84,7 @@ impl Extent3D {
     }
 
     #[inline]
-    crate fn iter(&self) -> impl ExactSizeIterator<Item = &u32> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &u32> {
         self.as_array().iter()
     }
 
@@ -93,7 +93,7 @@ impl Extent3D {
         Extent2D::new(self.width, self.height)
     }
 
-    crate fn contains_extent(&self, offset: Vector3<i32>, extent: Self) -> bool
+    pub fn contains_extent(&self, offset: Vector3<i32>, extent: Self) -> bool
     {
         fn check_range_overflow(offs: i32, len: u32, max: u32) -> bool {
             (offs >= 0)
@@ -105,7 +105,7 @@ impl Extent3D {
     }
 
     #[inline]
-    crate fn texel_count(&self) -> vk::DeviceSize {
+    pub fn texel_count(&self) -> vk::DeviceSize {
         self.width as vk::DeviceSize
             * self.height as vk::DeviceSize
             * self.depth as vk::DeviceSize

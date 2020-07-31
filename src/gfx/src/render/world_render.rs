@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use device::*;
+
 use crate::*;
 
 #[derive(Debug)]

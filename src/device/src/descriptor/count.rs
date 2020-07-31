@@ -3,7 +3,7 @@ use math::Vector;
 use num::Zero;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-crate struct DescriptorCounts(Vector<u32, 11>);
+pub struct DescriptorCounts(Vector<u32, 11>);
 
 impl Default for DescriptorCounts {
     fn default() -> Self {
@@ -24,16 +24,16 @@ impl From<DescriptorCounts> for Vector<u32, 11> {
 }
 
 impl DescriptorCounts {
-    crate fn new() -> Self { Default::default() }
+    pub fn new() -> Self { Default::default() }
 
-    crate fn iter(&self) ->
+    pub fn iter(&self) ->
         impl Iterator<Item = (vk::DescriptorType, u32)> + '_
     {
         self.0.iter().enumerate()
             .map(|(i, v)| (vk::DescriptorType(i as _), *v))
     }
 
-    crate fn iter_mut(&mut self) ->
+    pub fn iter_mut(&mut self) ->
         impl Iterator<Item = (vk::DescriptorType, &mut u32)>
     {
         self.0.iter_mut().enumerate()

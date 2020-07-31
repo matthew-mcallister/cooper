@@ -66,7 +66,7 @@ pub enum SampleCount {
 }
 
 // Don't use std::ops::Range b/c it's not Copy
-crate type ResourceRange = [u32; 2];
+pub type ResourceRange = [u32; 2];
 
 #[derive(Clone, Constructor, Copy, Debug)]
 pub struct ImageSubresources {
@@ -77,7 +77,7 @@ pub struct ImageSubresources {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct Image {
+pub struct Image {
     device: Arc<Device>,
     def: Arc<ImageDef>,
     inner: vk::Image,
@@ -98,7 +98,7 @@ pub struct ImageDef {
 }
 
 #[derive(Debug)]
-crate struct ImageView {
+pub struct ImageView {
     image: Arc<Image>,
     flags: ImageViewFlags,
     view_type: vk::ImageViewType,
@@ -118,7 +118,7 @@ impl Drop for Image {
 }
 
 impl Image {
-    crate fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
+    pub fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
         trace!("Image::new(def: {:?})", fmt_named(&*def));
 
         let device = Arc::clone(heap.device());
@@ -160,7 +160,7 @@ impl Image {
         }
     }
 
-    crate fn with(
+    pub fn with(
         heap: &ImageHeap,
         flags: ImageFlags,
         ty: ImageType,
@@ -177,7 +177,7 @@ impl Image {
         Self::new(heap, def)
     }
 
-    crate fn inner(&self) -> vk::Image {
+    pub fn inner(&self) -> vk::Image {
         self.inner
     }
 
@@ -213,15 +213,15 @@ impl Image {
         self.def.mip_levels()
     }
 
-    crate fn alloc(&self) -> &DeviceAlloc {
+    pub fn alloc(&self) -> &DeviceAlloc {
         &self.alloc
     }
 
-    crate fn validate_subresources(&self, sub: &ImageSubresources) {
+    pub fn validate_subresources(&self, sub: &ImageSubresources) {
         self.def.validate_subresources(sub);
     }
 
-    crate fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
+    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
     {
         self.def.subresource_size(sub)
     }
@@ -230,13 +230,13 @@ impl Image {
         self.def.all_subresources()
     }
 
-    crate fn all_layers_for_mip_level(&self, mip_level: u32) ->
+    pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
         ImageSubresources
     {
         self.def.all_layers_for_mip_level(mip_level)
     }
 
-    crate fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
+    pub fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
         let mut flags = ImageViewFlags::empty();
         let min_array_layers;
         if self.ty() == ImageType::Cube {
@@ -267,7 +267,7 @@ impl Named for Image {
 }
 
 impl ImageDef {
-    crate fn new(
+    pub fn new(
         device: &Arc<Device>,
         flags: ImageFlags,
         ty: ImageType,
@@ -312,7 +312,7 @@ impl ImageDef {
         self.mip_levels
     }
 
-    crate fn validate_subresources(&self, sub: &ImageSubresources) {
+    pub fn validate_subresources(&self, sub: &ImageSubresources) {
         assert!(sub.aspects.contains(sub.aspects));
         assert_gt!(sub.mip_level_count(), 0);
         assert_le!(sub.mip_levels[1], self.mip_levels);
@@ -322,7 +322,7 @@ impl ImageDef {
         assert_lt!(sub.layers[0], sub.layers[1]);
     }
 
-    crate fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
+    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
     {
         let lvl_size = |lvl| self.extent().mip_level(lvl).texel_count();
         let texels: vk::DeviceSize = sub.mip_level_range().map(lvl_size).sum();
@@ -339,7 +339,7 @@ impl ImageDef {
         }
     }
 
-    crate fn all_layers_for_mip_level(&self, mip_level: u32) ->
+    pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
         ImageSubresources
     {
         ImageSubresources {
@@ -349,16 +349,16 @@ impl ImageDef {
         }
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = Some(name.into());
     }
 
-    crate fn with_name(mut self, name: impl Into<String>) -> Self {
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.set_name(name);
         self
     }
 
-    crate fn build_image(self, heap: &ImageHeap) -> Arc<Image> {
+    pub fn build_image(self, heap: &ImageHeap) -> Arc<Image> {
         Arc::new(Image::new(heap, Arc::new(self)))
     }
 }
@@ -379,7 +379,7 @@ impl Drop for ImageView {
 }
 
 impl ImageView {
-    crate unsafe fn new(
+    pub unsafe fn new(
         image: Arc<Image>,
         flags: ImageViewFlags,
         format: Format,
@@ -415,57 +415,57 @@ impl ImageView {
         }
     }
 
-    crate fn inner(&self) -> vk::ImageView {
+    pub fn inner(&self) -> vk::ImageView {
         self.inner
     }
 
-    crate fn image(&self) -> &Arc<Image> {
+    pub fn image(&self) -> &Arc<Image> {
         &self.image
     }
 
-    crate fn flags(&self) -> ImageViewFlags {
+    pub fn flags(&self) -> ImageViewFlags {
         self.flags
     }
 
-    crate fn format(&self) -> Format {
+    pub fn format(&self) -> Format {
         self.format
     }
 
-    crate fn samples(&self) -> SampleCount {
+    pub fn samples(&self) -> SampleCount {
         self.image.samples()
     }
 
-    crate fn extent(&self) -> Extent3D {
+    pub fn extent(&self) -> Extent3D {
         self.image.extent()
     }
 
-    crate fn subresources(&self) -> ImageSubresources {
+    pub fn subresources(&self) -> ImageSubresources {
         self.subresources
     }
 
-    crate fn layers(&self) -> u32 {
+    pub fn layers(&self) -> u32 {
         self.subresources.layer_count()
     }
 
-    crate fn mip_levels(&self) -> u32 {
+    pub fn mip_levels(&self) -> u32 {
         self.subresources.mip_level_count()
     }
 }
 
 impl ImageFlags {
-    crate fn is_render_target(self) -> bool {
+    pub fn is_render_target(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT
             | Self::DEPTH_STENCIL_ATTACHMENT)
     }
 
     // XXX: Is every input attachment also a color or depth attachment?
-    crate fn is_attachment(self) -> bool {
+    pub fn is_attachment(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT
             | Self::DEPTH_STENCIL_ATTACHMENT
             | Self::INPUT_ATTACHMENT)
     }
 
-    crate fn usage(self) -> vk::ImageUsageFlags {
+    pub fn usage(self) -> vk::ImageUsageFlags {
         use vk::ImageUsageFlags as F;
 
         let pairs = [
@@ -553,7 +553,7 @@ impl From<ImageSubresources> for vk::ImageSubresourceRange {
 }
 
 impl ImageSubresources {
-    crate fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers
+    pub fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers
     {
         vk::ImageSubresourceLayers {
             aspect_mask: self.aspects,
@@ -563,15 +563,15 @@ impl ImageSubresources {
         }
     }
 
-    crate fn mip_level_range(&self) -> std::ops::Range<u32> {
+    pub fn mip_level_range(&self) -> std::ops::Range<u32> {
         self.mip_levels[0]..self.mip_levels[1]
     }
 
-    crate fn mip_level_count(&self) -> u32 {
+    pub fn mip_level_count(&self) -> u32 {
         self.mip_levels[1] - self.mip_levels[0]
     }
 
-    crate fn layer_count(&self) -> u32 {
+    pub fn layer_count(&self) -> u32 {
         self.layers[1] - self.layers[0]
     }
 }

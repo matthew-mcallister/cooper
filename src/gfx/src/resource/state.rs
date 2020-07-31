@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use base::ByPtr;
+use device::{Image, ImageDef, ImageHeap, fmt_named};
 use fnv::FnvHashMap as HashMap;
 use log::trace;
 use prelude::*;
 
-use crate::device::{Image, ImageDef, ImageHeap, fmt_named};
 use super::ResourceState;
 
 #[derive(Debug)]

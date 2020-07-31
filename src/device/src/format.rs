@@ -16,7 +16,7 @@ macro_rules! impl_format {
 
         impl Format {
             // TODO: Should probably implement on vk::Format
-            crate fn aspects(self) -> vk::ImageAspectFlags {
+            pub fn aspects(self) -> vk::ImageAspectFlags {
                 match self {$(
                     Format::$name => $(vk::ImageAspectFlags::$aspect)|*,
                 )*}

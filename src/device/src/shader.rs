@@ -10,7 +10,7 @@ use prelude::*;
 use crate::*;
 
 #[derive(Debug)]
-crate struct Shader {
+pub struct Shader {
     device: Arc<Device>,
     module: vk::ShaderModule,
     code: Vec<u32>,
@@ -23,7 +23,7 @@ crate struct Shader {
 /// A choice of shader plus specialization constant values.
 #[derive(Debug, Derivative)]
 #[derivative(Hash, PartialEq)]
-crate struct ShaderSpec {
+pub struct ShaderSpec {
     #[derivative(Hash(hash_with="ptr_hash"))]
     #[derivative(PartialEq(compare_with="ptr_eq"))]
     shader: Arc<Shader>,
@@ -34,10 +34,10 @@ crate struct ShaderSpec {
 impl Eq for ShaderSpec {}
 
 // Probably should know the type and dimension too...
-crate type ShaderLocation = u32;
+pub type ShaderLocation = u32;
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum ShaderStage {
+pub enum ShaderStage {
     Vertex,
     TessControl,
     TessEval,
@@ -56,7 +56,7 @@ impl Drop for Shader {
 }
 
 impl Shader {
-    crate unsafe fn new(
+    pub unsafe fn new(
         device: Arc<Device>,
         code: Vec<u32>,
         source_file: Option<String>,
@@ -92,7 +92,7 @@ impl Shader {
     }
 
     /// A convenience method for loading a shader off the disk.
-    crate unsafe fn from_path(device: Arc<Device>, path: impl Into<String>) ->
+    pub unsafe fn from_path(device: Arc<Device>, path: impl Into<String>) ->
         std::io::Result<Self>
     {
         use byteorder::{ByteOrder, NativeEndian};
@@ -107,31 +107,31 @@ impl Shader {
         Ok(Self::new(device, words, Some(path)))
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn module(&self) -> vk::ShaderModule {
+    pub fn module(&self) -> vk::ShaderModule {
         self.module
     }
 
-    crate fn entry_cstr(&self) -> &CStr {
+    pub fn entry_cstr(&self) -> &CStr {
         unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") }
     }
 
-    crate fn code(&self) -> &[u32] {
+    pub fn code(&self) -> &[u32] {
         &self.code
     }
 
-    crate fn stage(&self) -> ShaderStage {
+    pub fn stage(&self) -> ShaderStage {
         self.stage
     }
 
-    crate fn inputs(&self) -> &[ShaderLocation] {
+    pub fn inputs(&self) -> &[ShaderLocation] {
         &self.inputs
     }
 
-    crate fn outputs(&self) -> &[ShaderLocation] {
+    pub fn outputs(&self) -> &[ShaderLocation] {
         &self.outputs
     }
 }
@@ -143,7 +143,7 @@ impl Named for Shader {
 }
 
 impl ShaderSpec {
-    crate fn new(shader: Arc<Shader>) -> Self {
+    pub fn new(shader: Arc<Shader>) -> Self {
         ShaderSpec {
             shader,
             spec_info: Default::default(),
@@ -152,15 +152,15 @@ impl ShaderSpec {
         }
     }
 
-    crate fn shader(&self) -> &Arc<Shader> {
+    pub fn shader(&self) -> &Arc<Shader> {
         &self.shader
     }
 
-    crate fn spec_info(&self) -> &vk::SpecializationInfo {
+    pub fn spec_info(&self) -> &vk::SpecializationInfo {
         &self.spec_info
     }
 
-    crate fn set<T>(&mut self, id: u32, val: &T) -> &mut ShaderSpec {
+    pub fn set<T>(&mut self, id: u32, val: &T) -> &mut ShaderSpec {
         let bytes = std::slice::from_ref(val).as_bytes();
         self.spec_map.push(vk::SpecializationMapEntry {
             constant_id: id,

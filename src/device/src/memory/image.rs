@@ -10,7 +10,7 @@ use super::*;
 /// A suballocation of a VkMemory object.
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
-crate struct DeviceAlloc {
+pub struct DeviceAlloc {
     memory: Arc<DeviceMemory>,
     offset: vk::DeviceSize,
     size: vk::DeviceSize,
@@ -65,7 +65,7 @@ struct HeapPoolInner {
 }
 
 #[derive(Debug)]
-crate struct ImageHeap {
+pub struct ImageHeap {
     device: Arc<Device>,
     // One pool per memory type
     pools: Vec<Arc<HeapPool>>,
@@ -161,7 +161,7 @@ impl HeapPool {
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
     ) -> DeviceAlloc {
-        trace!("ImageHeap::alloc(size: {}, alignment: {})", size, alignment);
+        trace!("HeapPool::alloc(size: {}, alignment: {})", size, alignment);
         let alignment = std::cmp::max(self.min_alignment(), alignment);
         let mut inner = self.inner.lock();
         let block = inner.allocator.alloc(size, alignment)
@@ -202,7 +202,7 @@ impl HeapPool {
 }
 
 impl ImageHeap {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let pools: Vec<_> = iter_memory_types(&device)
             .enumerate()
             .map(|(idx, _)| {
@@ -219,7 +219,7 @@ impl ImageHeap {
         0x100_0000
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
@@ -232,7 +232,7 @@ impl ImageHeap {
     }
 
     // N.B. This races with other threads.
-    crate fn heaps(&self) -> Vec<HeapInfo> {
+    pub fn heaps(&self) -> Vec<HeapInfo> {
         let heap_count = self.device.mem_props.memory_heap_count as usize;
         let mut heaps = vec![HeapInfo::default(); heap_count];
         for pool in self.pools.iter() {
@@ -256,7 +256,7 @@ impl ImageHeap {
     }
 
     /// Binds an image to newly allocated memory.
-    crate unsafe fn bind(&self, image: vk::Image) -> DeviceAlloc {
+    pub unsafe fn bind(&self, image: vk::Image) -> DeviceAlloc {
         let device = &self.device;
         let (reqs, dedicated_reqs) = get_image_memory_reqs(device, image);
 

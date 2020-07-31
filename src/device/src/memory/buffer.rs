@@ -10,7 +10,7 @@ use crate::*;
 use super::*;
 
 #[derive(Clone, Debug)]
-crate struct DeviceBuffer {
+pub struct DeviceBuffer {
     memory: Arc<DeviceMemory>,
     inner: vk::Buffer,
     usage: vk::BufferUsageFlags,
@@ -20,7 +20,7 @@ crate struct DeviceBuffer {
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
-crate enum BufferBinding {
+pub enum BufferBinding {
     Storage,
     Uniform,
     StorageTexel,
@@ -31,15 +31,15 @@ crate enum BufferBinding {
 
 // A slice of a VkBuffer.
 #[derive(Clone, Copy, Debug)]
-crate struct BufferRange<'buf> {
-    crate buffer: &'buf DeviceBuffer,
-    crate offset: vk::DeviceSize,
-    crate size: vk::DeviceSize,
+pub struct BufferRange<'buf> {
+    pub buffer: &'buf DeviceBuffer,
+    pub offset: vk::DeviceSize,
+    pub size: vk::DeviceSize,
 }
 
 /// An owned suballocation of a VkBuffer object.
 #[derive(Debug)]
-crate struct BufferAlloc {
+pub struct BufferAlloc {
     buffer: Arc<DeviceBuffer>,
     offset: vk::DeviceSize,
     // N.B. the allocator might return more memory than requested.
@@ -49,7 +49,7 @@ crate struct BufferAlloc {
 /// Warning: This type does *not* call `T::drop`. Unfortunately Rust
 /// does not allow us to express this as a type constraint yet.
 #[derive(Debug)]
-crate struct BufferBox<T: ?Sized> {
+pub struct BufferBox<T: ?Sized> {
     alloc: BufferAlloc,
     ptr: NonNull<T>,
 }
@@ -123,35 +123,35 @@ impl DeviceBuffer {
         create_buffer(device, size, usage, mapping, lifetime, chunk)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.memory.device
     }
 
-    crate fn memory(&self) -> &Arc<DeviceMemory> {
+    pub fn memory(&self) -> &Arc<DeviceMemory> {
         &self.memory
     }
 
-    crate fn inner(&self) -> vk::Buffer {
+    pub fn inner(&self) -> vk::Buffer {
         self.inner
     }
 
-    crate fn size(&self) -> vk::DeviceSize {
+    pub fn size(&self) -> vk::DeviceSize {
         self.memory.size()
     }
 
-    crate fn lifetime(&self) -> Lifetime {
+    pub fn lifetime(&self) -> Lifetime {
         self.memory.lifetime()
     }
 
-    crate fn mapped(&self) -> bool {
+    pub fn mapped(&self) -> bool {
         self.memory.mapped()
     }
 
-    crate fn binding(&self) -> Option<BufferBinding> {
+    pub fn binding(&self) -> Option<BufferBinding> {
         self.binding
     }
 
-    crate fn usage(&self) -> vk::BufferUsageFlags {
+    pub fn usage(&self) -> vk::BufferUsageFlags {
         self.usage
     }
 
@@ -164,7 +164,7 @@ impl DeviceBuffer {
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }
@@ -212,11 +212,11 @@ impl MemoryRegion for BufferAlloc {
 }
 
 impl<'a> BufferRange<'a> {
-    crate fn raw(&self) -> vk::Buffer {
+    pub fn raw(&self) -> vk::Buffer {
         self.buffer.inner
     }
 
-    crate fn descriptor_info(&self) -> vk::DescriptorBufferInfo {
+    pub fn descriptor_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.buffer.inner,
             offset: self.offset,
@@ -226,11 +226,11 @@ impl<'a> BufferRange<'a> {
 }
 
 impl BufferAlloc {
-    crate fn buffer(&self) -> &Arc<DeviceBuffer> {
+    pub fn buffer(&self) -> &Arc<DeviceBuffer> {
         &self.buffer
     }
 
-    crate fn raw(&self) -> vk::Buffer {
+    pub fn raw(&self) -> vk::Buffer {
         self.buffer.inner
     }
 
@@ -238,7 +238,7 @@ impl BufferAlloc {
         self.buffer.memory.chunk
     }
 
-    crate fn range(&self) -> BufferRange<'_> {
+    pub fn range(&self) -> BufferRange<'_> {
         BufferRange {
             buffer: &self.buffer,
             offset: self.offset,
@@ -267,29 +267,29 @@ impl<T: ?Sized> BufferBox<T> {
         BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
     }
 
-    crate fn alloc(this: &Self) -> &BufferAlloc {
+    pub fn alloc(this: &Self) -> &BufferAlloc {
         &this.alloc
     }
 
-    crate fn range(this: &Self) -> BufferRange<'_> {
+    pub fn range(this: &Self) -> BufferRange<'_> {
         this.alloc.range()
     }
 
-    crate fn into_inner(this: Self) -> BufferAlloc {
+    pub fn into_inner(this: Self) -> BufferAlloc {
         this.alloc
     }
 
     /// Unlike `Box::leak`, the pointer returned by this method deosn't
     /// have `'static` lifetime---it may dangle. Hence, it is not safe
     /// to dereference.
-    crate fn leak(this: Self) -> NonNull<T> {
+    pub fn leak(this: Self) -> NonNull<T> {
         this.alloc.leak();
         this.ptr
     }
 }
 
 impl<T> BufferBox<T> {
-    crate fn from_val(mut alloc: BufferAlloc, val: T) -> Self {
+    pub fn from_val(mut alloc: BufferAlloc, val: T) -> Self {
         let ptr = alloc.as_mut::<T>().write(val) as _;
         unsafe { BufferBox::new(alloc, ptr) }
     }
@@ -310,7 +310,7 @@ impl<T> BufferBox<[T]> {
 }
 
 impl<T: Copy> BufferBox<[T]> {
-    crate fn copy_from_slice(mut alloc: BufferAlloc, src: &[T]) -> Self {
+    pub fn copy_from_slice(mut alloc: BufferAlloc, src: &[T]) -> Self {
         let slice = alloc.as_mut_slice::<T>(src.len());
         slice.copy_from_slice(as_uninit_slice(src));
         let slice = slice as *mut _ as _;
@@ -335,13 +335,13 @@ impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
 }
 
 #[derive(Debug)]
-crate struct BufferHeap {
+pub struct BufferHeap {
     // TODO: Mutex individual pools instead of the whole heap.
     inner: Mutex<BufferHeapInner>,
 }
 
 #[derive(Debug)]
-crate struct BufferHeapInner {
+pub struct BufferHeapInner {
     device: Arc<Device>,
     static_pools: EnumMap<BufferBinding, BufferHeapEntry<FreeListAllocator>>,
     frame_pools: EnumMap<BufferBinding, BufferHeapEntry<LinearAllocator>>,
@@ -369,7 +369,7 @@ struct BufferPool<A: Allocator> {
 }
 
 impl BufferHeap {
-    crate fn new(device: Arc<Device>) -> Arc<Self> {
+    pub fn new(device: Arc<Device>) -> Arc<Self> {
         macro_rules! entry {
             ($dev:expr, $lt:expr) => {
                 (|binding| BufferHeapEntry::new($dev, binding, $lt)).into()
@@ -397,7 +397,7 @@ impl BufferHeap {
         }
     }
 
-    crate fn alloc(
+    pub fn alloc(
         self: &Arc<Self>,
         binding: BufferBinding,
         lifetime: Lifetime,
@@ -424,7 +424,7 @@ impl BufferHeap {
             .free(alloc);
     }
 
-    crate fn boxed<T>(
+    pub fn boxed<T>(
         self: &Arc<Self>,
         binding: BufferBinding,
         lifetime: Lifetime,
@@ -436,7 +436,7 @@ impl BufferHeap {
         BufferBox::from_val(alloc, val)
     }
 
-    crate fn box_iter<T>(
+    pub fn box_iter<T>(
         self: &Arc<Self>,
         binding: BufferBinding,
         lifetime: Lifetime,
@@ -448,7 +448,7 @@ impl BufferHeap {
         BufferBox::from_iter(alloc, iter)
     }
 
-    crate fn box_slice<T: Copy>(
+    pub fn box_slice<T: Copy>(
         self: &Arc<Self>,
         binding: BufferBinding,
         lifetime: Lifetime,
@@ -460,7 +460,7 @@ impl BufferHeap {
         BufferBox::copy_from_slice(alloc, src)
     }
 
-    crate fn box_uninit<T: Copy>(
+    pub fn box_uninit<T: Copy>(
         self: &Arc<Self>,
         binding: BufferBinding,
         lifetime: Lifetime,
@@ -474,7 +474,7 @@ impl BufferHeap {
     }
 
     /// Invalidates frame-scope allocations.
-    crate unsafe fn clear_frame(&self) {
+    pub unsafe fn clear_frame(&self) {
         for pool in self.inner.lock().frame_pools.values_mut() {
             pool.clear();
         }

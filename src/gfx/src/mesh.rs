@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use base::PartialEnumMap;
+use device::*;
 use itertools::Itertools;
 
 use crate::*;
@@ -159,11 +160,17 @@ impl IndexBuffer {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use device::*;
     use prelude::*;
     use super::*;
 
     unsafe fn create_mesh(vars: crate::testing::TestVars) {
-        let state = SystemState::new(Arc::clone(vars.device()));
+        let buffers = BufferHeap::new(Arc::clone(vars.device()));
+        let mut builder = RenderMeshBuilder {
+            buffers: &buffers,
+            lifetime: Lifetime::Frame,
+            mesh: Default::default(),
+        };
 
         let pos: &[[f32; 3]] = &[
             [0.0, 0.0, 0.0],
@@ -176,14 +183,10 @@ mod tests {
             0, 3, 1,
             0, 2, 3,
         ];
-        let mut builder = RenderMeshBuilder {
-            buffers: &state.buffers,
-            lifetime: Lifetime::Frame,
-            mesh: Default::default(),
-        };
         builder.index(IndexType::U16, idxs.as_bytes())
             .attr(VertexAttr::Position, Format::RGB32F, pos.as_bytes())
             .attr(VertexAttr::Normal, Format::RGB32F, normal.as_bytes());
+
         let _ = builder.build();
     }
 

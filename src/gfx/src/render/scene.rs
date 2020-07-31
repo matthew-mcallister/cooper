@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use device::{
+    BufferRange, DescriptorSet, DescriptorSetLayout, Device, Lifetime,
+};
 use math::{Matrix4, Matrix4x3};
 
 use crate::{Globals, SystemState};
-use crate::device::{
-    BufferRange, DescriptorSet, DescriptorSetLayout, Device, Lifetime,
-};
 use crate::util::pack_xform;
 
 #[derive(Clone, Copy, Debug, Default)]

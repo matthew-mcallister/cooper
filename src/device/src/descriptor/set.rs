@@ -10,12 +10,12 @@ use super::*;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct DescriptorSet {
+pub struct DescriptorSet {
     #[derivative(Debug(format_with = "write_named::<DescriptorSetLayout>"))]
-    pub(super) layout: Arc<DescriptorSetLayout>,
-    pub(super) pool: Weak<Mutex<DescriptorPool>>,
-    pub(super) inner: vk::DescriptorSet,
-    pub(super) name: Option<String>,
+    crate layout: Arc<DescriptorSetLayout>,
+    crate pool: Weak<Mutex<DescriptorPool>>,
+    crate inner: vk::DescriptorSet,
+    crate name: Option<String>,
 }
 
 impl Drop for Set {
@@ -27,19 +27,19 @@ impl Drop for Set {
 }
 
 impl Set {
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.layout.device()
     }
 
-    crate fn inner(&self) -> vk::DescriptorSet {
+    pub fn inner(&self) -> vk::DescriptorSet {
         self.inner
     }
 
-    crate fn layout(&self) -> &Arc<DescriptorSetLayout> {
+    pub fn layout(&self) -> &Arc<DescriptorSetLayout> {
         &self.layout
     }
 
-    crate fn write_buffer(
+    pub fn write_buffer(
         &mut self,
         binding: u32,
         buffer: BufferRange<'_>,
@@ -50,7 +50,7 @@ impl Set {
     /// Writes uniform or storage buffers. Doesn't work with texel
     /// buffers as they require a buffer view object.
     // N.B. direct writes scale poorly compared to update templates.
-    crate fn write_buffers(
+    pub fn write_buffers(
         &mut self,
         binding: u32,
         first_element: u32,
@@ -94,7 +94,7 @@ impl Set {
         }
     }
 
-    crate unsafe fn write_image(
+    pub unsafe fn write_image(
         &mut self,
         binding: u32,
         view: &Arc<ImageView>,
@@ -109,7 +109,7 @@ impl Set {
     /// Writes images to the descriptor set. Combined image/samplers
     /// must specify an array of samplers.
     // TODO: Perhaps should take an iterator
-    crate unsafe fn write_images(
+    pub unsafe fn write_images(
         &mut self,
         binding: u32,
         first_element: u32,
@@ -186,7 +186,7 @@ impl Set {
             (writes.len() as _, writes.as_ptr(), 0, ptr::null());
     }
 
-    crate unsafe fn write_samplers(
+    pub unsafe fn write_samplers(
         &mut self,
         _binding: u32,
         _first_element: u32,
@@ -195,7 +195,7 @@ impl Set {
         todo!()
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }

@@ -12,17 +12,17 @@ use crate::*;
 /// Adds type information to Vulkan object types from the debug_utils
 /// extension.
 // TODO: should be part of vk::HandleType
-crate trait DebugHandle: vk::traits::HandleType + Copy {
+pub trait DebugHandle: vk::traits::HandleType + Copy {
     /// Returns the debug object type.
     fn object_type() -> vk::ObjectType;
 }
 
-crate trait Named: fmt::Debug {
+pub trait Named: fmt::Debug {
     /// Returns the debugging name of the object.
     fn name(&self) -> Option<&str>;
 }
 
-crate fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
+pub fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
     fmt::Result
 {
     if let Some(name) = named.name() {
@@ -36,7 +36,7 @@ crate fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
     }
 }
 
-crate fn fmt_named<'a>(named: &'a impl Named) -> impl fmt::Debug + 'a {
+pub fn fmt_named<'a>(named: &'a impl Named) -> impl fmt::Debug + 'a {
     struct FmtNamed<'a, N: Named>(&'a N);
     impl<N: Named> fmt::Debug for FmtNamed<'_, N> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -109,7 +109,7 @@ impl_debug_marker_name! {
     AccelerationStructureNV = ACCELERATION_STRUCTURE_NV;
 }
 
-crate unsafe fn set_name<T: DebugHandle>(
+pub unsafe fn set_name<T: DebugHandle>(
     device: &vkl::DeviceTable,
     handle: T,
     name: &impl AsRef<std::ffi::CStr>,
@@ -142,7 +142,7 @@ crate struct DebugMessenger {
 
 impl DebugMessenger {
     // TODO: This is an *instance-level* method...
-    crate unsafe fn new(
+    pub unsafe fn new(
         instance: &Instance,
         severity: vk::DebugUtilsMessageSeverityFlagsEXT,
         types: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -168,7 +168,7 @@ impl DebugMessenger {
         }
     }
 
-    crate unsafe fn destroy(&mut self, it: &vkl::InstanceTable) {
+    pub unsafe fn destroy(&mut self, it: &vkl::InstanceTable) {
         it.destroy_debug_utils_messenger_ext(self.inner, ptr::null());
     }
 }

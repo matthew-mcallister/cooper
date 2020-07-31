@@ -62,8 +62,8 @@ mod tests {
     use super::*;
 
     unsafe fn render_nothing(vars: crate::testing::TestVars) {
-        let window = Arc::clone(&vars.swapchain.surface.window);
-        let app_info = (*vars.device().instance.app_info).clone();
+        let window = Arc::clone(&vars.swapchain.window());
+        let app_info = (*vars.device().instance().app_info()).clone();
         let rl = Box::new(RenderLoop::new(app_info, window).unwrap());
         let world = RenderWorld::new(rl);
         world.render();

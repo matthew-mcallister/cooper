@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use base::ByPtr;
 use derive_more::Display;
+use device::ImageView;
 use fnv::FnvHashMap as HashMap;
 use log::trace;
 
-use crate::device::ImageView;
 use crate::resource::{ResourceState, ResourceSystem};
 use super::*;
 

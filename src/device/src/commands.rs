@@ -18,7 +18,7 @@ enum CmdBufferState {
 // TODO: Keep track of how many live command buffer objects there are;
 // it's too easy to leak command buffers.
 #[derive(Debug)]
-crate struct CmdPool {
+pub struct CmdPool {
     device: Arc<Device>,
     inner: vk::CommandPool,
     flags: vk::CommandPoolCreateFlags,
@@ -28,7 +28,7 @@ crate struct CmdPool {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct CmdBuffer {
+pub struct CmdBuffer {
     device: Arc<Device>,
     inner: vk::CommandBuffer,
     level: CmdBufferLevel,
@@ -38,7 +38,7 @@ crate struct CmdBuffer {
 }
 
 #[derive(Debug)]
-crate struct SubpassCmds {
+pub struct SubpassCmds {
     inner: CmdBuffer,
     framebuffer: Arc<Framebuffer>,
     subpass: Subpass,
@@ -46,7 +46,7 @@ crate struct SubpassCmds {
 }
 
 #[derive(Debug)]
-crate struct RenderPassCmds {
+pub struct RenderPassCmds {
     inner: CmdBuffer,
     framebuffer: Arc<Framebuffer>,
     cur_subpass: i32,
@@ -54,13 +54,13 @@ crate struct RenderPassCmds {
 }
 
 #[derive(Debug)]
-crate struct XferCmds {
+pub struct XferCmds {
     inner: CmdBuffer,
 }
 
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
 #[derivative(Default)]
-crate enum CmdBufferLevel {
+pub enum CmdBufferLevel {
     #[derivative(Default)]
     Primary,
     Secondary,
@@ -71,7 +71,7 @@ crate enum CmdBufferLevel {
 wrap_vk_enum! {
     #[derive(Derivative)]
     #[derivative(Default)]
-    crate enum SubpassContents {
+    pub enum SubpassContents {
         #[derivative(Default)]
         Inline = INLINE,
         Secondary = SECONDARY_COMMAND_BUFFERS,
@@ -88,7 +88,7 @@ impl Drop for CmdPool {
 }
 
 impl CmdPool {
-    crate fn new(
+    pub fn new(
         queue_family: QueueFamily<'_>,
         flags: vk::CommandPoolCreateFlags,
     ) -> Self {
@@ -118,37 +118,37 @@ impl CmdPool {
         }
     }
 
-    crate fn new_transient(queue_family: QueueFamily<'_>) -> Self {
+    pub fn new_transient(queue_family: QueueFamily<'_>) -> Self {
         Self::new(queue_family, vk::CommandPoolCreateFlags::TRANSIENT_BIT)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn is_transient(&self) -> bool {
+    pub fn is_transient(&self) -> bool {
         use vk::CommandPoolCreateFlags as Flags;
         self.flags.contains(Flags::TRANSIENT_BIT)
     }
 
-    crate fn reset_enabled(&self) -> bool {
+    pub fn reset_enabled(&self) -> bool {
         use vk::CommandPoolCreateFlags as Flags;
         self.flags.contains(Flags::RESET_COMMAND_BUFFER_BIT)
     }
 
-    crate fn queue_family(&self) -> QueueFamily<'_> {
+    pub fn queue_family(&self) -> QueueFamily<'_> {
         self.device.queue_family(self.queue_family)
     }
 
-    crate fn supports_graphics(&self) -> bool {
+    pub fn supports_graphics(&self) -> bool {
         self.queue_family().supports_graphics()
     }
 
-    crate fn supports_xfer(&self) -> bool {
+    pub fn supports_xfer(&self) -> bool {
         self.queue_family().supports_xfer()
     }
 
-    crate fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
+    pub fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
         trace!("CmdPool::alloc(self: {:?}, level: {:?})",
             fmt_named(&*self), level);
         let dt = &*self.device.table;
@@ -167,19 +167,19 @@ impl CmdPool {
         buffer
     }
 
-    crate unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
+    pub unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
         trace!("CmdPool::free(self: {:?}, queue_family: {}, cmds: {:?})",
             fmt_named(&*self), self.queue_family, cmds);
         let dt = &*self.device.table;
         dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
     }
 
-    crate unsafe fn reset(&mut self) {
+    pub unsafe fn reset(&mut self) {
         let dt = &*self.device.table;
         dt.reset_command_pool(self.inner, Default::default());
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner, name); }
@@ -202,7 +202,7 @@ impl Drop for CmdBuffer {
 
 // TODO: This API hardly supports reusing command buffers.
 impl CmdBuffer {
-    crate fn new(mut pool: Box<CmdPool>, level: CmdBufferLevel) -> Self {
+    pub fn new(mut pool: Box<CmdPool>, level: CmdBufferLevel) -> Self {
         Self {
             device: Arc::clone(pool.device()),
             inner: pool.alloc(level),
@@ -212,14 +212,14 @@ impl CmdBuffer {
         }
     }
 
-    crate fn new_primary(pool: Box<CmdPool>) -> Self {
+    pub fn new_primary(pool: Box<CmdPool>) -> Self {
         Self::new(pool, CmdBufferLevel::Primary)
     }
 
     /// Creates a command buffer from a raw Vulkan command buffer
     /// handle. The underlying command buffer object *must* be in the
     /// initial state.
-    crate unsafe fn from_initial(
+    pub unsafe fn from_initial(
         pool: Box<CmdPool>,
         cmds: vk::CommandBuffer,
         level: CmdBufferLevel,
@@ -233,7 +233,7 @@ impl CmdBuffer {
         }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.pool.device()
     }
 
@@ -241,7 +241,7 @@ impl CmdBuffer {
         &self.device().table
     }
 
-    crate fn inner(&self) -> vk::CommandBuffer {
+    pub fn inner(&self) -> vk::CommandBuffer {
         self.inner
     }
 
@@ -249,19 +249,19 @@ impl CmdBuffer {
         self.state
     }
 
-    crate fn is_recording(&self) -> bool {
+    pub fn is_recording(&self) -> bool {
         self.state == CmdBufferState::Recording
     }
 
-    crate fn level(&self) -> CmdBufferLevel {
+    pub fn level(&self) -> CmdBufferLevel {
         self.level
     }
 
-    crate fn supports_graphics(&self) -> bool {
+    pub fn supports_graphics(&self) -> bool {
         self.pool.supports_graphics()
     }
 
-    crate fn supports_xfer(&self) -> bool {
+    pub fn supports_xfer(&self) -> bool {
         self.pool.supports_xfer()
     }
 
@@ -292,7 +292,7 @@ impl CmdBuffer {
         self.state = CmdBufferState::Recording;
     }
 
-    crate unsafe fn do_end(&mut self) {
+    pub unsafe fn do_end(&mut self) {
         trace!("CmdBuffer::end(self.inner: {:?})", self.inner);
         let dt = &*self.device.table;
         self.ensure_recording();
@@ -300,7 +300,7 @@ impl CmdBuffer {
         self.state = CmdBufferState::Executable;
     }
 
-    crate fn end(mut self) -> (vk::CommandBuffer, Box<CmdPool>) {
+    pub fn end(mut self) -> (vk::CommandBuffer, Box<CmdPool>) {
         unsafe {
             self.do_end();
             // Sadly, we must do this
@@ -361,7 +361,7 @@ impl CmdBuffer {
 }
 
 impl CmdBufferLevel {
-    crate fn is_secondary(self) -> bool {
+    pub fn is_secondary(self) -> bool {
         use CmdBufferLevel::*;
         match self {
             Primary => false,
@@ -369,7 +369,7 @@ impl CmdBufferLevel {
         }
     }
 
-    crate fn required_usage_flags(self) -> vk::CommandBufferUsageFlags {
+    pub fn required_usage_flags(self) -> vk::CommandBufferUsageFlags {
         if self == Self::SubpassContinue {
             vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT
         } else { Default::default() }
@@ -383,7 +383,7 @@ impl From<CmdBufferLevel> for vk::CommandBufferLevel {
 }
 
 impl SubpassCmds {
-    crate unsafe fn secondary(
+    pub unsafe fn secondary(
         framebuffer: Arc<Framebuffer>,
         subpass: Subpass,
         pool: Box<CmdPool>,
@@ -408,19 +408,19 @@ impl SubpassCmds {
         self.inner.ensure_recording();
     }
 
-    crate fn raw(&self) -> vk::CommandBuffer {
+    pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
 
-    crate fn subpass(&self) -> &Subpass {
+    pub fn subpass(&self) -> &Subpass {
         &self.subpass
     }
 
-    crate fn level(&self) -> CmdBufferLevel {
+    pub fn level(&self) -> CmdBufferLevel {
         self.inner.level
     }
 
-    crate fn is_inline(&self) -> bool {
+    pub fn is_inline(&self) -> bool {
         self.inner.level != CmdBufferLevel::SubpassContinue
     }
 
@@ -440,7 +440,7 @@ impl SubpassCmds {
     }
 
     // TODO: Allow binding multiple in one call
-    crate fn bind_gfx_descs(
+    pub fn bind_gfx_descs(
         &mut self,
         index: u32,
         set: &DescriptorSet,
@@ -468,7 +468,7 @@ impl SubpassCmds {
         }
     }
 
-    crate fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>) {
+    pub fn bind_gfx_pipe(&mut self, pipeline: &Arc<GraphicsPipeline>) {
         self.ensure_recording();
         tryopt! {
             if Arc::ptr_eq(self.gfx_pipe.as_ref()?, pipeline) {
@@ -486,7 +486,7 @@ impl SubpassCmds {
         self.gfx_pipe = Some(Arc::clone(pipeline));
     }
 
-    crate unsafe fn bind_index_buffer<'a>(
+    pub unsafe fn bind_index_buffer<'a>(
         &mut self,
         buffer: BufferRange<'a>,
         ty: IndexType,
@@ -499,7 +499,7 @@ impl SubpassCmds {
         );
     }
 
-    crate fn bind_vertex_buffers(&mut self, data: &VertexData<'_>) {
+    pub fn bind_vertex_buffers(&mut self, data: &VertexData<'_>) {
         let pipe = self.gfx_pipe.as_ref().unwrap();
         let layout = pipe.vertex_layout();
 
@@ -529,11 +529,11 @@ impl SubpassCmds {
         assert!(self.gfx_pipe.is_some());
     }
 
-    crate unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
+    pub unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
         self.draw_offset(vertex_count, instance_count, 0, 0);
     }
 
-    crate unsafe fn draw_offset(
+    pub unsafe fn draw_offset(
         &mut self,
         vertex_count: u32,
         instance_count: u32,
@@ -548,7 +548,7 @@ impl SubpassCmds {
         );
     }
 
-    crate unsafe fn draw_indexed(
+    pub unsafe fn draw_indexed(
         &mut self,
         vertex_count: u32,
         instance_count: u32,
@@ -556,7 +556,7 @@ impl SubpassCmds {
         self.draw_indexed_offset(vertex_count, instance_count, 0, 0, 0);
     }
 
-    crate unsafe fn draw_indexed_offset(
+    pub unsafe fn draw_indexed_offset(
         &mut self,
         vertex_count: u32,
         instance_count: u32,
@@ -577,7 +577,7 @@ impl SubpassCmds {
 
     /// Stops recording commands within the current subpass. Does *not*
     /// advance to the next subpass.
-    crate fn exit_subpass(self) -> RenderPassCmds {
+    pub fn exit_subpass(self) -> RenderPassCmds {
         self.ensure_recording();
         assert!(self.is_inline());
         RenderPassCmds {
@@ -589,21 +589,21 @@ impl SubpassCmds {
     }
 
     /// Ends recording of a secondary render pass continuation.
-    crate fn end_secondary(self) -> (vk::CommandBuffer, Box<CmdPool>) {
+    pub fn end_secondary(self) -> (vk::CommandBuffer, Box<CmdPool>) {
         self.ensure_recording();
         assert!(!self.is_inline());
         self.inner.end()
     }
 
-    crate unsafe fn set_viewport(&mut self, viewport: vk::Viewport) {
+    pub unsafe fn set_viewport(&mut self, viewport: vk::Viewport) {
         self.inner.set_viewport(viewport);
     }
 
-    crate unsafe fn set_scissors(&mut self, scissor: vk::Rect2D) {
+    pub unsafe fn set_scissors(&mut self, scissor: vk::Rect2D) {
         self.inner.set_scissor(scissor);
     }
 
-    crate fn set_depth_bias(
+    pub fn set_depth_bias(
         &mut self,
         constant_factor: f32,
         slope_factor: f32,
@@ -613,7 +613,7 @@ impl SubpassCmds {
 }
 
 impl RenderPassCmds {
-    crate fn new(
+    pub fn new(
         cmds: CmdBuffer,
         framebuffer: Arc<Framebuffer>,
         clear_values: &[vk::ClearValue],
@@ -637,23 +637,23 @@ impl RenderPassCmds {
         self.inner.dt()
     }
 
-    crate fn framebuffer(&self) -> &Arc<Framebuffer> {
+    pub fn framebuffer(&self) -> &Arc<Framebuffer> {
         &self.framebuffer
     }
 
-    crate fn pass(&self) -> &Arc<RenderPass> {
+    pub fn pass(&self) -> &Arc<RenderPass> {
         &self.framebuffer.pass()
     }
 
-    crate fn raw(&self) -> vk::CommandBuffer {
+    pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
 
-    crate fn level(&self) -> CmdBufferLevel {
+    pub fn level(&self) -> CmdBufferLevel {
         self.inner.level
     }
 
-    crate fn cur_subpass(&self) -> Subpass {
+    pub fn cur_subpass(&self) -> Subpass {
         self.framebuffer.pass().subpass(self.cur_subpass as _)
     }
 
@@ -704,7 +704,7 @@ impl RenderPassCmds {
         debug_assert!(self.cur_subpass >= 0);
     }
 
-    crate fn enter_subpass(self) -> SubpassCmds {
+    pub fn enter_subpass(self) -> SubpassCmds {
         self.ensure_recording();
         assert_eq!(self.cur_contents, SubpassContents::Inline);
         let subpass = self.cur_subpass();
@@ -716,7 +716,7 @@ impl RenderPassCmds {
         }
     }
 
-    crate fn next_subpass(&mut self, contents: SubpassContents) {
+    pub fn next_subpass(&mut self, contents: SubpassContents) {
         self.ensure_recording();
         self.cur_subpass += 1;
         self.cur_contents = contents;
@@ -724,7 +724,7 @@ impl RenderPassCmds {
         unsafe { self.dt().cmd_next_subpass(self.raw(), contents.into()); }
     }
 
-    crate unsafe fn execute_cmds(&mut self, cmds: &[vk::CommandBuffer]) {
+    pub unsafe fn execute_cmds(&mut self, cmds: &[vk::CommandBuffer]) {
         assert_eq!(self.level(), CmdBufferLevel::Primary);
         assert_eq!(self.cur_contents, SubpassContents::Secondary);
         self.dt().cmd_execute_commands(
@@ -734,14 +734,14 @@ impl RenderPassCmds {
         );
     }
 
-    crate fn end(self) -> CmdBuffer {
+    pub fn end(self) -> CmdBuffer {
         unsafe { self.dt().cmd_end_render_pass(self.raw()); }
         self.inner
     }
 }
 
 impl XferCmds {
-    crate fn new(mut cmds: CmdBuffer) -> Self {
+    pub fn new(mut cmds: CmdBuffer) -> Self {
         assert!(cmds.supports_xfer());
         assert_ne!(cmds.level, CmdBufferLevel::SubpassContinue);
         unsafe { cmds.begin(None); }
@@ -752,11 +752,11 @@ impl XferCmds {
         self.inner.dt()
     }
 
-    crate fn raw(&self) -> vk::CommandBuffer {
+    pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
 
-    crate unsafe fn pipeline_barrier(
+    pub unsafe fn pipeline_barrier(
         &mut self,
         src_stage_mask: vk::PipelineStageFlags,
         dst_stage_mask: vk::PipelineStageFlags,
@@ -780,7 +780,7 @@ impl XferCmds {
     }
 
     // TODO: Could take an iterator over BufferRange pairs
-    crate unsafe fn copy_buffer(
+    pub unsafe fn copy_buffer(
         &mut self,
         src: &Arc<DeviceBuffer>,
         dst: &Arc<DeviceBuffer>,
@@ -803,7 +803,7 @@ impl XferCmds {
         )
     }
 
-    crate unsafe fn copy_buffer_to_image(
+    pub unsafe fn copy_buffer_to_image(
         &mut self,
         src: &DeviceBuffer,
         dst: &Arc<Image>,
@@ -825,11 +825,11 @@ impl XferCmds {
         );
     }
 
-    crate fn end_xfer(self) -> CmdBuffer {
+    pub fn end_xfer(self) -> CmdBuffer {
         self.inner
     }
 
-    crate fn end(self) -> (vk::CommandBuffer, Box<CmdPool>) {
+    pub fn end(self) -> (vk::CommandBuffer, Box<CmdPool>) {
         self.inner.end()
     }
 }

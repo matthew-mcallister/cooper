@@ -9,7 +9,7 @@ use crate::*;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct Device {
+pub struct Device {
     #[derivative(Debug = "ignore")]
     crate table: Arc<vkl::DeviceTable>,
     #[derivative(Debug = "ignore")]
@@ -37,7 +37,7 @@ impl Drop for Device {
 }
 
 impl Device {
-    crate unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
+    pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
         Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         let it = &instance.table;
@@ -108,34 +108,34 @@ impl Device {
         Ok((device, queues))
     }
 
-    crate fn table(&self) -> &vkl::DeviceTable {
+    pub fn table(&self) -> &vkl::DeviceTable {
         &self.table
     }
 
-    crate fn instance(&self) -> &Arc<Instance> {
+    pub fn instance(&self) -> &Arc<Instance> {
         &self.instance
     }
 
-    crate fn properties(&self) -> &vk::PhysicalDeviceProperties {
+    pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
         &self.props
     }
 
-    crate fn queue_family<'dev>(
+    pub fn queue_family<'dev>(
         self: &'dev Arc<Self>,
         index: u32,
     ) -> QueueFamily<'dev> {
         QueueFamily::new(self, index)
     }
 
-    crate fn limits(&self) -> &vk::PhysicalDeviceLimits {
+    pub fn limits(&self) -> &vk::PhysicalDeviceLimits {
         &self.properties().limits
     }
 
-    crate fn features(&self) -> &vk::PhysicalDeviceFeatures {
+    pub fn features(&self) -> &vk::PhysicalDeviceFeatures {
         &self.features
     }
 
-    crate unsafe fn set_name(
+    pub unsafe fn set_name(
         &self,
         handle: impl DebugHandle,
         name: impl Into<String>,
@@ -146,7 +146,7 @@ impl Device {
         }
     }
 
-    crate unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>)
+    pub unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>)
         -> Result<Swapchain, AnyError>
     {
         let mut swapchain = Swapchain::new(surface, self)?;
@@ -154,7 +154,7 @@ impl Device {
         Ok(swapchain)
     }
 
-    crate fn wait_idle(&self) {
+    pub fn wait_idle(&self) {
         unsafe { self.table.device_wait_idle(); }
     }
 }

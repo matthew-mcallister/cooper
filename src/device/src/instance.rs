@@ -12,7 +12,7 @@ use crate::*;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct Instance {
+pub struct Instance {
     crate vk: window::VulkanPlatform,
     #[derivative(Debug = "ignore")]
     crate entry: Arc<vkl::Entry>,
@@ -50,7 +50,7 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    crate unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) ->
+    pub unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) ->
         Result<Self, AnyError>
     {
         if !vk.supported() { Err("vulkan not available")?; }
@@ -127,11 +127,15 @@ impl Instance {
         Ok(instance)
     }
 
-    crate unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
+    pub fn app_info(&self) -> &AppInfo {
+        &self.app_info
+    }
+
+    pub unsafe fn get_physical_devices(&self) -> Vec<vk::PhysicalDevice> {
         vk::enumerate2!(self.table, enumerate_physical_devices).unwrap()
     }
 
-    crate unsafe fn get_queue_family_properties(
+    pub unsafe fn get_queue_family_properties(
         &self,
         pdev: vk::PhysicalDevice,
     ) -> Vec<vk::QueueFamilyProperties> {
@@ -142,7 +146,7 @@ impl Instance {
         )
     }
 
-    crate unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
+    pub unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
         vk::PhysicalDeviceProperties
     {
         let mut res = Default::default();
@@ -150,13 +154,13 @@ impl Instance {
         res
     }
 
-    crate unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
+    pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
         Result<(Arc<Device>, Vec<Vec<Arc<Queue>>>), AnyError>
     {
         Ok(Device::new(Arc::clone(self), pdev)?)
     }
 
-    crate unsafe fn create_surface(
+    pub unsafe fn create_surface(
         self: &Arc<Self>,
         window: &Arc<window::Window>,
     ) -> Result<Arc<Surface>, AnyError> {

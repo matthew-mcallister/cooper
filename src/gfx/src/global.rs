@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use device::*;
 use log::trace;
 
 use crate::*;
@@ -33,11 +34,11 @@ crate enum ShaderConst {
 }
 
 impl Globals {
-    crate fn new(state: &SystemState, heap: &ImageHeap) -> Self {
-        unsafe { Self::unsafe_new(state, heap) }
+    crate fn new(state: &SystemState) -> Self {
+        unsafe { Self::unsafe_new(state) }
     }
 
-    unsafe fn unsafe_new(state: &SystemState, heap: &ImageHeap) -> Self {
+    unsafe fn unsafe_new(state: &SystemState) -> Self {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
@@ -65,7 +66,7 @@ impl Globals {
             1,
             1,
         ).with_name("immediate_image_2d")
-            .build_image(heap)
+            .build_image(&state.image_heap)
             .create_full_view();
 
         let immediate_storage_image_2d = ImageDef::new(
@@ -78,7 +79,7 @@ impl Globals {
             1,
             1,
         ).with_name("immediate_storage_image_2d")
-            .build_image(heap)
+            .build_image(&state.image_heap)
             .create_full_view();
 
         let empty_image_2d = Arc::new(ImageDef::new(
@@ -228,20 +229,12 @@ impl GlobalShaders {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
-        let state = SystemState::new(Arc::clone(vars.device()));
-        let heap = ImageHeap::new(Arc::clone(vars.device()));
-        let _ = Globals::new(&state, &heap);
-    }
-
-    unsafe fn empty_descriptors_test(vars: testing::TestVars) {
+    unsafe fn write_empty(vars: crate::testing::TestVars) {
         let device = Arc::clone(vars.device());
         let state = SystemState::new(Arc::clone(&device));
-        let heap = ImageHeap::new(Arc::clone(&device));
-        let globals = Globals::new(&state, &heap);
+        let globals = Globals::new(&state, );
 
         let bindings = set_layout_bindings![
             (0, UNIFORM_BUFFER),
@@ -261,10 +254,7 @@ mod tests {
         globals.write_empty_descriptors(&mut desc);
     }
 
-    unit::declare_tests![
-        smoke_test,
-        empty_descriptors_test
-    ];
+    unit::declare_tests![write_empty];
 }
 
 unit::collect_tests![tests];

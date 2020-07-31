@@ -97,7 +97,7 @@ impl Drop for Sampler {
 }
 
 impl Sampler {
-    crate fn new(device: Arc<Device>, desc: SamplerDesc) -> Self { unsafe {
+    pub fn new(device: Arc<Device>, desc: SamplerDesc) -> Self { unsafe {
         let dt = &*device.table;
 
         assert!((0.0 <= desc.mip_lod_bias) & (desc.mip_lod_bias <= 15.0));
@@ -134,7 +134,7 @@ impl Sampler {
         }
     } }
 
-    crate fn inner(&self) -> vk::Sampler {
+    pub fn inner(&self) -> vk::Sampler {
         self.inner
     }
 
@@ -164,30 +164,30 @@ impl From<AnisotropyLevel> for f32 {
 /// A multithreaded object storage system for sampler objects based on
 /// the pipeline creation cache.
 #[derive(Debug)]
-crate struct SamplerCache {
+pub struct SamplerCache {
     device: Arc<Device>,
     inner: StagedCache<SamplerDesc, Arc<Sampler>>,
 }
 
 impl SamplerCache {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         Self {
             device,
             inner: Default::default(),
         }
     }
 
-    crate fn commit(&mut self) {
+    pub fn commit(&mut self) {
         self.inner.commit();
     }
 
-    crate fn get_committed(&self, desc: &SamplerDesc) ->
+    pub fn get_committed(&self, desc: &SamplerDesc) ->
         Option<&Arc<Sampler>>
     {
         self.inner.get_committed(desc)
     }
 
-    crate fn get_or_create(&self, desc: &SamplerDesc) -> Cow<Arc<Sampler>> {
+    pub fn get_or_create(&self, desc: &SamplerDesc) -> Cow<Arc<Sampler>> {
         self.inner.get_or_insert_with(desc, || Arc::new(Sampler::new(
             Arc::clone(&self.device),
             *desc,

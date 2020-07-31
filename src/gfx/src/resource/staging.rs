@@ -2,13 +2,12 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use derive_more::Display;
-use log::trace;
-use more_asserts::assert_le;
-
-use crate::device::{
+use device::{
     Device, Image, ImageSubresources, MemoryRegion, SampleCount, StagingBuffer,
     XferCmds, fmt_named,
 };
+use log::trace;
+use more_asserts::assert_le;
 
 #[derive(Clone, Copy, Debug, Default, Display, Eq, PartialEq)]
 #[display(fmt = "staging buffer out of memory")]
@@ -158,7 +157,7 @@ impl UploadStage {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use device::*;
     use super::*;
 
     unsafe fn staging_inner(
@@ -213,7 +212,7 @@ mod tests {
         cmds.end_xfer().end()
     }
 
-    unsafe fn stage(vars: testing::TestVars) {
+    unsafe fn stage(vars: crate::testing::TestVars) {
         let device = vars.device();
         let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 
@@ -230,7 +229,7 @@ mod tests {
         let (_, _) = staging_inner(&heap, &mut staging, pool);
     }
 
-    unsafe fn stage_validation_error(vars: testing::TestVars) {
+    unsafe fn stage_validation_error(vars: crate::testing::TestVars) {
         let device = vars.device();
         let mut staging = UploadStage::new(Arc::clone(&device), 0x10_0000);
 

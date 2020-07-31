@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use device::*;
 use log::{debug, trace};
 use prelude::*;
 
@@ -41,14 +42,14 @@ impl RenderLoop {
         Result<Self, AnyError>
     {
         let (swapchain, queues) = unsafe { init_swapchain(app_info, window)? };
-        let device = Arc::clone(&swapchain.device);
+        let device = Arc::clone(swapchain.device());
         let gfx_queue = Arc::clone(&queues[0][0]);
 
         let state = Box::new(SystemState::new(Arc::clone(&device)));
         let image_heap = ImageHeap::new(Arc::clone(&device));
         let mut resources = ResourceSystem::new(&gfx_queue);
 
-        let globals = Arc::new(Globals::new(&state, &image_heap));
+        let globals = Arc::new(Globals::new(&state));
         globals.upload_images(&mut resources);
 
         let renderer = WorldRenderer::new(
@@ -90,6 +91,10 @@ impl RenderLoop {
 
     fn state_mut(&mut self) -> &mut SystemState {
         &mut *self.state.as_mut().unwrap()
+    }
+
+    crate fn globals(&self) -> &Arc<Globals> {
+        &self.globals
     }
 
     crate fn renderer(&self) -> &WorldRenderer {

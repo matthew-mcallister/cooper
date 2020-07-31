@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use derive_more::From;
-use log::{debug, trace};
-
-use crate::device::{
+use device::{
     CmdBuffer, CmdBufferLevel, CmdPool, Device, ImageDef, ImageFlags,
     ImageHeap, ImageSubresources, Queue, SignalInfo, SubmitInfo,
     TimelineSemaphore, WaitResult, XferCmds,
 };
+use log::{debug, trace};
+
 use super::*;
 
 #[derive(Debug)]

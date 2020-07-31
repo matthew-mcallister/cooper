@@ -9,7 +9,7 @@ use crate::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use]
-crate enum WaitResult {
+pub enum WaitResult {
     Success,
     Timeout,
 }
@@ -27,19 +27,19 @@ impl TryFrom<vk::Result> for WaitResult {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct SemaphoreInner {
+pub struct SemaphoreInner {
     device: Arc<Device>,
     raw: vk::Semaphore,
     name: Option<String>,
 }
 
 #[derive(Debug)]
-crate struct BinarySemaphore {
+pub struct BinarySemaphore {
     inner: SemaphoreInner,
 }
 
 #[derive(Debug)]
-crate struct TimelineSemaphore {
+pub struct TimelineSemaphore {
     inner: SemaphoreInner,
 }
 
@@ -53,11 +53,11 @@ impl Drop for SemaphoreInner {
 }
 
 impl SemaphoreInner {
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn raw(&self) -> vk::Semaphore {
+    pub fn raw(&self) -> vk::Semaphore {
         self.raw
     }
 
@@ -75,7 +75,7 @@ impl Named for SemaphoreInner {
 }
 
 impl BinarySemaphore {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         let dt = device.table();
         let create_info = vk::SemaphoreCreateInfo::default();
         let mut sem = vk::null();
@@ -90,19 +90,19 @@ impl BinarySemaphore {
         } }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.inner.device()
     }
 
-    crate fn raw(&self) -> vk::Semaphore {
+    pub fn raw(&self) -> vk::Semaphore {
         self.inner.raw()
     }
 
-    crate fn inner_mut(&mut self) -> &mut SemaphoreInner {
+    pub fn inner_mut(&mut self) -> &mut SemaphoreInner {
         &mut self.inner
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         self.inner.set_name(name);
     }
 }
@@ -114,7 +114,7 @@ impl Named for BinarySemaphore {
 }
 
 impl TimelineSemaphore {
-    crate fn new(device: Arc<Device>, value: u64) -> Self {
+    pub fn new(device: Arc<Device>, value: u64) -> Self {
         let dt = device.table();
         let ty_create_info = vk::SemaphoreTypeCreateInfo {
             semaphore_type: vk::SemaphoreType::TIMELINE,
@@ -137,7 +137,7 @@ impl TimelineSemaphore {
         } }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         self.inner.device()
     }
 
@@ -145,15 +145,15 @@ impl TimelineSemaphore {
         self.device().table()
     }
 
-    crate fn raw(&self) -> vk::Semaphore {
+    pub fn raw(&self) -> vk::Semaphore {
         self.inner.raw()
     }
 
-    crate fn inner_mut(&mut self) -> &mut SemaphoreInner {
+    pub fn inner_mut(&mut self) -> &mut SemaphoreInner {
         &mut self.inner
     }
 
-    crate unsafe fn signal(&self, value: u64) {
+    pub unsafe fn signal(&self, value: u64) {
         trace!("TimelineSemaphore::signal(self: {:?}, value: {})",
             fmt_named(self), value);
         self.dt().signal_semaphore(&vk::SemaphoreSignalInfo {
@@ -163,7 +163,7 @@ impl TimelineSemaphore {
         });
     }
 
-    crate fn wait(&self, value: u64, timeout: u64) -> WaitResult {
+    pub fn wait(&self, value: u64, timeout: u64) -> WaitResult {
         trace!("TimelineSemaphore::wait(self: {:?}, value: {}, timeout: {})",
             fmt_named(self), value, timeout);
         unsafe {
@@ -176,7 +176,7 @@ impl TimelineSemaphore {
         }
     }
 
-    crate fn get_value(&self) -> u64 {
+    pub fn get_value(&self) -> u64 {
         let mut value = 0;
         unsafe {
             self.dt().get_semaphore_counter_value(self.raw(), &mut value)
@@ -185,7 +185,7 @@ impl TimelineSemaphore {
         value
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         self.inner.set_name(name);
     }
 }

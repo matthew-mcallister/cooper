@@ -148,6 +148,7 @@ dependencies = [
  "anyhow 1.0.31 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cooper-base 0.1.0",
+ "cooper-device 0.1.0",
  "cooper-math 0.1.0",
  "cooper-num 0.1.0",
  "cooper-prelude 0.1.0",

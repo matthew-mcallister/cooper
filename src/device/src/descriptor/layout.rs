@@ -8,7 +8,7 @@ use crate::*;
 use super::*;
 
 #[derive(Clone, Debug)]
-crate struct DescriptorSetLayout {
+pub struct DescriptorSetLayout {
     device: Arc<Device>,
     inner: vk::DescriptorSetLayout,
     flags: vk::DescriptorSetLayoutCreateFlags,
@@ -31,7 +31,7 @@ fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) -> Counts {
 }
 
 impl Layout {
-    crate unsafe fn new(
+    pub unsafe fn new(
         device: Arc<Device>,
         flags: vk::DescriptorSetLayoutCreateFlags,
         bindings: &[vk::DescriptorSetLayoutBinding],
@@ -65,34 +65,34 @@ impl Layout {
         }
     }
 
-    crate unsafe fn from_bindings(
+    pub unsafe fn from_bindings(
         device: Arc<Device>,
         bindings: &[vk::DescriptorSetLayoutBinding],
     ) -> Self {
         Self::new(device, Default::default(), bindings)
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn inner(&self) -> vk::DescriptorSetLayout {
+    pub fn inner(&self) -> vk::DescriptorSetLayout {
         self.inner
     }
 
-    crate fn flags(&self) -> vk::DescriptorSetLayoutCreateFlags {
+    pub fn flags(&self) -> vk::DescriptorSetLayoutCreateFlags {
         self.flags
     }
 
-    crate fn bindings(&self) -> &[vk::DescriptorSetLayoutBinding] {
+    pub fn bindings(&self) -> &[vk::DescriptorSetLayoutBinding] {
         &self.bindings
     }
 
-    crate fn counts(&self) -> &Counts {
+    pub fn counts(&self) -> &Counts {
         &self.counts
     }
 
-    crate fn required_pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
+    pub fn required_pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
         let mut flags = Default::default();
 
         let update_after_bind =
@@ -104,7 +104,7 @@ impl Layout {
         flags
     }
 
-    crate fn set_name(&mut self, name: impl Into<String>) {
+    pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
         unsafe { self.device().set_name(self.inner(), name); }

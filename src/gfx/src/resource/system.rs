@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::device::{Device, Image, ImageDef, ImageHeap, Queue};
+use device::{Device, Image, ImageDef, ImageHeap, Queue};
+
 use super::*;
 
 #[derive(Debug)]
@@ -69,7 +70,7 @@ impl ResourceSystem {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use device::*;
     use super::*;
 
     unsafe fn test_image(device: &Arc<Device>, width: u32, height: u32) ->
@@ -88,7 +89,7 @@ mod tests {
         ).with_name(format!("{}x{}", width, height)))
     }
 
-    unsafe fn upload(vars: testing::TestVars) {
+    unsafe fn upload(vars: crate::testing::TestVars) {
         let device = vars.device();
         let queue = vars.gfx_queue();
 
