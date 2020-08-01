@@ -30,8 +30,11 @@ pub struct DescriptorHeap {
 
 fn pool_sizes(counts: &DescriptorCounts) -> Vec<vk::DescriptorPoolSize> {
     counts.iter()
-        .filter_map(|(ty, n)| (n > 0).then_some(
-            vk::DescriptorPoolSize { ty, descriptor_count: n }
+        .filter_map(|(ty, &n)| (n > 0).then_some(
+            vk::DescriptorPoolSize {
+                ty: ty.into(),
+                descriptor_count: n,
+            }
         ))
         .collect()
 }
@@ -240,15 +243,13 @@ impl Heap {
 fn global_descriptor_counts(max_sets: u32) -> (u32, Counts) {
     #![allow(clippy::identity_op)]
     let max_descs = [
-        (vk::DescriptorType::SAMPLER,                   1 * max_sets),
-        (vk::DescriptorType::COMBINED_IMAGE_SAMPLER,    8 * max_sets),
-        (vk::DescriptorType::SAMPLED_IMAGE,             8 * max_sets),
-        (vk::DescriptorType::STORAGE_IMAGE,             1 * max_sets),
-        (vk::DescriptorType::UNIFORM_TEXEL_BUFFER,      1 * max_sets),
-        (vk::DescriptorType::STORAGE_TEXEL_BUFFER,      1 * max_sets),
-        (vk::DescriptorType::UNIFORM_BUFFER,            2 * max_sets),
-        (vk::DescriptorType::STORAGE_BUFFER,            2 * max_sets),
-        (vk::DescriptorType::INPUT_ATTACHMENT,          256),
+        (DescriptorType::Sampler,               1 * max_sets),
+        (DescriptorType::CombinedImageSampler,  8 * max_sets),
+        (DescriptorType::SampledImage,          8 * max_sets),
+        (DescriptorType::StorageImage,          1 * max_sets),
+        (DescriptorType::UniformBuffer,         2 * max_sets),
+        (DescriptorType::StorageBuffer,         2 * max_sets),
+        (DescriptorType::InputAttachment,       256),
     ].iter().cloned().collect();
     (max_sets, max_descs)
 }

@@ -96,6 +96,8 @@ impl Drop for Sampler {
     }
 }
 
+impl_device_derived!(Sampler);
+
 impl Sampler {
     pub fn new(device: Arc<Device>, desc: SamplerDesc) -> Self { unsafe {
         let dt = &*device.table;

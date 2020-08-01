@@ -21,7 +21,7 @@ crate struct StagedCache<K, V> {
     staged: Mutex<FnvHashMap<K, V>>,
 }
 
-impl<K: Eq + Hash, V> Default for StagedCache<K, V> {
+impl<K, V> Default for StagedCache<K, V> {
     fn default() -> Self {
         StagedCache {
             committed: Default::default(),

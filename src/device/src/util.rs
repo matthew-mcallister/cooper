@@ -240,17 +240,26 @@ crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
     xform.transpose().submatrix(0, 0)
 }
 
-macro_rules! set_layout_bindings {
+#[macro_export]
+macro_rules! set_layout_desc {
     ($(($($binding:tt)*)),*$(,)?) => {
-        [$(set_layout_bindings!(@binding ($($binding)*)),)*]
+        $crate::DescriptorSetLayoutDesc {
+            bindings: smallvec::smallvec![
+                $($crate::set_layout_desc!(@binding ($($binding)*)),)*
+            ],
+            ..Default::default()
+        }
     };
     (@binding (
-        $binding:expr, $type:ident$([$count:expr])? $(, $($stages:ident)+)?)
-    ) => {
-        vk::DescriptorSetLayoutBinding {
+        $binding:expr,
+        $type:ident$([$count:expr])?
+        $(, $($stages:ident)|+)?
+        $(,)?
+    )) => {
+        $crate::DescriptorSetLayoutBinding {
             binding: $binding,
-            descriptor_type: vk::DescriptorType::$type,
-            descriptor_count: { 1 $(; $count)? },
+            ty: $crate::DescriptorType::$type,
+            count: { 1 $(; $count)? },
             stage_flags: {
                 // TODO: Maybe should be VERTEX | FRAGMENT by default
                 (vk::ShaderStageFlags::ALL)
@@ -300,5 +309,26 @@ macro_rules! set_name {
         {
             $($var.set_name(stringify!($var));)*
         }
+    }
+}
+
+// Implements Hash and Eq for a VkDevice-derived object in terms of the
+// Vulkan object handle.
+macro_rules! impl_device_derived {
+    ($name:ident) => {
+        impl std::hash::Hash for $name {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.device.hash(state);
+                self.inner.hash(state);
+            }
+        }
+
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                self.inner == other.inner && self.device == other.device
+            }
+        }
+
+        impl Eq for $name {}
     }
 }

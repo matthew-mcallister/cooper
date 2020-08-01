@@ -21,7 +21,13 @@
     type_ascription,
 )]
 
-#![allow(dead_code, incomplete_features, unused_imports, unused_macros)]
+#![allow(
+    dead_code,
+    incomplete_features,
+    path_statements,
+    unused_imports,
+    unused_macros,
+)]
 #![allow(
     clippy::missing_safety_doc,
     clippy::module_inception,

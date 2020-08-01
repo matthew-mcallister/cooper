@@ -1,20 +1,38 @@
 // TODO: Choosing between uniform/storage and dynamic/static should be
 // an implementation detail.
 
+use std::borrow::Cow;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::*;
+use more_asserts::assert_lt;
+use prelude::SliceExt;
+
+use crate::{Device, Named, Sampler, StagedCache};
+use crate::util::{SmallVec, slice_eq, slice_hash};
 use super::*;
 
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
     device: Arc<Device>,
     inner: vk::DescriptorSetLayout,
-    flags: vk::DescriptorSetLayoutCreateFlags,
-    bindings: Box<[vk::DescriptorSetLayoutBinding]>,
+    desc: SetLayoutDesc,
     counts: Counts,
     name: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DescriptorSetLayoutDesc {
+    pub bindings: SmallVec<SetLayoutBinding, 4>,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DescriptorSetLayoutBinding {
+    pub binding: u32,
+    pub ty: DescriptorType,
+    pub count: u32,
+    pub stage_flags: vk::ShaderStageFlags,
+    pub samplers: Option<SmallVec<Arc<Sampler>, 2>>,
 }
 
 impl Drop for Layout {
@@ -24,52 +42,71 @@ impl Drop for Layout {
     }
 }
 
-fn count_descriptors(bindings: &[vk::DescriptorSetLayoutBinding]) -> Counts {
-    bindings.iter()
-        .map(|binding| (binding.descriptor_type, binding.descriptor_count))
-        .sum()
+impl_device_derived!(Layout);
+
+fn count_descriptors(bindings: &[SetLayoutBinding]) -> Counts {
+    bindings.iter().map(|binding| (binding.ty, binding.count)).sum()
+}
+
+fn validate_layout(desc: &SetLayoutDesc) {
+    assert_ne!(desc.bindings.len(), 0);
+    let mut b0 = desc.bindings[0].binding;
+    for binding in desc.bindings[1..].iter() {
+        assert_ne!(binding.count, 0);
+        // Ensure that there are no duplicates and there are no
+        // redundant permutations of the same bindings in the cache
+        let b1 = binding.binding;
+        assert_lt!(b0, b1);
+        b0 = b1;
+    }
+    // TODO: wrap stage flags
 }
 
 impl Layout {
-    pub unsafe fn new(
-        device: Arc<Device>,
-        flags: vk::DescriptorSetLayoutCreateFlags,
-        bindings: &[vk::DescriptorSetLayoutBinding],
-    ) -> Self {
-        let dt = &*device.table;
+    pub fn new(device: Arc<Device>, desc: SetLayoutDesc) -> Self {
+        let dt = device.table();
 
-        // Validation
-        {
-            for binding in bindings.iter() {
-                assert!(is_valid_type(binding.descriptor_type));
+        validate_layout(&desc);
+
+        // TODO: I think this could be made simpler with a staticvec
+        let mut samplers: SmallVec<_, 4> = SmallVec::new();
+        let bindings: SmallVec<_, 4> = desc.bindings.iter().map(|binding| {
+            if let Some(samplers) = &binding.samplers {
+                assert_eq!(samplers.len(), binding.count as usize);
             }
-        }
+            let vk_samplers: SmallVec<_, 2> = binding.samplers.iter()
+                .flat_map(|samplers| samplers.iter())
+                .map(|sampler| sampler.inner())
+                .collect();
+            let p_immutable_samplers = vk_samplers.c_ptr();
+            samplers.push(vk_samplers);
+            vk::DescriptorSetLayoutBinding {
+                binding: binding.binding,
+                descriptor_type: binding.ty.into(),
+                descriptor_count: binding.count,
+                stage_flags: binding.stage_flags,
+                p_immutable_samplers,
+            }
+        }).collect();
 
-        let create_info = vk::DescriptorSetLayoutCreateInfo {
-            flags,
+        let info = vk::DescriptorSetLayoutCreateInfo {
             binding_count: bindings.len() as _,
             p_bindings: bindings.as_ptr(),
             ..Default::default()
         };
-        let counts = count_descriptors(bindings);
         let mut inner = vk::null();
-        dt.create_descriptor_set_layout(&create_info, ptr::null(), &mut inner)
-            .check().unwrap();
+        unsafe {
+            dt.create_descriptor_set_layout(&info, ptr::null(), &mut inner)
+                .check().unwrap();
+        }
+
         Self {
             device,
             inner,
-            flags,
-            bindings: bindings.into(),
-            counts,
+            counts: count_descriptors(&desc.bindings),
+            desc,
             name: None,
         }
-    }
-
-    pub unsafe fn from_bindings(
-        device: Arc<Device>,
-        bindings: &[vk::DescriptorSetLayoutBinding],
-    ) -> Self {
-        Self::new(device, Default::default(), bindings)
     }
 
     pub fn device(&self) -> &Arc<Device> {
@@ -80,12 +117,12 @@ impl Layout {
         self.inner
     }
 
-    pub fn flags(&self) -> vk::DescriptorSetLayoutCreateFlags {
-        self.flags
+    pub fn desc(&self) -> &SetLayoutDesc {
+        &self.desc
     }
 
-    pub fn bindings(&self) -> &[vk::DescriptorSetLayoutBinding] {
-        &self.bindings
+    pub fn bindings(&self) -> &[SetLayoutBinding] {
+        &self.desc().bindings
     }
 
     pub fn counts(&self) -> &Counts {
@@ -93,15 +130,7 @@ impl Layout {
     }
 
     pub fn required_pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
-        let mut flags = Default::default();
-
-        let update_after_bind =
-            vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL_BIT_EXT;
-        if self.flags.contains(update_after_bind) {
-            flags |= vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND_BIT_EXT;
-        }
-
-        flags
+        Default::default()
     }
 
     pub fn set_name(&mut self, name: impl Into<String>) {
@@ -114,5 +143,40 @@ impl Layout {
 impl Named for Layout {
     fn name(&self) -> Option<&str> {
         Some(&self.name.as_ref()?)
+    }
+}
+
+#[derive(Debug)]
+pub struct DescriptorSetLayoutCache {
+    device: Arc<Device>,
+    inner: StagedCache<SetLayoutDesc, Arc<SetLayout>>,
+}
+
+impl SetLayoutCache {
+    pub fn new(device: Arc<Device>) -> Self {
+        Self {
+            device,
+            inner: Default::default(),
+        }
+    }
+
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    pub fn commit(&mut self) {
+        self.inner.commit();
+    }
+
+    pub fn get_committed(&self, desc: &SetLayoutDesc) ->
+        Option<&Arc<SetLayout>>
+    {
+        self.inner.get_committed(desc)
+    }
+
+    pub fn get_or_create(&self, desc: &SetLayoutDesc) -> Cow<Arc<SetLayout>> {
+        self.inner.get_or_insert_with(desc, || {
+            Arc::new(SetLayout::new(Arc::clone(self.device()), desc.clone()))
+        })
     }
 }

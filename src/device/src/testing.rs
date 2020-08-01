@@ -64,7 +64,7 @@ impl TestContext {
 impl unit::PanicTestInvoker<TestData> for TestContext {
     fn invoke(&self, test: &Test) {
         let vars = unsafe { self.create_swapchain() }
-            .unwrap_or_else(|e| panic!("failed to initialize: {}", e); });
+            .unwrap_or_else(|e| panic!("failed to initialize: {}", e));
         unsafe { (test.data())(vars); }
     }
 }
@@ -280,25 +280,19 @@ impl TrivialRenderer {
 
     crate fn new(resources: &TestResources) -> Self {
         let device = resources.device();
+        let dev = || Arc::clone(device);
         let descriptors = &resources.descriptors;
         let shaders = &resources.shaders;
 
-        let bindings = set_layout_bindings![
-            (0, UNIFORM_BUFFER),
-            (1, STORAGE_BUFFER),
-        ];
-        let layout0 = unsafe {
-            Arc::new(SetLayout::from_bindings(Arc::clone(&device), &bindings))
-        };
-
-        let bindings = set_layout_bindings![
-            (0, COMBINED_IMAGE_SAMPLER),
-            (1, STORAGE_IMAGE),
-            (2, SAMPLED_IMAGE),
-        ];
-        let layout1 = unsafe {
-            Arc::new(SetLayout::from_bindings(Arc::clone(&device), &bindings))
-        };
+        let layout0 = Arc::new(SetLayout::new(dev(), set_layout_desc![
+            (0, UniformBuffer),
+            (1, StorageBuffer),
+        ]));
+        let layout1 = Arc::new(SetLayout::new(dev(), set_layout_desc![
+            (0, CombinedImageSampler),
+            (1, StorageImage),
+            (2, SampledImage),
+        ]));
 
         let vert_shader = Arc::new(Arc::clone(&shaders.trivial_vert).into());
         let frag_shader = Arc::new(Arc::clone(&shaders.trivial_frag).into());

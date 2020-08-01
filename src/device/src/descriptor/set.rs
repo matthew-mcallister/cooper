@@ -61,18 +61,19 @@ impl Set {
 
         let layout_binding = &self.layout.bindings()[binding as usize];
         let len = buffers.len() as u32;
-        let ty = layout_binding.descriptor_type;
+        let ty = layout_binding.ty;
 
         // Validation
         {
             // N.B. Overrunning writes are actually allowed by the spec
-            assert!(first_element + len <= layout_binding.descriptor_count);
+            assert!(first_element + len <= layout_binding.count);
             for buffer in buffers.iter() {
-                match buffer.buffer.binding().unwrap() {
-                    BufferBinding::Uniform => assert!(is_uniform_buffer(ty)),
-                    BufferBinding::Storage => assert!(is_storage_buffer(ty)),
+                let required = match buffer.buffer.binding().unwrap() {
+                    BufferBinding::Uniform => DescriptorType::UniformBuffer,
+                    BufferBinding::Storage => DescriptorType::StorageBuffer,
                     _ => panic!("incompatible descriptor type"),
                 };
+                assert_eq!(ty, required);
             }
         }
 
@@ -84,7 +85,7 @@ impl Set {
             dst_binding: binding,
             dst_array_element: first_element,
             descriptor_count: info.len() as _,
-            descriptor_type: ty,
+            descriptor_type: ty.into(),
             p_buffer_info: info.as_ptr(),
             ..Default::default()
         }];
@@ -136,36 +137,36 @@ impl Set {
         layout: vk::ImageLayout,
         sampler: Option<&Arc<Sampler>>,
     ) {
-        use vk::DescriptorType as Dt;
+        use DescriptorType as Dt;
         use vk::ImageLayout as Il;
 
         let dt = &self.layout.device().table;
         let layout_binding = &self.layout.bindings()[binding as usize];
-        let ty = layout_binding.descriptor_type;
+        let ty = layout_binding.ty;
 
         let sampler = tryopt!(sampler?.inner()).unwrap_or(vk::null());
 
         // Validation
         {
-            assert!(element < layout_binding.descriptor_count);
+            assert!(element < layout_binding.count);
             let flags = view.image().flags();
             match ty {
-                Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
+                Dt::CombinedImageSampler | Dt::SampledImage =>
                     assert!(!flags.contains(ImageFlags::NO_SAMPLE)),
-                Dt::STORAGE_IMAGE =>
+                Dt::StorageImage =>
                     assert!(flags.contains(ImageFlags::STORAGE)),
-                Dt::INPUT_ATTACHMENT =>
+                Dt::InputAttachment =>
                     assert!(flags.contains(ImageFlags::INPUT_ATTACHMENT)),
                 _ => unreachable!(),
             }
             match ty {
-                Dt::COMBINED_IMAGE_SAMPLER | Dt::SAMPLED_IMAGE =>
+                Dt::CombinedImageSampler | Dt::SampledImage =>
                     assert_eq!(layout, Il::SHADER_READ_ONLY_OPTIMAL),
-                Dt::STORAGE_IMAGE => assert_eq!(layout, Il::GENERAL),
+                Dt::StorageImage => assert_eq!(layout, Il::GENERAL),
                 _ => {},
             }
             // combined image/sampler <=> sampler not null
-            assert_eq!(ty == Dt::COMBINED_IMAGE_SAMPLER, !sampler.is_null());
+            assert_eq!(ty == Dt::CombinedImageSampler, !sampler.is_null());
         }
 
         let info = [vk::DescriptorImageInfo {
@@ -178,7 +179,7 @@ impl Set {
             dst_binding: binding,
             dst_array_element: element,
             descriptor_count: info.len() as _,
-            descriptor_type: ty,
+            descriptor_type: ty.into(),
             p_image_info: info.as_ptr(),
             ..Default::default()
         }];

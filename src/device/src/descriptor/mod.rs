@@ -1,44 +1,59 @@
+use base::EnumVector;
+use derivative::Derivative;
+use enum_map::Enum;
+
 use self::{
     DescriptorCounts as Counts, DescriptorHeap as Heap, DescriptorPool as Pool,
     DescriptorSet as Set, DescriptorSetLayout as Layout,
 };
 
-pub use self::DescriptorSetLayout as SetLayout;
+// Perhaps these should always go by the short name
+pub use self::{
+    DescriptorSetLayout as SetLayout, DescriptorSetLayoutDesc as SetLayoutDesc,
+    DescriptorSetLayoutBinding as SetLayoutBinding,
+    DescriptorSetLayoutCache as SetLayoutCache,
+};
 
-mod count;
 mod layout;
 mod pool;
 mod set;
 
-pub use count::*;
 pub use layout::*;
 pub use pool::*;
 pub use set::*;
 
-fn is_valid_type(ty: vk::DescriptorType) -> bool {
-    // Not supported yet: texel buffers, dynamic buffers
-    [
-        vk::DescriptorType::SAMPLER,
-        vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-        vk::DescriptorType::SAMPLED_IMAGE,
-        vk::DescriptorType::STORAGE_IMAGE,
-        vk::DescriptorType::UNIFORM_BUFFER,
-        vk::DescriptorType::STORAGE_BUFFER,
-        vk::DescriptorType::INPUT_ATTACHMENT,
-    ].contains(&ty)
+wrap_vk_enum! {
+    #[derive(Derivative, Enum)]
+    #[derivative(Default)]
+    pub enum DescriptorType {
+        #[derivative(Default)]
+        Sampler = SAMPLER,
+        CombinedImageSampler = COMBINED_IMAGE_SAMPLER,
+        SampledImage = SAMPLED_IMAGE,
+        StorageImage = STORAGE_IMAGE,
+        UniformBuffer = UNIFORM_BUFFER,
+        StorageBuffer = STORAGE_BUFFER,
+        InputAttachment = INPUT_ATTACHMENT,
+    }
 }
 
-fn is_buffer(ty: vk::DescriptorType) -> bool {
-    (ty == vk::DescriptorType::UNIFORM_BUFFER)
-        | (ty == vk::DescriptorType::STORAGE_BUFFER)
-}
+type DescriptorCounts = EnumVector<DescriptorType, u32>;
 
-fn is_uniform_buffer(ty: vk::DescriptorType) -> bool {
-    ty == vk::DescriptorType::UNIFORM_BUFFER
-}
+impl DescriptorType {
+    fn is_buffer(self) -> bool {
+        match self {
+            Self::UniformBuffer | Self::StorageBuffer => true,
+            _ => false,
+        }
+    }
 
-fn is_storage_buffer(ty: vk::DescriptorType) -> bool {
-    ty == vk::DescriptorType::STORAGE_BUFFER
+    fn is_image(self) -> bool {
+        match self {
+            Self::CombinedImageSampler | Self::SampledImage
+                | Self::StorageImage | Self::InputAttachment => true,
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -49,38 +64,7 @@ mod tests {
     use crate::testing::*;
     use super::*;
 
-    unsafe fn constant_buffer_layout(device: &Arc<Device>) ->
-        Arc<DescriptorSetLayout>
-    {
-        let device = Arc::clone(device);
-        let bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
-                    | vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            },
-        ];
-        DescriptorSetLayout::from_bindings(device, &bindings).into()
-    }
-
-    unsafe fn material_layout(device: &Arc<Device>) ->
-        Arc<DescriptorSetLayout>
-    {
-        let device = Arc::clone(device);
-        let bindings = [vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 3,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-            ..Default::default()
-        }];
-        DescriptorSetLayout::from_bindings(device, &bindings).into()
-    }
-
-    unsafe fn alloc_test(vars: TestVars) {
+    unsafe fn alloc(vars: TestVars) {
         let device = vars.device();
 
         let (max_sets, descriptor_counts) = frame_descriptor_counts();
@@ -90,16 +74,27 @@ mod tests {
             descriptor_counts,
             Lifetime::Static,
         );
-        let constant_buffer_layout = constant_buffer_layout(&device);
-        let material_layout = material_layout(&device);
+
+        let constant_buffer_layout = Arc::new(SetLayout::new(
+            Arc::clone(device),
+            set_layout_desc![
+                (0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),
+            ],
+        ));
+        let material_layout = Arc::new(SetLayout::new(
+            Arc::clone(device),
+            set_layout_desc![
+                (0, CombinedImageSampler[3], FRAGMENT_BIT),
+            ],
+        ));
 
         let set0 = pool.alloc(&constant_buffer_layout);
         let sets = pool.alloc_many(&material_layout, 3);
 
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 4);
-        assert_eq!(used[vk::DescriptorType::STORAGE_BUFFER], 1);
-        assert_eq!(used[vk::DescriptorType::COMBINED_IMAGE_SAMPLER], 9);
+        assert_eq!(used[DescriptorType::StorageBuffer], 1);
+        assert_eq!(used[DescriptorType::CombinedImageSampler], 9);
 
         assert!(!sets.iter().any(|set| set.inner().is_null()));
         assert_ne!(sets[0].inner(), sets[1].inner());
@@ -109,21 +104,19 @@ mod tests {
         pool.free(&set0);
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 3);
-        assert_eq!(used[vk::DescriptorType::STORAGE_BUFFER], 0);
+        assert_eq!(used[DescriptorType::StorageBuffer], 0);
     }
 
-    unsafe fn write_test(vars: TestVars) {
-        let device = vars.device();
+    unsafe fn write(vars: TestVars) {
+        let device = Arc::clone(vars.device());
         let resources = TestResources::new(&device);
         let descriptors = &resources.descriptors;
 
-        let bindings = set_layout_bindings![
-            (0, UNIFORM_BUFFER[2]),
-            (1, SAMPLED_IMAGE),
-            (2, COMBINED_IMAGE_SAMPLER[2]),
-        ];
-        let layout = Arc::new(SetLayout::from_bindings(
-            Arc::clone(&device), &bindings));
+        let layout = Arc::new(SetLayout::new(device, set_layout_desc![
+            (0, UniformBuffer[2]),
+            (1, SampledImage),
+            (2, CombinedImageSampler[2]),
+        ]));
 
         let mut desc = descriptors.alloc(Lifetime::Static, &layout);
         let buffers = vec![resources.empty_uniform_buffer.range(); 2];
@@ -139,9 +132,32 @@ mod tests {
         );
     }
 
+    fn layout_cache(vars: TestVars) {
+        let mut cache = SetLayoutCache::new(Arc::clone(vars.device()));
+        let desc = set_layout_desc![
+            (0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),
+        ];
+        let layout: Arc<_> = cache.get_or_create(&desc).into_owned();
+        assert_eq!(layout.desc(), &desc);
+        let layout1 = cache.get_or_create(&desc);
+        assert_eq!(&*layout as *const _, &**layout1 as *const _);
+        cache.commit();
+        let layout2 = cache.get_committed(&desc).unwrap();
+        assert_eq!(&*layout as *const _, &**layout2 as *const _);
+
+        let desc = set_layout_desc![
+            (0, SampledImage, FRAGMENT_BIT),
+        ];
+        let layout: Arc<_> = cache.get_or_create(&desc).into_owned();
+        assert_eq!(layout.desc(), &desc);
+        let layout1 = cache.get_or_create(&desc);
+        assert_eq!(&*layout as *const _, &**layout1 as *const _);
+    }
+
     unit::declare_tests![
-        alloc_test,
-        write_test,
+        alloc,
+        write,
+        layout_cache,
     ];
 }
 

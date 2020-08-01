@@ -2,28 +2,19 @@ use std::ffi::CString;
 use std::ptr;
 use std::sync::Arc;
 
-use derivative::Derivative;
 use prelude::*;
 
 use crate::*;
 
-#[derive(Derivative)]
-#[derivative(Debug)]
+// TODO: Give a debug name to this
 pub struct Device {
-    #[derivative(Debug = "ignore")]
     crate table: Arc<vkl::DeviceTable>,
-    #[derivative(Debug = "ignore")]
     crate instance: Arc<Instance>,
-    #[derivative(Debug = "ignore")]
     crate app_info: Arc<AppInfo>,
     crate pdev: vk::PhysicalDevice,
-    #[derivative(Debug = "ignore")]
     crate props: vk::PhysicalDeviceProperties,
-    #[derivative(Debug = "ignore")]
     crate queue_families: Vec<vk::QueueFamilyProperties>,
-    #[derivative(Debug = "ignore")]
     crate mem_props: vk::PhysicalDeviceMemoryProperties,
-    #[derivative(Debug = "ignore")]
     crate features: vk::PhysicalDeviceFeatures,
 }
 
@@ -33,6 +24,30 @@ impl Drop for Device {
         unsafe {
             dt.destroy_device(ptr::null());
         }
+    }
+}
+
+// The hash and eq impls operate solely on the VkDevice handle, which
+// should be a globally unique pointer.
+impl std::hash::Hash for Device {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.table.device.hash(state);
+    }
+}
+
+impl PartialEq for Device {
+    fn eq(&self, other: &Self) -> bool {
+        self.table.device == other.table.device
+    }
+}
+
+impl Eq for Device {}
+
+impl std::fmt::Debug for Device {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Device")
+            .field("pdev", &self.pdev)
+            .finish()
     }
 }
 
