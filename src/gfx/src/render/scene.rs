@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use device::{
-    BufferRange, DescriptorSet, DescriptorSetLayout, Device, Lifetime,
+    BufferRange, DescriptorSet, DescriptorSetLayout, Lifetime, SetLayoutCache,
 };
 use math::{Matrix4, Matrix4x3};
 
@@ -33,28 +33,14 @@ enum Binding {
 }
 
 impl SceneDescriptors {
-    crate fn create_layout(device: Arc<Device>) -> Arc<DescriptorSetLayout> {
-        let bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: Binding::ViewUniforms as _,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT
-                    | vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            },
-            vk::DescriptorSetLayoutBinding {
-                binding: Binding::InstanceUniforms as _,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX_BIT,
-                ..Default::default()
-            },
-        ];
-        let mut layout =
-            unsafe { DescriptorSetLayout::from_bindings(device, &bindings) };
-        layout.set_name("scene_descriptors");
-        Arc::new(layout)
+    crate fn create_layout(layouts: &SetLayoutCache) ->
+        Arc<DescriptorSetLayout>
+    {
+        layouts.get_or_create_named(&device::set_layout_desc![
+            (Binding::ViewUniforms as _, UniformBuffer,
+                VERTEX_BIT | FRAGMENT_BIT),
+            (Binding::InstanceUniforms as _, StorageBuffer, VERTEX_BIT),
+        ], Some("scene_descriptors".to_owned())).into_owned()
     }
 
     pub(super) fn new(state: &SystemState, globals: &Globals) -> Self {

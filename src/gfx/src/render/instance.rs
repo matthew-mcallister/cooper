@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use device::*;
+use smallvec::smallvec;
 
 use crate::*;
 
@@ -55,7 +56,7 @@ unsafe fn render_instances(
         desc.stages = material.select_shaders();
 
         let set_layouts = &mut desc.layout.set_layouts;
-        *set_layouts = vec![Arc::clone(descriptors.layout())];
+        *set_layouts = smallvec![Arc::clone(descriptors.layout())];
         tryopt! {
             set_layouts.push(Arc::clone(material.desc()?.layout()));
         };

@@ -240,28 +240,6 @@ crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
     xform.transpose().submatrix(0, 0)
 }
 
-macro_rules! set_layout_bindings {
-    ($(($($binding:tt)*)),*$(,)?) => {
-        [$(set_layout_bindings!(@binding ($($binding)*)),)*]
-    };
-    (@binding (
-        $binding:expr, $type:ident$([$count:expr])? $(, $($stages:ident)+)?)
-    ) => {
-        vk::DescriptorSetLayoutBinding {
-            binding: $binding,
-            descriptor_type: vk::DescriptorType::$type,
-            descriptor_count: { 1 $(; $count)? },
-            stage_flags: {
-                // TODO: Maybe should be VERTEX | FRAGMENT by default
-                (vk::ShaderStageFlags::ALL)
-                $(; vk::ShaderStageFlags::empty()
-                    $(| vk::ShaderStageFlags::$stages)*)?
-            },
-            ..Default::default()
-        }
-    };
-}
-
 macro_rules! wrap_vk_enum {
     (
         $(#[$($meta:meta)*])*

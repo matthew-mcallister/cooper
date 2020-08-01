@@ -22,20 +22,10 @@ impl TextureVisMaterialFactory {
         globals: &Arc<Globals>,
         slot: MaterialImage,
     ) -> Self {
-        let bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: MaterialImage::SIZE as u32,
-                stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
-                ..Default::default()
-            },
-        ];
-        let layout = unsafe { Arc::new(dev::DescriptorSetLayout::new(
-            Arc::clone(state.device()),
-            Default::default(),
-            &bindings,
-        )) };
+        let count = MaterialImage::SIZE as u32;
+        let layout = state.set_layouts.get_or_create(&dev::set_layout_desc![
+            (0, CombinedImageSampler[count], FRAGMENT_BIT),
+        ]).into_owned();
 
         // TODO: This could easily be made into a macro. Or a function
         // taking an iterator. Or, better yet, ShaderSpec could just

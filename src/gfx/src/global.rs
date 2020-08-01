@@ -103,7 +103,7 @@ impl Globals {
         let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
 
         let scene_desc_layout =
-            SceneDescriptors::create_layout(Arc::clone(&device));
+            SceneDescriptors::create_layout(&state.set_layouts);
 
         Globals {
             device,
@@ -141,32 +141,32 @@ impl Globals {
         desc: &mut DescriptorSet,
         binding: u32,
     ) {
-        use vk::DescriptorType as Dt;
+        use DescriptorType::*;
         let layout_binding = &layout.bindings()[binding as usize];
-        let count = layout_binding.descriptor_count as usize;
-        match layout_binding.descriptor_type {
-            Dt::SAMPLER => todo!(),
-            Dt::COMBINED_IMAGE_SAMPLER => {
+        let count = layout_binding.count as usize;
+        match layout_binding.ty {
+            Sampler => todo!(),
+            CombinedImageSampler => {
                 let views = vec![&self.immediate_image_2d; count];
                 let samplers = vec![&self.empty_sampler; count];
                 let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
                 desc.write_images(binding, 0, &views, layout, Some(&samplers));
             },
-            Dt::SAMPLED_IMAGE => {
+            SampledImage => {
                 let views = vec![&self.immediate_image_2d; count];
                 let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
                 desc.write_images(binding, 0, &views, layout, None);
             },
-            Dt::STORAGE_IMAGE => {
+            StorageImage => {
                 let views = vec![&self.immediate_storage_image_2d; count];
                 let layout = vk::ImageLayout::GENERAL;
                 desc.write_images(binding, 0, &views, layout, None);
             },
-            Dt::UNIFORM_BUFFER => {
+            UniformBuffer => {
                 let bufs = vec![self.empty_uniform_buffer.range(); count];
                 desc.write_buffers(binding, 0, &bufs);
             },
-            Dt::STORAGE_BUFFER => {
+            StorageBuffer => {
                 let bufs = vec![self.empty_storage_buffer.range(); count];
                 desc.write_buffers(binding, 0, &bufs);
             },
@@ -236,19 +236,18 @@ mod tests {
         let state = SystemState::new(Arc::clone(&device));
         let globals = Globals::new(&state, );
 
-        let bindings = set_layout_bindings![
-            (0, UNIFORM_BUFFER),
-            (1, UNIFORM_BUFFER[2]),
-            (2, STORAGE_BUFFER),
-            (3, STORAGE_BUFFER[2]),
-            (4, COMBINED_IMAGE_SAMPLER),
-            (5, COMBINED_IMAGE_SAMPLER[2]),
-            (6, SAMPLED_IMAGE),
-            (7, SAMPLED_IMAGE[2]),
-            (8, STORAGE_IMAGE),
-            (9, STORAGE_IMAGE[2]),
-        ];
-        let layout = Arc::new(SetLayout::from_bindings(device, &bindings));
+        let layout = Arc::new(SetLayout::new(device, set_layout_desc![
+            (0, UniformBuffer),
+            (1, UniformBuffer[2]),
+            (2, StorageBuffer),
+            (3, StorageBuffer[2]),
+            (4, CombinedImageSampler),
+            (5, CombinedImageSampler[2]),
+            (6, SampledImage),
+            (7, SampledImage[2]),
+            (8, StorageImage),
+            (9, StorageImage[2]),
+        ]));
 
         let mut desc = state.descriptors.alloc(Lifetime::Frame, &layout);
         globals.write_empty_descriptors(&mut desc);

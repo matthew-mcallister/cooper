@@ -174,9 +174,20 @@ impl SetLayoutCache {
         self.inner.get_committed(desc)
     }
 
-    pub fn get_or_create(&self, desc: &SetLayoutDesc) -> Cow<Arc<SetLayout>> {
-        self.inner.get_or_insert_with(desc, || {
-            Arc::new(SetLayout::new(Arc::clone(self.device()), desc.clone()))
+    pub fn get_or_create_named(
+        &self,
+        desc: &SetLayoutDesc,
+        name: Option<String>,
+    ) -> Cow<Arc<SetLayout>> {
+        self.inner.get_or_insert_with(desc, move || {
+            let mut layout =
+                SetLayout::new(Arc::clone(self.device()), desc.clone());
+            tryopt! { layout.set_name(name?) };
+            Arc::new(layout)
         })
+    }
+
+    pub fn get_or_create(&self, desc: &SetLayoutDesc) -> Cow<Arc<SetLayout>> {
+        self.get_or_create_named(desc, None)
     }
 }

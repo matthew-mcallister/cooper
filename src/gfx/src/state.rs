@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use device::{
     BufferHeap, DescriptorHeap, Device, ImageHeap, PipelineCache, SamplerCache,
+    SetLayoutCache,
 };
 use log::trace;
 
@@ -11,6 +12,7 @@ crate struct SystemState {
     crate buffers: Arc<BufferHeap>,
     crate image_heap: Arc<ImageHeap>,
     crate descriptors: Arc<DescriptorHeap>,
+    crate set_layouts: SetLayoutCache,
     crate pipelines: PipelineCache,
     crate samplers: SamplerCache,
     //shader_specs: ..., (maybe)
@@ -22,6 +24,7 @@ impl SystemState {
         let buffers = BufferHeap::new(dev());
         let image_heap = Arc::new(ImageHeap::new(dev()));
         let descriptors = Arc::new(DescriptorHeap::new(&device));
+        let set_layouts = SetLayoutCache::new(dev());
         let pipelines = PipelineCache::new(&device);
         let samplers = SamplerCache::new(dev());
         SystemState {
@@ -29,6 +32,7 @@ impl SystemState {
             buffers,
             image_heap,
             descriptors,
+            set_layouts,
             pipelines,
             samplers,
         }
