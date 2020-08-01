@@ -93,14 +93,6 @@ impl RenderLoop {
         &mut *self.state.as_mut().unwrap()
     }
 
-    crate fn globals(&self) -> &Arc<Globals> {
-        &self.globals
-    }
-
-    crate fn renderer(&self) -> &WorldRenderer {
-        &self.renderer
-    }
-
     crate fn frame_num(&self) -> u64 {
         self.frame_num
     }
@@ -212,6 +204,7 @@ impl SwapchainControl {
         self.acquired_image.unwrap()
     }
 
+    #[allow(dead_code)]
     fn swapchain_mut(&mut self) -> &mut Swapchain {
         &mut self.swapchain
     }

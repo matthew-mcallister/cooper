@@ -39,6 +39,7 @@ impl UploadStage {
         }
     }
 
+    #[allow(dead_code)]
     crate unsafe fn stage_buffer(&self) {
         // No need to stage buffers on UMA
         // TODO: assert!(!buffer.is_device_local());

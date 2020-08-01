@@ -38,6 +38,7 @@ impl SystemState {
         }
     }
 
+    #[allow(dead_code)]
     crate fn device(&self) -> &Arc<Device> {
         &self.device
     }

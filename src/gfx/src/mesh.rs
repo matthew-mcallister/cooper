@@ -39,6 +39,7 @@ impl RenderMesh {
         self.vertex_count
     }
 
+    #[allow(dead_code)]
     crate fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer> {
         &self.bindings
     }
@@ -127,6 +128,7 @@ impl<'a> RenderMeshBuilder<'a> {
     }
 }
 
+#[allow(dead_code)]
 impl AttrBuffer {
     crate fn data(&self) -> BufferRange<'_> {
         self.alloc.range()

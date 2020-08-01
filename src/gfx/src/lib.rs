@@ -21,7 +21,7 @@
     type_ascription,
 )]
 
-#![allow(dead_code, incomplete_features)]
+#![allow(incomplete_features)]
 
 #![allow(
     clippy::missing_safety_doc,
@@ -39,7 +39,6 @@ macro_rules! test_type {
 
 #[macro_use]
 mod util;
-crate use util::*;
 
 mod global;
 mod material;
@@ -69,7 +68,6 @@ pub use device::{
 };
 
 unit::collect_tests![
-    global,
     mesh,
     resource,
     world,

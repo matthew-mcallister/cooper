@@ -133,6 +133,7 @@ impl UploadScheduler {
         }
     }
 
+    #[allow(dead_code)]
     crate fn device(&self) -> &Arc<Device> {
         self.sem.device()
     }
@@ -192,6 +193,7 @@ impl UploadScheduler {
         unsafe { self.queue.submit(&submissions); }
     }
 
+    #[allow(dead_code)]
     crate fn wait_with_timeout(&mut self, timeout: u64) -> WaitResult {
         let res = self.sem.wait(self.pending_batch, timeout);
         if res == WaitResult::Success {
@@ -200,6 +202,7 @@ impl UploadScheduler {
         res
     }
 
+    #[allow(dead_code)]
     crate fn flush(
         &mut self,
         resources: &mut ResourceStateTable,

@@ -118,6 +118,7 @@ impl WorldRenderer {
     }
 
     /// Used when recreating the swapchain
+    #[allow(dead_code)]
     crate fn into_inner(self) -> RenderScheduler {
         self.scheduler
     }

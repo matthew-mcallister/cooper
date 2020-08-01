@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crossbeam::atomic::AtomicCell;
 use derivative::Derivative;
 use device::*;
 
@@ -27,6 +26,7 @@ crate struct RenderPassNode {
 }
 
 impl RenderPassNode {
+    #[allow(dead_code)]
     crate fn new(framebuffer: Arc<Framebuffer>) -> Self {
         Self::with_clear(framebuffer, Vec::new())
     }
@@ -118,19 +118,4 @@ impl RenderScheduler {
         pool.free(&self.buffers);
         self.buffers.clear();
     }
-}
-
-crate type SharedBox<T> = Arc<AtomicCell<Option<Box<T>>>>;
-
-/// Creates a task with an asynchronous return value.
-crate fn subpass_task<T, V, F>(f: F) -> (SharedBox<T>, SubpassTask)
-where
-    T: Send + 'static,
-    V: Into<Box<T>>,
-    F: FnOnce(&mut SubpassCmds) -> V + Send + 'static,
-{
-    let ret = Arc::new(AtomicCell::new(None));
-    let ret2 = Arc::clone(&ret);
-    let g: SubpassTask = Box::new(move |x| { ret2.store(Some(f(x).into())); });
-    (ret, g)
 }

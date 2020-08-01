@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use device::*;
-use log::trace;
 
 use crate::*;
 
@@ -126,54 +125,6 @@ impl Globals {
             0,
         );
     }
-
-    // TODO: This is obsolete
-    crate unsafe fn write_empty_descriptors(&self, desc: &mut DescriptorSet) {
-        let layout = Arc::clone(&desc.layout());
-        for i in 0..layout.bindings().len() {
-            self.write_empty_descriptors_binding(&layout, desc, i as _);
-        }
-    }
-
-    crate unsafe fn write_empty_descriptors_binding(
-        &self,
-        layout: &Arc<SetLayout>,
-        desc: &mut DescriptorSet,
-        binding: u32,
-    ) {
-        use DescriptorType::*;
-        let layout_binding = &layout.bindings()[binding as usize];
-        let count = layout_binding.count as usize;
-        match layout_binding.ty {
-            Sampler => todo!(),
-            CombinedImageSampler => {
-                let views = vec![&self.immediate_image_2d; count];
-                let samplers = vec![&self.empty_sampler; count];
-                let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-                desc.write_images(binding, 0, &views, layout, Some(&samplers));
-            },
-            SampledImage => {
-                let views = vec![&self.immediate_image_2d; count];
-                let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-                desc.write_images(binding, 0, &views, layout, None);
-            },
-            StorageImage => {
-                let views = vec![&self.immediate_storage_image_2d; count];
-                let layout = vk::ImageLayout::GENERAL;
-                desc.write_images(binding, 0, &views, layout, None);
-            },
-            UniformBuffer => {
-                let bufs = vec![self.empty_uniform_buffer.range(); count];
-                desc.write_buffers(binding, 0, &bufs);
-            },
-            StorageBuffer => {
-                let bufs = vec![self.empty_storage_buffer.range(); count];
-                desc.write_buffers(binding, 0, &bufs);
-            },
-            _ => trace!("uninitialized descriptor: binding: {}, layout: {:?}",
-                binding, layout),
-        }
-    }
 }
 
 mod shader_sources {
@@ -226,34 +177,3 @@ impl GlobalShaders {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    unsafe fn write_empty(vars: crate::testing::TestVars) {
-        let device = Arc::clone(vars.device());
-        let state = SystemState::new(Arc::clone(&device));
-        let globals = Globals::new(&state, );
-
-        let layout = Arc::new(SetLayout::new(device, set_layout_desc![
-            (0, UniformBuffer),
-            (1, UniformBuffer[2]),
-            (2, StorageBuffer),
-            (3, StorageBuffer[2]),
-            (4, CombinedImageSampler),
-            (5, CombinedImageSampler[2]),
-            (6, SampledImage),
-            (7, SampledImage[2]),
-            (8, StorageImage),
-            (9, StorageImage[2]),
-        ]));
-
-        let mut desc = state.descriptors.alloc(Lifetime::Frame, &layout);
-        globals.write_empty_descriptors(&mut desc);
-    }
-
-    unit::declare_tests![write_empty];
-}
-
-unit::collect_tests![tests];

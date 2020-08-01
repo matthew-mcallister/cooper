@@ -93,6 +93,7 @@ impl unit::PanicTestInvoker<IntegrationTestData> for TestContext {
     }
 }
 
+#[allow(dead_code)]
 impl TestVars {
     crate fn swapchain(&self) -> &Swapchain {
         &self.swapchain

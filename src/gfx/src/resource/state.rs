@@ -79,6 +79,7 @@ impl ResourceStateTable {
         info.resource.as_ref()
     }
 
+    #[allow(dead_code)]
     crate fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
         self.images.remove(ByPtr::by_ptr(image));
     }

@@ -27,6 +27,7 @@ impl MaterialStateTable {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn get_state(&self, def: &Arc<MaterialDef>) -> ResourceState {
         tryopt!(resource_state(self.materials.get(ByPtr::by_ptr(def))))
             .unwrap_or(ResourceState::Unavailable)
@@ -49,6 +50,7 @@ impl MaterialStateTable {
     }
 }
 
+#[allow(dead_code)]
 fn resource_state(state: Option<&Arc<Material>>) -> ResourceState {
     if state.is_some() {
         ResourceState::Available

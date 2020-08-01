@@ -90,6 +90,7 @@ impl MaterialDef {
     }
 }
 
+#[allow(dead_code)]
 impl Material {
     crate fn def(&self) -> &Arc<MaterialDef> {
         &self.def

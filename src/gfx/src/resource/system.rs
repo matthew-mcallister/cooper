@@ -18,6 +18,7 @@ impl ResourceSystem {
         }
     }
 
+    #[allow(dead_code)]
     crate fn device(&self) -> &Arc<Device> {
         self.sched.device()
     }
@@ -49,6 +50,7 @@ impl ResourceSystem {
         self.state.get_image(image, self.sched.avail_batch())
     }
 
+    #[allow(dead_code)]
     crate fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
         self.state.invalidate_image(image);
     }
@@ -63,6 +65,7 @@ impl ResourceSystem {
         }
     }
 
+    #[allow(dead_code)]
     crate fn flush(&mut self, heap: &ImageHeap) {
         self.sched.flush(&mut self.state, heap);
     }
