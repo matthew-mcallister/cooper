@@ -341,7 +341,7 @@ impl TrivialRenderer {
     }
 
     crate fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {
-        desc.layout.set_layouts = self.set_layouts.to_vec();
+        desc.layout.set_layouts = self.set_layouts[..].into();
         desc.stages.insert(ShaderStage::Vertex, Arc::clone(&self.vert_shader));
         desc.stages.insert(ShaderStage::Fragment, Arc::clone(&self.frag_shader));
     }

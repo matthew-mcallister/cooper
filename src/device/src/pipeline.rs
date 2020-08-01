@@ -14,18 +14,14 @@ use crate::*;
 pub struct PipelineLayout {
     device: Arc<Device>,
     inner: vk::PipelineLayout,
-    set_layouts: Vec<Arc<DescriptorSetLayout>>,
+    set_layouts: SmallVec<Arc<DescriptorSetLayout>, 4>,
 }
 
-#[derive(Clone, Debug, Default, Derivative)]
-#[derivative(Hash, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct PipelineLayoutDesc {
-    #[derivative(Hash(hash_with = "slice_hash"))]
-    #[derivative(PartialEq(compare_with = "slice_eq"))]
-    pub set_layouts: Vec<Arc<DescriptorSetLayout>>,
+    pub set_layouts: SmallVec<Arc<DescriptorSetLayout>, 4>,
     push_constants: Option<()>,
 }
-impl Eq for PipelineLayoutDesc {}
 
 pub type ShaderStageMap = PartialEnumMap<ShaderStage, Arc<ShaderSpec>>;
 
@@ -54,8 +50,6 @@ pub struct GraphicsPipelineDesc {
     pub subpass: Subpass,
     pub layout: PipelineLayoutDesc,
     pub vertex_layout: VertexInputLayout,
-    #[derivative(Hash(hash_with = "byte_hash"))]
-    #[derivative(PartialEq(compare_with = "byte_eq"))]
     pub stages: ShaderStageMap,
     pub cull_mode: CullMode,
     pub wireframe: bool,
@@ -91,7 +85,7 @@ impl PipelineLayout {
         let cap = device.limits().max_bound_descriptor_sets as usize;
         assert!(set_layouts.len() < cap);
 
-        let vk_set_layouts: Vec<_> = set_layouts.iter()
+        let vk_set_layouts: SmallVec<_, 4> = set_layouts.iter()
             .map(|layout| layout.inner())
             .collect();
         let create_info = vk::PipelineLayoutCreateInfo {

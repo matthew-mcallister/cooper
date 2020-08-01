@@ -61,15 +61,11 @@ struct SubpassState {
     samples: SampleCount,
 }
 
-#[derive(Clone, Debug, Derivative)]
-#[derivative(Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Subpass {
-    #[derivative(Hash(hash_with = "ptr_hash"))]
-    #[derivative(PartialEq(compare_with = "ptr_eq"))]
     pass: Arc<RenderPass>,
     index: usize,
 }
-impl Eq for Subpass {}
 
 #[derive(Debug, Default)]
 pub struct SubpassDesc {
@@ -90,6 +86,8 @@ impl Drop for RenderPass {
         }
     }
 }
+
+impl_device_derived!(RenderPass);
 
 impl RenderPass {
     pub unsafe fn new(

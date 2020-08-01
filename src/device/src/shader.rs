@@ -3,7 +3,6 @@ use std::ffi::CStr;
 use std::ptr;
 use std::sync::Arc;
 
-use derivative::Derivative;
 use enum_map::Enum;
 use prelude::*;
 
@@ -12,7 +11,7 @@ use crate::*;
 #[derive(Debug)]
 pub struct Shader {
     device: Arc<Device>,
-    module: vk::ShaderModule,
+    inner: vk::ShaderModule,
     code: Vec<u32>,
     stage: ShaderStage,
     source_file: Option<String>,
@@ -21,17 +20,13 @@ pub struct Shader {
 }
 
 /// A choice of shader plus specialization constant values.
-#[derive(Debug, Derivative)]
-#[derivative(Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct ShaderSpec {
-    #[derivative(Hash(hash_with="ptr_hash"))]
-    #[derivative(PartialEq(compare_with="ptr_eq"))]
     shader: Arc<Shader>,
     spec_info: vk::SpecializationInfo,
     spec_map: Vec<vk::SpecializationMapEntry>,
     data: Vec<u8>,
 }
-impl Eq for ShaderSpec {}
 
 // Probably should know the type and dimension too...
 pub type ShaderLocation = u32;
@@ -50,10 +45,12 @@ impl Drop for Shader {
     fn drop(&mut self) {
         let dt = &*self.device.table;
         unsafe {
-            dt.destroy_shader_module(self.module, ptr::null());
+            dt.destroy_shader_module(self.inner, ptr::null());
         }
     }
 }
+
+impl_device_derived!(Shader);
 
 impl Shader {
     pub unsafe fn new(
@@ -67,8 +64,8 @@ impl Shader {
             p_code: code.as_ptr(),
             ..Default::default()
         };
-        let mut module = vk::null();
-        dt.create_shader_module(&create_info, ptr::null(), &mut module)
+        let mut inner = vk::null();
+        dt.create_shader_module(&create_info, ptr::null(), &mut inner)
             .check().unwrap();
 
         let reflected = spv::parse_words(&code);
@@ -77,12 +74,12 @@ impl Shader {
         let (inputs, outputs) = get_shader_interface(&entry);
 
         if let Some(source) = &source_file {
-            device.set_name(module, source.clone());
+            device.set_name(inner, source.clone());
         }
 
         Shader {
             device,
-            module,
+            inner,
             code,
             stage,
             source_file,
@@ -112,7 +109,7 @@ impl Shader {
     }
 
     pub fn module(&self) -> vk::ShaderModule {
-        self.module
+        self.inner
     }
 
     pub fn entry_cstr(&self) -> &CStr {

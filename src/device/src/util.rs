@@ -52,20 +52,6 @@ crate fn clear_depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
     }
 }
 
-#[inline]
-crate fn ptr_eq<T, P: Deref<Target = T>>(this: &P, other: &P) -> bool {
-    let this: &T = this.deref();
-    let other: &T = other.deref();
-    ptr::eq(this, other)
-}
-
-#[inline]
-crate fn ptr_hash<T, P: Deref<Target = T>, H: Hasher>(this: &P, state: &mut H)
-{
-    let ptr: &T = this.deref();
-    std::ptr::hash(ptr, state);
-}
-
 /// If `T` is an aggregate type, it must have *no padding bytes*
 /// (including at the end), or this function loses all meaning.
 // TODO: comparing byte arrays is maybe slower than comparing primitives
