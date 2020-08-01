@@ -88,9 +88,9 @@ macro_rules! impl_bin_op {
         }
 
         impl_bin_ops!(
-            {$($params)*},
+            {$($params)*}, {},
             ($Ty), ($Ty),
-            copy,
+            Copy,
             (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
         );
     }
@@ -120,7 +120,7 @@ macro_rules! impl_scalar_op {
         }
 
         impl_bin_ops!(
-            {$($params)*}, ($Lhs), ($Rhs), copy,
+            {$($params)*}, {}, ($Lhs), ($Rhs), Copy,
             (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
         );
     }

@@ -3,13 +3,11 @@
 use derivative::*;
 use derive_more::*;
 use enum_map::{Enum, EnumMap};
-
 use num::*;
 
-/// Represents the module V^K for an enum K and ring V. A.k.a. a numeric
-/// array indexed by an enum.
-// TODO: With const generics, this whole type could be replaced with
-// sthg like `impl<K: Enum<N>> Index<K> for Vector<N, V>`
+use crate::impl_bin_ops;
+
+/// Represents a numeric vector indexed by an enum.
 #[derive(Derivative, From, Index, IndexMut)]
 #[derivative(Clone(bound="EnumMap<K, V>: Clone"))]
 #[derivative(Copy(bound="EnumMap<K, V>: Copy"))]
@@ -113,6 +111,7 @@ macro_rules! impl_un_op {
 
 macro_rules! impl_bin_op {
     ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        // TODO: The V: Copy bound should not be necessary
         impl<K: Enum<V>, V> std::ops::$OpAssign for EnumVector<K, V>
             where V: std::ops::$OpAssign + Copy,
         {
@@ -123,15 +122,23 @@ macro_rules! impl_bin_op {
             }
         }
 
-        impl<K: Enum<V>, V> std::ops::$Op for EnumVector<K, V>
-            where V: std::ops::$OpAssign + Copy,
+        impl<'rhs, K: Enum<V>, V> std::ops::$OpAssign<&'rhs Self>
+            for EnumVector<K, V>
+            where V: std::ops::$OpAssign<&'rhs V>,
         {
-            type Output = Self;
-            fn $op(mut self, other: Self) -> Self::Output {
-                <Self as std::ops::$OpAssign>::$op_assign(&mut self, other);
-                self
+            fn $op_assign(&mut self, other: &'rhs Self) {
+                for (k, v) in self.iter_mut() {
+                    <V as std::ops::$OpAssign<&'rhs V>>::$op_assign(v, &other[k]);
+                }
             }
         }
+
+        impl_bin_ops!(
+            {K: Enum<V>, V}, {V: Copy},
+            (EnumVector<K, V>), (EnumVector<K, V>),
+            Copy,
+            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
+        );
 
         impl<K: Enum<V>, V> std::ops::$OpAssign<V> for EnumVector<K, V>
             where V: std::ops::$OpAssign + Copy,
@@ -143,15 +150,23 @@ macro_rules! impl_bin_op {
             }
         }
 
-        impl<K: Enum<V>, V> std::ops::$Op<V> for EnumVector<K, V>
-            where V: std::ops::$OpAssign + Copy,
+        impl<'rhs, K: Enum<V>, V> std::ops::$OpAssign<&'rhs V>
+            for EnumVector<K, V>
+            where V: std::ops::$OpAssign<&'rhs V>,
         {
-            type Output = Self;
-            fn $op(mut self, other: V) -> Self::Output {
-                <Self as std::ops::$OpAssign<V>>::$op_assign(&mut self, other);
-                self
+            fn $op_assign(&mut self, other: &'rhs V) {
+                for v in self.values_mut() {
+                    <V as std::ops::$OpAssign<&'rhs V>>::$op_assign(v, other);
+                }
             }
         }
+
+        impl_bin_ops!(
+            {K: Enum<V>, V}, {V: Copy},
+            (EnumVector<K, V>), (V),
+            Copy,
+            (std::ops::$Op), (std::ops::$OpAssign), $op, $op_assign,
+        );
     }
 }
 
@@ -165,6 +180,36 @@ impl_bin_op!(Rem, RemAssign, rem, rem_assign);
 impl_bin_op!(BitAnd, BitAndAssign, bitand, bitand_assign);
 impl_bin_op!(BitOr, BitOrAssign, bitor, bitor_assign);
 impl_bin_op!(BitXor, BitXorAssign, bitxor, bitxor_assign);
+
+impl<K: Enum<V>, V> std::iter::Sum<(K, V)> for EnumVector<K, V>
+    where
+        Self: Default,
+        V: std::ops::AddAssign + Copy,
+{
+    fn sum<I>(iter: I) -> Self
+        where I: Iterator<Item = (K, V)>
+    {
+        let mut vec = Self::default();
+        for (k, v) in iter {
+            vec[k] += v;
+        }
+        vec
+    }
+}
+
+impl<K: Enum<V>, V> std::iter::FromIterator<(K, V)> for EnumVector<K, V>
+    where Self: Default
+{
+    fn from_iter<I>(iter: I) -> Self
+        where I: IntoIterator<Item = (K, V)>
+    {
+        let mut vec = Self::default();
+        for (k, v) in iter {
+            vec[k] = v;
+        }
+        vec
+    }
+}
 
 #[macro_export]
 macro_rules! enum_vec {

@@ -7,9 +7,9 @@
 )]
 
 #[macro_use]
-mod enum_vec;
-#[macro_use]
 mod ops;
+#[macro_use]
+mod enum_vec;
 #[macro_use]
 mod macros;
 #[macro_use]
