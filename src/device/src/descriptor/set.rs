@@ -165,8 +165,11 @@ impl Set {
                 Dt::StorageImage => assert_eq!(layout, Il::GENERAL),
                 _ => {},
             }
-            // combined image/sampler <=> sampler not null
-            assert_eq!(ty == Dt::CombinedImageSampler, !sampler.is_null());
+            if ty == Dt::CombinedImageSampler
+                && layout_binding.samplers.is_none()
+            {
+                    assert!(!sampler.is_null());
+            }
         }
 
         let info = [vk::DescriptorImageInfo {
