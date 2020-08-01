@@ -328,6 +328,7 @@ impl SwapchainView {
 }
 
 impl Token {
+    #[allow(dead_code)]
     fn invalidate(&mut self) {
         self.inner.store(false, Ordering::Relaxed);
         *self = Default::default();

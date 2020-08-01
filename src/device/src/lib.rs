@@ -22,11 +22,8 @@
 )]
 
 #![allow(
-    dead_code,
     incomplete_features,
     path_statements,
-    unused_imports,
-    unused_macros,
 )]
 #![allow(
     clippy::missing_safety_doc,
@@ -38,6 +35,7 @@
     clippy::type_complexity,
 )]
 
+#[cfg(test)]
 macro_rules! test_type {
     () => { crate::testing::Test }
 }
@@ -83,7 +81,7 @@ pub use shader::*;
 crate use staged_cache::*;
 pub use swapchain::*;
 pub use sync::*;
-crate use util::*;
+pub use util::*;
 pub use vertex::*;
 
 #[cfg(test)]

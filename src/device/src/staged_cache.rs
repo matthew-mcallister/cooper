@@ -30,15 +30,18 @@ impl<K, V> Default for StagedCache<K, V> {
     }
 }
 
+impl<K, V> StagedCache<K, V> {
+    #[allow(dead_code)]
+    crate fn new() -> Self {
+        Default::default()
+    }
+}
+
 impl<K, V> StagedCache<K, V>
 where
     K: Eq + Hash + Clone,
     V: Clone,
 {
-    crate fn new() -> Self {
-        Default::default()
-    }
-
     /// Gets a committed entry with zero synchronization guaranteed.
     crate fn get_committed(&self, key: &K) -> Option<&V> {
         self.committed.get(key)

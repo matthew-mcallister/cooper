@@ -1,6 +1,5 @@
 use std::os::raw::c_int;
 use std::sync::Arc;
-use std::thread;
 
 use derive_more::From;
 use prelude::*;
@@ -330,14 +329,6 @@ impl TrivialRenderer {
             frag_shader,
             descs,
         }
-    }
-
-    crate fn descriptor_layouts(&self) -> &[Arc<SetLayout>] {
-        &self.set_layouts[..]
-    }
-
-    crate fn descriptors(&self) -> &[DescriptorSet] {
-        &self.descs[..]
     }
 
     crate fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {

@@ -9,7 +9,7 @@ use more_asserts::assert_lt;
 use prelude::SliceExt;
 
 use crate::{Device, Named, Sampler, StagedCache};
-use crate::util::{SmallVec, slice_eq, slice_hash};
+use crate::util::SmallVec;
 use super::*;
 
 #[derive(Clone, Debug)]

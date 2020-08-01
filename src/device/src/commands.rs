@@ -12,7 +12,6 @@ enum CmdBufferState {
     Initial,
     Recording,
     Executable,
-    Pending,
 }
 
 // TODO: Keep track of how many live command buffer objects there are;

@@ -141,7 +141,7 @@ impl Queue {
         const MAX_SUBMITS: usize = 8;
 
         type VecSem<T> = SmallVec<T, MAX_SEMS>;
-        type VecSubmit<T> = SmallVec<T, MAX_SEMS>;
+        type VecSubmit<T> = SmallVec<T, MAX_SUBMITS>;
 
         let wait_count: usize = submissions.iter()
             .map(|submit| submit.wait_sems.len())

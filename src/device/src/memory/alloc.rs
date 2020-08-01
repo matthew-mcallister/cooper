@@ -30,6 +30,7 @@ pub(super) struct FreeListAllocator {
 }
 
 impl FreeListAllocator {
+    #[allow(dead_code)]
     pub(super) fn new() -> Self {
         Default::default()
     }
@@ -189,6 +190,7 @@ pub(super) struct LinearAllocator {
 }
 
 impl LinearAllocator {
+    #[allow(dead_code)]
     pub(super) fn new() -> Self {
         Default::default()
     }

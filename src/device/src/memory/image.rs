@@ -107,18 +107,6 @@ impl HeapPool {
         self.memory_type().heap_index
     }
 
-    fn has_flags(&self, flags: vk::MemoryPropertyFlags) -> bool {
-        self.memory_type().property_flags.contains(flags)
-    }
-
-    fn host_visible(&self) -> bool {
-        self.has_flags(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT)
-    }
-
-    fn mapped(&self) -> bool {
-        self.host_visible()
-    }
-
     fn chunk_size(&self) -> vk::DeviceSize {
         0x400_0000
     }
@@ -191,6 +179,7 @@ impl HeapPool {
         inner.allocator.free(to_block(alloc));
     }
 
+    #[allow(dead_code)]
     fn clear(&mut self) {
         let mut inner = self.inner.lock();
         for chunk in inner.chunks.iter() {
@@ -213,10 +202,6 @@ impl ImageHeap {
             device,
             pools,
         }
-    }
-
-    fn chunk_size() -> vk::DeviceSize {
-        0x100_0000
     }
 
     pub fn device(&self) -> &Arc<Device> {

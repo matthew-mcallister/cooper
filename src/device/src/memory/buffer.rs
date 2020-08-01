@@ -6,7 +6,6 @@ use enum_map::{Enum, EnumMap};
 use parking_lot::Mutex;
 use prelude::*;
 
-use crate::*;
 use super::*;
 
 #[derive(Clone, Debug)]
@@ -581,10 +580,12 @@ impl<A: Allocator> BufferPool<A> {
         }
     }
 
+    #[allow(dead_code)]
     fn used(&self) -> vk::DeviceSize {
         self.allocator.used()
     }
 
+    #[allow(dead_code)]
     fn reserved(&self) -> vk::DeviceSize {
         self.allocator.capacity()
     }
@@ -593,6 +594,7 @@ impl<A: Allocator> BufferPool<A> {
         0x100_0000
     }
 
+    #[allow(dead_code)]
     fn chunks(&self) -> &[Arc<DeviceBuffer>] {
         &self.chunks
     }
@@ -618,6 +620,7 @@ impl<A: Allocator> BufferPool<A> {
             | vk::BufferUsageFlags::TRANSFER_DST_BIT
     }
 
+    #[allow(dead_code)]
     fn mapping(&self) -> MemoryMapping {
         self.mapping
     }

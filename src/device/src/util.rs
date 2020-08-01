@@ -1,17 +1,9 @@
-// TODO: Most/all items in this module should not be exported crate-wide
-
-#![allow(deprecated)]
-#![allow(unused_macros)]
-
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
-use std::ops::Deref;
 use std::os::raw::c_char;
-use std::ptr;
 
 use derive_more::{Constructor, From};
-use math::{Matrix4, Matrix4x3};
 use prelude::*;
 
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
@@ -32,7 +24,7 @@ crate fn bool32(b: bool) -> vk::Bool32 {
 }
 
 #[inline]
-crate fn clear_color(color: [f32; 4]) -> vk::ClearValue {
+pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
     vk::ClearValue {
         color: vk::ClearColorValue {
             float_32: color,
@@ -41,12 +33,12 @@ crate fn clear_color(color: [f32; 4]) -> vk::ClearValue {
 }
 
 #[inline]
-crate fn clear_depth(depth: f32) -> vk::ClearValue {
+pub fn clear_depth(depth: f32) -> vk::ClearValue {
     clear_depth_stencil(depth, 0)
 }
 
 #[inline]
-crate fn clear_depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
+pub fn clear_depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
     vk::ClearValue {
         depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
     }
@@ -69,36 +61,9 @@ crate fn byte_hash<T, H: Hasher>(this: &T, state: &mut H) {
     std::slice::from_ref(this).as_bytes().hash(state)
 }
 
-/// Remarks on `byte_eq` apply.
-#[inline]
-crate fn slice_eq<T>(this: &impl AsRef<[T]>, other: &impl AsRef<[T]>) -> bool {
-    this.as_ref().as_bytes() == other.as_ref().as_bytes()
-}
-
-/// Remarks on `byte_hash` apply.
-#[inline]
-crate fn slice_hash<T, H: Hasher>(this: &impl AsRef<[T]>, state: &mut H) {
-    this.as_ref().as_bytes().hash(state)
-}
-
-#[inline]
-crate fn as_uninit<T>(src: &T) -> &MaybeUninit<T> {
-    unsafe { &*(src as *const _ as *const _) }
-}
-
 #[inline]
 crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
     unsafe { &*(src as *const _ as *const _) }
-}
-
-#[inline]
-crate fn flatten_arrays<T, const N: usize>(arrays: &[[T; N]]) -> &[T] {
-    unsafe {
-        std::slice::from_raw_parts(
-            arrays.as_ptr() as *const T,
-            arrays.len() * N,
-        )
-    }
 }
 
 #[derive(Constructor, From)]
@@ -181,49 +146,6 @@ macro_rules! primitive_enum {
         @[try_from_error: $try_from_err_ty:ty = $try_from_err_expr:expr]
         enum $name:ident { $($member:ident = $val:expr,)* }
     ) => {};
-}
-
-macro_rules! impl_from_via_default {
-    ($name:ident, $from:ty) => {
-        impl From<$from> for $name {
-            fn from(_: $from) -> Self {
-                Default::default()
-            }
-        }
-    }
-}
-
-#[repr(C)]
-crate struct Aligned<T, U: ?Sized>(crate [T; 0], crate U);
-
-impl<T> Aligned<T, [u8]> {
-    const unsafe fn cast(&self) -> &[T] {
-        let bytes = &self.1;
-        let ptr = bytes as *const [u8] as *const u8 as *const T;
-        let size_of = std::mem::size_of::<T>();
-        assert!(bytes.len() % size_of == 0);
-        let len = bytes.len() / size_of;
-        &*std::ptr::slice_from_raw_parts(ptr, len)
-    }
-}
-
-crate const fn cast_aligned_u32(aligned: &Aligned<u32, [u8]>) -> &[u32] {
-    unsafe { aligned.cast() }
-}
-
-macro_rules! include_u32 {
-    ($($source:tt)*) => {
-        {
-            static ALIGNED: &'static $crate::util::Aligned<u32, [u8]> =
-                &$crate::util::Aligned([], *include_bytes!($($source)*));
-            $crate::util::cast_aligned_u32(ALIGNED)
-        }
-    }
-}
-
-#[inline(always)]
-crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
-    xform.transpose().submatrix(0, 0)
 }
 
 #[macro_export]

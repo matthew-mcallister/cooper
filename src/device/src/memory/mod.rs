@@ -388,13 +388,4 @@ impl MemoryMapping {
     }
 }
 
-impl DedicatedAllocContent {
-    fn tiling(self) -> Tiling {
-        match self {
-            Self::Buffer(_) => Tiling::Linear,
-            Self::Image(_) => Tiling::Nonlinear,
-        }
-    }
-}
-
 unit::collect_tests![alloc, buffer, image, staging];
