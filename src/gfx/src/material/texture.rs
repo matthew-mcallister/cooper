@@ -49,7 +49,7 @@ impl MaterialFactory for TextureVisMaterialFactory {
                 subresources: image.all_subresources(),
                 image,
                 flags: Default::default(),
-                sampler: Arc::clone(&self.globals.empty_sampler),
+                sampler_state: Default::default(),
             });
         }
     }

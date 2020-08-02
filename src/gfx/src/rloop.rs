@@ -148,11 +148,6 @@ impl RenderLoop {
         self.renderer.materials().define_material(program, images)
     }
 
-    pub fn get_or_create_sampler(&mut self, desc: &SamplerDesc) -> Arc<Sampler>
-    {
-        self.state().samplers.get_or_create(desc).into_owned()
-    }
-
     crate fn new_frame(&mut self) {
         self.frame_num += 1;
         debug!("beginning frame {}", self.frame_num);

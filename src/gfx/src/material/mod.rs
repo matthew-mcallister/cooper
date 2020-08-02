@@ -3,7 +3,7 @@ use std::sync::Arc;
 use base::PartialEnumMap;
 use device::{
     DescriptorSet, Image, ImageDef, ImageSubresources, ImageView,
-    ImageViewFlags, Sampler, ShaderStageMap,
+    ImageViewFlags, Sampler, SamplerDesc, ShaderStageMap,
 };
 use enum_map::{Enum, EnumMap};
 
@@ -47,7 +47,7 @@ pub struct ImageBindingDesc {
     // TODO: Should be set by the factory, not the user
     pub flags: ImageViewFlags,
     pub subresources: ImageSubresources,
-    pub sampler: Arc<Sampler>,
+    pub sampler_state: SamplerDesc,
 }
 
 pub type MaterialImageBindings =

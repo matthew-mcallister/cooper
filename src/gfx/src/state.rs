@@ -51,5 +51,6 @@ impl SystemState {
         }
         self.pipelines.commit();
         self.samplers.commit();
+        self.set_layouts.commit();
     }
 }

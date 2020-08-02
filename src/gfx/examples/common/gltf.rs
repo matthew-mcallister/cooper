@@ -303,13 +303,12 @@ fn load_texture(
     );
     rloop.upload_image(&image, Arc::clone(&data.pixels), 0);
 
-    let sampler = rloop.get_or_create_sampler(&load_sampler(tex.sampler()));
-
+    let sampler_state = load_sampler(tex.sampler());
     ImageBindingDesc {
         subresources: image.all_subresources(),
         image,
         flags: Default::default(),
-        sampler,
+        sampler_state,
     }
 }
 

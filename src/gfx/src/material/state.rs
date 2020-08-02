@@ -67,7 +67,7 @@ fn create_material(
     let images: PartialEnumMap<_, &Arc<Image>> = def.image_bindings.iter()
         .map(|(k, binding)| Some((k, resources.get_image(&binding.image)?)))
         .collect::<Option<_>>()?;
-    let images = bind_images(images, &def.image_bindings);
+    let images = bind_images(state, images, &def.image_bindings);
     let desc = def.factory.create_descriptor_set(state, &images);
     Some(Material {
         def,
@@ -77,6 +77,7 @@ fn create_material(
 }
 
 fn bind_images(
+    state: &SystemState,
     images: PartialEnumMap<MaterialImage, &Arc<Image>>,
     bindings: &MaterialImageBindings,
 ) -> MaterialImageState {
@@ -91,9 +92,11 @@ fn bind_images(
             Default::default(),
             binding.subresources,
         )) };
+        let sampler = state.samplers.get_or_create(&binding.sampler_state)
+            .into_owned();
         (name, ImageBindingState {
             view,
-            sampler: Arc::clone(&binding.sampler),
+            sampler,
         })
     }).collect()
 }
