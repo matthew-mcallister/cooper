@@ -93,6 +93,7 @@ impl Extent3D {
         Extent2D::new(self.width, self.height)
     }
 
+    #[inline]
     pub fn contains_extent(&self, offset: Vector3<i32>, extent: Self) -> bool
     {
         fn check_range_overflow(offs: i32, len: u32, max: u32) -> bool {

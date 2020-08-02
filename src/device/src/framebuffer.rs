@@ -36,30 +36,37 @@ impl Framebuffer {
         create_framebuffer(pass, attachments)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.pass.device()
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::Framebuffer {
         self.inner
     }
 
+    #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
 
+    #[inline]
     pub fn attachments(&self) -> &[AttachmentImage] {
         &self.attachments
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent2D {
         self.attachments[0].extent()
     }
 
+    #[inline]
     pub fn render_area(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent().into())
     }
 
+    #[inline]
     pub fn viewport(&self) -> vk::Viewport {
         let extent = self.extent();
         vk::Viewport {
@@ -72,12 +79,14 @@ impl Framebuffer {
         }
     }
 
+    #[inline]
     pub fn is_swapchain_valid(&self) -> bool {
         self.attachments.iter().all(|attch| attch.is_valid())
     }
 }
 
 impl AttachmentImage {
+        #[inline]
     pub fn view(&self) -> vk::ImageView {
         match &self {
             Self::Image(view) => view.inner(),
@@ -85,6 +94,7 @@ impl AttachmentImage {
         }
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent2D {
         match &self {
             Self::Image(view) => view.extent().to_2d(),
@@ -92,6 +102,7 @@ impl AttachmentImage {
         }
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         match &self {
             Self::Image(view) => view.format(),
@@ -99,6 +110,7 @@ impl AttachmentImage {
         }
     }
 
+    #[inline]
     pub fn samples(&self) -> SampleCount {
         match &self {
             Self::Image(img) => img.samples(),
@@ -106,6 +118,7 @@ impl AttachmentImage {
         }
     }
 
+    #[inline]
     pub fn is_valid(&self) -> bool {
         if let Self::Swapchain(sw) = self {
             sw.is_valid()

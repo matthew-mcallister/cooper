@@ -136,10 +136,12 @@ impl Sampler {
         }
     } }
 
+    #[inline]
     pub fn inner(&self) -> vk::Sampler {
         self.inner
     }
 
+    #[inline]
     pub fn desc(&self) -> &SamplerDesc {
         &self.desc
     }

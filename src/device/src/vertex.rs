@@ -84,6 +84,7 @@ pub struct VertexAttributeBinding {
 }
 
 impl IndexType {
+    #[inline]
     pub fn size(self) -> usize {
         match self {
             Self::U16 => 2,

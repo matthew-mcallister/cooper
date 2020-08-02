@@ -122,34 +122,42 @@ impl DeviceBuffer {
         create_buffer(device, size, usage, mapping, lifetime, chunk)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.memory.device
     }
 
+    #[inline]
     pub fn memory(&self) -> &Arc<DeviceMemory> {
         &self.memory
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::Buffer {
         self.inner
     }
 
+    #[inline]
     pub fn size(&self) -> vk::DeviceSize {
         self.memory.size()
     }
 
+    #[inline]
     pub fn lifetime(&self) -> Lifetime {
         self.memory.lifetime()
     }
 
+    #[inline]
     pub fn mapped(&self) -> bool {
         self.memory.mapped()
     }
 
+    #[inline]
     pub fn binding(&self) -> Option<BufferBinding> {
         self.binding
     }
 
+    #[inline]
     pub fn usage(&self) -> vk::BufferUsageFlags {
         self.usage
     }
@@ -211,10 +219,12 @@ impl MemoryRegion for BufferAlloc {
 }
 
 impl<'a> BufferRange<'a> {
+    #[inline]
     pub fn raw(&self) -> vk::Buffer {
         self.buffer.inner
     }
 
+    #[inline]
     pub fn descriptor_info(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.buffer.inner,
@@ -225,10 +235,12 @@ impl<'a> BufferRange<'a> {
 }
 
 impl BufferAlloc {
+    #[inline]
     pub fn buffer(&self) -> &Arc<DeviceBuffer> {
         &self.buffer
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::Buffer {
         self.buffer.inner
     }
@@ -237,6 +249,7 @@ impl BufferAlloc {
         self.buffer.memory.chunk
     }
 
+    #[inline]
     pub fn range(&self) -> BufferRange<'_> {
         BufferRange {
             buffer: &self.buffer,
@@ -266,14 +279,17 @@ impl<T: ?Sized> BufferBox<T> {
         BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
     }
 
+    #[inline]
     pub fn alloc(this: &Self) -> &BufferAlloc {
         &this.alloc
     }
 
+    #[inline]
     pub fn range(this: &Self) -> BufferRange<'_> {
         this.alloc.range()
     }
 
+    #[inline]
     pub fn into_inner(this: Self) -> BufferAlloc {
         this.alloc
     }
@@ -281,6 +297,7 @@ impl<T: ?Sized> BufferBox<T> {
     /// Unlike `Box::leak`, the pointer returned by this method deosn't
     /// have `'static` lifetime---it may dangle. Hence, it is not safe
     /// to dereference.
+    #[inline]
     pub fn leak(this: Self) -> NonNull<T> {
         this.alloc.leak();
         this.ptr
@@ -288,6 +305,7 @@ impl<T: ?Sized> BufferBox<T> {
 }
 
 impl<T> BufferBox<T> {
+    #[inline]
     pub fn from_val(mut alloc: BufferAlloc, val: T) -> Self {
         let ptr = alloc.as_mut::<T>().write(val) as _;
         unsafe { BufferBox::new(alloc, ptr) }
@@ -309,6 +327,7 @@ impl<T> BufferBox<[T]> {
 }
 
 impl<T: Copy> BufferBox<[T]> {
+    #[inline]
     pub fn copy_from_slice(mut alloc: BufferAlloc, src: &[T]) -> Self {
         let slice = alloc.as_mut_slice::<T>(src.len());
         slice.copy_from_slice(as_uninit_slice(src));
@@ -423,6 +442,7 @@ impl BufferHeap {
             .free(alloc);
     }
 
+    #[inline]
     pub fn boxed<T>(
         self: &Arc<Self>,
         binding: BufferBinding,
@@ -435,6 +455,7 @@ impl BufferHeap {
         BufferBox::from_val(alloc, val)
     }
 
+    #[inline]
     pub fn box_iter<T>(
         self: &Arc<Self>,
         binding: BufferBinding,
@@ -447,6 +468,7 @@ impl BufferHeap {
         BufferBox::from_iter(alloc, iter)
     }
 
+    #[inline]
     pub fn box_slice<T: Copy>(
         self: &Arc<Self>,
         binding: BufferBinding,
@@ -459,6 +481,7 @@ impl BufferHeap {
         BufferBox::copy_from_slice(alloc, src)
     }
 
+    #[inline]
     pub fn box_uninit<T: Copy>(
         self: &Arc<Self>,
         binding: BufferBinding,

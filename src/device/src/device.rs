@@ -123,18 +123,22 @@ impl Device {
         Ok((device, queues))
     }
 
+    #[inline]
     pub fn table(&self) -> &vkl::DeviceTable {
         &self.table
     }
 
+    #[inline]
     pub fn instance(&self) -> &Arc<Instance> {
         &self.instance
     }
 
+    #[inline]
     pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
         &self.props
     }
 
+    #[inline]
     pub fn queue_family<'dev>(
         self: &'dev Arc<Self>,
         index: u32,
@@ -142,10 +146,12 @@ impl Device {
         QueueFamily::new(self, index)
     }
 
+    #[inline]
     pub fn limits(&self) -> &vk::PhysicalDeviceLimits {
         &self.properties().limits
     }
 
+    #[inline]
     pub fn features(&self) -> &vk::PhysicalDeviceFeatures {
         &self.features
     }

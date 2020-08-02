@@ -104,14 +104,17 @@ impl PipelineLayout {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::PipelineLayout {
         self.inner
     }
 
+    #[inline]
     pub fn set_layouts(&self) -> &[Arc<DescriptorSetLayout>] {
         &self.set_layouts
     }
@@ -131,34 +134,42 @@ impl GraphicsPipeline {
         create_graphics_pipeline(layout, desc)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::Pipeline {
         self.inner
     }
 
+    #[inline]
     pub fn desc(&self) -> &GraphicsPipelineDesc {
         &self.desc
     }
 
+    #[inline]
     pub fn layout(&self) -> &Arc<PipelineLayout> {
         &self.layout
     }
 
+    #[inline]
     pub fn vertex_layout(&self) -> &VertexInputLayout {
         &self.desc.vertex_layout
     }
 
+    #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
         &self.desc.subpass.pass()
     }
 
+    #[inline]
     pub fn subpass(&self) -> &Subpass {
         &self.desc.subpass
     }
 
+    #[inline]
     pub fn vertex_stage(&self) -> &Arc<ShaderSpec> {
         self.desc.vertex_stage()
     }
@@ -172,6 +183,7 @@ fn color_write_mask_all() -> vk::ColorComponentFlags {
 }
 
 impl GraphicsPipelineDesc {
+    #[inline]
     pub fn new(subpass: Subpass) -> Self {
         Self {
             subpass,
@@ -192,6 +204,7 @@ impl GraphicsPipelineDesc {
         }
     }
 
+    #[inline]
     pub fn vertex_stage(&self) -> &Arc<ShaderSpec> {
         &self.stages[ShaderStage::Vertex]
     }

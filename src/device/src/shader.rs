@@ -104,30 +104,37 @@ impl Shader {
         Ok(Self::new(device, words, Some(path)))
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn module(&self) -> vk::ShaderModule {
         self.inner
     }
 
+    #[inline]
     pub fn entry_cstr(&self) -> &CStr {
         unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") }
     }
 
+    #[inline]
     pub fn code(&self) -> &[u32] {
         &self.code
     }
 
+    #[inline]
     pub fn stage(&self) -> ShaderStage {
         self.stage
     }
 
+    #[inline]
     pub fn inputs(&self) -> &[ShaderLocation] {
         &self.inputs
     }
 
+    #[inline]
     pub fn outputs(&self) -> &[ShaderLocation] {
         &self.outputs
     }
@@ -140,6 +147,7 @@ impl Named for Shader {
 }
 
 impl ShaderSpec {
+    #[inline]
     pub fn new(shader: Arc<Shader>) -> Self {
         ShaderSpec {
             shader,
@@ -149,10 +157,12 @@ impl ShaderSpec {
         }
     }
 
+    #[inline]
     pub fn shader(&self) -> &Arc<Shader> {
         &self.shader
     }
 
+    #[inline]
     pub fn spec_info(&self) -> &vk::SpecializationInfo {
         &self.spec_info
     }

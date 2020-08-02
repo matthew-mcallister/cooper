@@ -59,6 +59,7 @@ pub struct SubmitInfo<'a> {
 
 impl<'dev> QueueFamily<'dev> {
     // The encapsulation here is kind of bad...
+    #[inline]
     pub fn new(device: &'dev Arc<Device>, index: u32) -> QueueFamily<'dev> {
         assert_lt!(index as usize, device.queue_families.len());
         QueueFamily {
@@ -67,18 +68,22 @@ impl<'dev> QueueFamily<'dev> {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &'dev Arc<Device> {
         self.device
     }
 
+    #[inline]
     pub fn index(&self) -> u32 {
         self.index
     }
 
+    #[inline]
     pub fn properties(&self) -> &'dev vk::QueueFamilyProperties {
         &self.device.queue_families[self.index as usize]
     }
 
+    #[inline]
     pub fn flags(&self) -> vk::QueueFlags {
         self.properties().queue_flags
     }
@@ -86,7 +91,7 @@ impl<'dev> QueueFamily<'dev> {
     pub fn ty(&self) -> QueueType {
         let flags = self.flags();
         if flags.intersects(vk::QueueFlags::GRAPHICS_BIT) {
-            debug_assert!(flags.intersects(vk::QueueFlags::COMPUTE_BIT));
+            assert!(flags.intersects(vk::QueueFlags::COMPUTE_BIT));
             QueueType::Graphics
         } else if flags.intersects(vk::QueueFlags::COMPUTE_BIT) {
             QueueType::Compute
@@ -97,32 +102,39 @@ impl<'dev> QueueFamily<'dev> {
         }
     }
 
+    #[inline]
     pub fn supports_graphics(&self) -> bool {
         self.ty().supports(QueueType::Graphics)
     }
 
+    #[inline]
     pub fn supports_xfer(&self) -> bool {
         self.ty().supports(QueueType::Xfer)
     }
 }
 
 impl Queue {
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::Queue {
         self.inner
     }
 
+    #[inline]
     pub fn family(&self) -> QueueFamily<'_> {
         self.device.queue_family(self.family)
     }
 
+    #[inline]
     pub fn flags(&self) -> vk::QueueFlags {
         self.family().flags()
     }
 
+    #[inline]
     pub fn ty(&self) -> QueueType {
         self.family().ty()
     }
@@ -271,9 +283,7 @@ impl Named for Queue {
 }
 
 impl QueueType {
-    // TODO: This implementation seems overly clever. In particular,
-    // graphics queues aren't *guaranteed* to support compute, though
-    // they always do in practice.
+    #[inline]
     pub fn supports(self, other: Self) -> bool {
         self <= other
     }

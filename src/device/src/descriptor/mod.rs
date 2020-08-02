@@ -40,6 +40,7 @@ wrap_vk_enum! {
 type DescriptorCounts = EnumVector<DescriptorType, u32>;
 
 impl DescriptorType {
+    #[inline]
     pub fn is_buffer(self) -> bool {
         match self {
             Self::UniformBuffer | Self::StorageBuffer => true,
@@ -47,6 +48,7 @@ impl DescriptorType {
         }
     }
 
+    #[inline]
     pub fn is_image(self) -> bool {
         match self {
             Self::CombinedImageSampler | Self::SampledImage

@@ -127,6 +127,7 @@ impl Instance {
         Ok(instance)
     }
 
+    #[inline]
     pub fn app_info(&self) -> &AppInfo {
         &self.app_info
     }

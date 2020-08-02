@@ -99,22 +99,27 @@ impl RenderPass {
         create_render_pass(device, attachments, subpasses, dependencies)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::RenderPass {
         self.inner
     }
 
+    #[inline]
     pub fn attachments(&self) -> &[AttachmentDescription] {
         &self.attachments
     }
 
+    #[inline]
     pub fn dependencies(&self) -> &[vk::SubpassDependency] {
         &self.dependencies
     }
 
+    #[inline]
     pub fn subpasses<'a>(self: &'a Arc<Self>) ->
         impl Iterator<Item = Subpass> + ExactSizeIterator + 'a
     {
@@ -122,11 +127,13 @@ impl RenderPass {
             .map(move |index| Subpass { pass: Arc::clone(self), index })
     }
 
+    #[inline]
     pub fn subpass(self: &Arc<Self>, index: usize) -> Subpass {
         assert!(index < self.subpasses.len());
         Subpass { pass: Arc::clone(self), index }
     }
 
+    #[inline]
     pub fn is_input_attachment(&self, index: usize) -> bool {
         assert!(index < self.attachments.len());
         self.subpasses.iter()
@@ -136,6 +143,7 @@ impl RenderPass {
 }
 
 impl Subpass {
+        #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
@@ -144,31 +152,38 @@ impl Subpass {
         &self.pass().subpasses[self.index]
     }
 
+    #[inline]
     pub fn index(&self) -> u32 {
         self.index as _
     }
 
+    #[inline]
     pub fn samples(&self) -> SampleCount {
         self.state().samples
     }
 
+    #[inline]
     pub fn input_attchs(&self) -> &[vk::AttachmentReference] {
         &self.state().input_attchs
     }
 
+    #[inline]
     pub fn color_attchs(&self) -> &[vk::AttachmentReference] {
         &self.state().color_attchs
     }
 
+    #[inline]
     pub fn resolve_attchs(&self) -> Option<&[vk::AttachmentReference]> {
         let attchs = &self.state().resolve_attchs;
         (!attchs.is_empty()).then_some(attchs)
     }
 
+    #[inline]
     pub fn preserve_attchs(&self) -> &[u32] {
         &self.state().preserve_attchs
     }
 
+    #[inline]
     pub fn depth_stencil_attch(&self) -> Option<&vk::AttachmentReference> {
         self.state().depth_stencil_attch.as_ref()
     }

@@ -53,6 +53,7 @@ impl Drop for Surface {
 }
 
 impl Surface {
+    #[inline]
     pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>)
         -> Result<Self, AnyError>
     {
@@ -64,6 +65,7 @@ impl Surface {
         })
     }
 
+    #[inline]
     pub fn window(&self) -> &Arc<window::Window> {
         &self.window
     }
@@ -93,30 +95,37 @@ impl Swapchain {
         Ok(result)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::SwapchainKHR {
         self.inner
     }
 
+    #[inline]
     pub fn surface(&self) -> &Arc<Surface> {
         &self.surface
     }
 
+    #[inline]
     pub fn window(&self) -> &Arc<window::Window> {
         self.surface.window()
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent2D {
         self.extent
     }
 
+    #[inline]
     pub fn rect(&self) -> vk::Rect2D {
         vk::Rect2D::new(vk::Offset2D::new(0, 0), self.extent.into())
     }
 
+    #[inline]
     pub fn viewport(&self) -> vk::Viewport {
         vk::Viewport {
             x: 0.0,
@@ -215,19 +224,21 @@ impl Swapchain {
         Ok(())
     }
 
+    #[inline]
     pub fn create_views(&self) -> Vec<Arc<SwapchainView>> {
         (0..self.images.len())
             .map(|index| Arc::new(SwapchainView::new(&self, index as _)))
             .collect()
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         Format::BGRA8_SRGB
     }
 
     /// Note: A suboptimal swapchain will just return an error with no
     /// swapchain index.
-    // TODO: Use case for synchronizing with a fence?
+    #[inline]
     pub fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) ->
         Result<u32, vk::Result>
     {
@@ -310,18 +321,22 @@ impl SwapchainView {
         }
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::ImageView {
         self.inner
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent2D {
         self.extent
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         Format::BGRA8_SRGB
     }
 
+    #[inline]
     pub fn is_valid(&self) -> bool {
         self.token.is_valid()
     }

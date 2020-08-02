@@ -85,26 +85,32 @@ impl Pool {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::DescriptorPool {
         self.inner
     }
 
+    #[inline]
     pub fn max_sets(&self) -> u32 {
         self.max_sets
     }
 
+    #[inline]
     pub fn used_sets(&self) -> u32 {
         self.used_sets
     }
 
+    #[inline]
     pub fn max_descriptors(&self) -> &Counts {
         &self.max_descriptors
     }
 
+    #[inline]
     pub fn used_descriptors(&self) -> &Counts {
         &self.used_descriptors
     }
@@ -152,6 +158,7 @@ impl Pool {
         }).collect()
     }
 
+    #[inline]
     pub fn alloc(&mut self, layout: &Arc<DescriptorSetLayout>) -> Set {
         self.alloc_many(layout, 1).pop().unwrap()
     }
@@ -225,6 +232,7 @@ impl Heap {
         sets
     }
 
+    #[inline]
     pub fn alloc(
         self: &Arc<Self>,
         lifetime: Lifetime,

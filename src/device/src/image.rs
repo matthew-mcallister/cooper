@@ -160,6 +160,7 @@ impl Image {
         }
     }
 
+    #[inline]
     pub fn with(
         heap: &ImageHeap,
         flags: ImageFlags,
@@ -177,59 +178,73 @@ impl Image {
         Self::new(heap, def)
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::Image {
         self.inner
     }
 
+    #[inline]
     pub fn def(&self) -> &Arc<ImageDef> {
         &self.def
     }
 
+    #[inline]
     pub fn flags(&self) -> ImageFlags {
         self.def.flags()
     }
 
+    #[inline]
     pub fn ty(&self) -> ImageType {
         self.def.ty()
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         self.def.format()
     }
 
+    #[inline]
     pub fn samples(&self) -> SampleCount {
         self.def.samples()
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent3D {
         self.def.extent()
     }
 
+    #[inline]
     pub fn layers(&self) -> u32 {
         self.def.layers()
     }
 
+    #[inline]
     pub fn mip_levels(&self) -> u32 {
         self.def.mip_levels()
     }
 
+    #[inline]
     pub fn alloc(&self) -> &DeviceAlloc {
         &self.alloc
     }
 
+    #[inline]
     pub fn validate_subresources(&self, sub: &ImageSubresources) {
         self.def.validate_subresources(sub);
     }
 
+    #[inline]
     pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
     {
         self.def.subresource_size(sub)
     }
 
+    #[inline]
     pub fn all_subresources(&self) -> ImageSubresources {
         self.def.all_subresources()
     }
 
+    #[inline]
     pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
         ImageSubresources
     {
@@ -267,6 +282,7 @@ impl Named for Image {
 }
 
 impl ImageDef {
+        #[inline]
     pub fn new(
         device: &Arc<Device>,
         flags: ImageFlags,
@@ -284,30 +300,37 @@ impl ImageDef {
         }
     }
 
+    #[inline]
     pub fn flags(&self) -> ImageFlags {
         self.flags
     }
 
+    #[inline]
     pub fn ty(&self) -> ImageType {
         self.ty
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         self.format
     }
 
+    #[inline]
     pub fn samples(&self) -> SampleCount {
         self.samples
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent3D {
         self.extent
     }
 
+    #[inline]
     pub fn layers(&self) -> u32 {
         self.layers
     }
 
+    #[inline]
     pub fn mip_levels(&self) -> u32 {
         self.mip_levels
     }
@@ -331,6 +354,7 @@ impl ImageDef {
             * layers as vk::DeviceSize
     }
 
+    #[inline]
     pub fn all_subresources(&self) -> ImageSubresources {
         ImageSubresources {
             aspects: self.format.aspects(),
@@ -339,6 +363,7 @@ impl ImageDef {
         }
     }
 
+    #[inline]
     pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
         ImageSubresources
     {
@@ -349,15 +374,18 @@ impl ImageDef {
         }
     }
 
+    #[inline]
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = Some(name.into());
     }
 
+    #[inline]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.set_name(name);
         self
     }
 
+    #[inline]
     pub fn build_image(self, heap: &ImageHeap) -> Arc<Image> {
         Arc::new(Image::new(heap, Arc::new(self)))
     }
@@ -415,50 +443,61 @@ impl ImageView {
         }
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::ImageView {
         self.inner
     }
 
+    #[inline]
     pub fn image(&self) -> &Arc<Image> {
         &self.image
     }
 
+    #[inline]
     pub fn flags(&self) -> ImageViewFlags {
         self.flags
     }
 
+    #[inline]
     pub fn format(&self) -> Format {
         self.format
     }
 
+    #[inline]
     pub fn samples(&self) -> SampleCount {
         self.image.samples()
     }
 
+    #[inline]
     pub fn extent(&self) -> Extent3D {
         self.image.extent()
     }
 
+    #[inline]
     pub fn subresources(&self) -> ImageSubresources {
         self.subresources
     }
 
+    #[inline]
     pub fn layers(&self) -> u32 {
         self.subresources.layer_count()
     }
 
+    #[inline]
     pub fn mip_levels(&self) -> u32 {
         self.subresources.mip_level_count()
     }
 }
 
 impl ImageFlags {
+    #[inline]
     pub fn is_render_target(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT
             | Self::DEPTH_STENCIL_ATTACHMENT)
     }
 
     // XXX: Is every input attachment also a color or depth attachment?
+    #[inline]
     pub fn is_attachment(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT
             | Self::DEPTH_STENCIL_ATTACHMENT
@@ -553,6 +592,7 @@ impl From<ImageSubresources> for vk::ImageSubresourceRange {
 }
 
 impl ImageSubresources {
+    #[inline]
     pub fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers
     {
         vk::ImageSubresourceLayers {
@@ -563,14 +603,17 @@ impl ImageSubresources {
         }
     }
 
+    #[inline]
     pub fn mip_level_range(&self) -> std::ops::Range<u32> {
         self.mip_levels[0]..self.mip_levels[1]
     }
 
+    #[inline]
     pub fn mip_level_count(&self) -> u32 {
         self.mip_levels[1] - self.mip_levels[0]
     }
 
+    #[inline]
     pub fn layer_count(&self) -> u32 {
         self.layers[1] - self.layers[0]
     }

@@ -121,28 +121,34 @@ impl CmdPool {
         Self::new(queue_family, vk::CommandPoolCreateFlags::TRANSIENT_BIT)
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn is_transient(&self) -> bool {
         use vk::CommandPoolCreateFlags as Flags;
         self.flags.contains(Flags::TRANSIENT_BIT)
     }
 
+    #[inline]
     pub fn reset_enabled(&self) -> bool {
         use vk::CommandPoolCreateFlags as Flags;
         self.flags.contains(Flags::RESET_COMMAND_BUFFER_BIT)
     }
 
+    #[inline]
     pub fn queue_family(&self) -> QueueFamily<'_> {
         self.device.queue_family(self.queue_family)
     }
 
+    #[inline]
     pub fn supports_graphics(&self) -> bool {
         self.queue_family().supports_graphics()
     }
 
+    #[inline]
     pub fn supports_xfer(&self) -> bool {
         self.queue_family().supports_xfer()
     }
@@ -232,6 +238,7 @@ impl CmdBuffer {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.pool.device()
     }
@@ -240,6 +247,7 @@ impl CmdBuffer {
         &self.device().table
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::CommandBuffer {
         self.inner
     }
@@ -248,18 +256,22 @@ impl CmdBuffer {
         self.state
     }
 
+    #[inline]
     pub fn is_recording(&self) -> bool {
         self.state == CmdBufferState::Recording
     }
 
+    #[inline]
     pub fn level(&self) -> CmdBufferLevel {
         self.level
     }
 
+    #[inline]
     pub fn supports_graphics(&self) -> bool {
         self.pool.supports_graphics()
     }
 
+    #[inline]
     pub fn supports_xfer(&self) -> bool {
         self.pool.supports_xfer()
     }
@@ -360,6 +372,7 @@ impl CmdBuffer {
 }
 
 impl CmdBufferLevel {
+    #[inline]
     pub fn is_secondary(self) -> bool {
         use CmdBufferLevel::*;
         match self {
@@ -368,6 +381,7 @@ impl CmdBufferLevel {
         }
     }
 
+    #[inline]
     pub fn required_usage_flags(self) -> vk::CommandBufferUsageFlags {
         if self == Self::SubpassContinue {
             vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT
@@ -407,18 +421,22 @@ impl SubpassCmds {
         self.inner.ensure_recording();
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
 
+    #[inline]
     pub fn subpass(&self) -> &Subpass {
         &self.subpass
     }
 
+    #[inline]
     pub fn level(&self) -> CmdBufferLevel {
         self.inner.level
     }
 
+    #[inline]
     pub fn is_inline(&self) -> bool {
         self.inner.level != CmdBufferLevel::SubpassContinue
     }
@@ -528,6 +546,7 @@ impl SubpassCmds {
         assert!(self.gfx_pipe.is_some());
     }
 
+    #[inline]
     pub unsafe fn draw(&mut self, vertex_count: u32, instance_count: u32) {
         self.draw_offset(vertex_count, instance_count, 0, 0);
     }
@@ -547,6 +566,7 @@ impl SubpassCmds {
         );
     }
 
+    #[inline]
     pub unsafe fn draw_indexed(
         &mut self,
         vertex_count: u32,
@@ -594,14 +614,17 @@ impl SubpassCmds {
         self.inner.end()
     }
 
+    #[inline]
     pub unsafe fn set_viewport(&mut self, viewport: vk::Viewport) {
         self.inner.set_viewport(viewport);
     }
 
+    #[inline]
     pub unsafe fn set_scissors(&mut self, scissor: vk::Rect2D) {
         self.inner.set_scissor(scissor);
     }
 
+    #[inline]
     pub fn set_depth_bias(
         &mut self,
         constant_factor: f32,
@@ -636,22 +659,27 @@ impl RenderPassCmds {
         self.inner.dt()
     }
 
+    #[inline]
     pub fn framebuffer(&self) -> &Arc<Framebuffer> {
         &self.framebuffer
     }
 
+    #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
         &self.framebuffer.pass()
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
 
+    #[inline]
     pub fn level(&self) -> CmdBufferLevel {
         self.inner.level
     }
 
+    #[inline]
     pub fn cur_subpass(&self) -> Subpass {
         self.framebuffer.pass().subpass(self.cur_subpass as _)
     }
@@ -751,6 +779,7 @@ impl XferCmds {
         self.inner.dt()
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::CommandBuffer {
         self.inner.inner()
     }
@@ -824,10 +853,12 @@ impl XferCmds {
         );
     }
 
+    #[inline]
     pub fn end_xfer(self) -> CmdBuffer {
         self.inner
     }
 
+    #[inline]
     pub fn end(self) -> (vk::CommandBuffer, Box<CmdPool>) {
         self.inner.end()
     }

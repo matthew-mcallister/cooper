@@ -308,39 +308,48 @@ impl Drop for DeviceMemory {
 }
 
 impl DeviceMemory {
+    #[inline]
     pub fn inner(&self) -> vk::DeviceMemory {
         self.inner
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn size(&self) -> vk::DeviceSize {
         self.size
     }
 
+    #[inline]
     pub fn type_index(&self) -> u32 {
         self.type_index
     }
 
     /// Memory-mapped pointer when host-visible.
+    ///     #[inline]
     pub fn ptr(&self) -> *mut c_void {
         self.ptr
     }
 
+    #[inline]
     pub fn tiling(&self) -> Tiling {
         self.tiling
     }
 
+    #[inline]
     pub fn mapped(&self) -> bool {
         !self.ptr.is_null()
     }
 
+    #[inline]
     pub fn lifetime(&self) -> Lifetime {
         self.lifetime
     }
 
+    #[inline]
     pub fn flags(&self) -> vk::MemoryPropertyFlags {
         self.device.mem_props.memory_types[self.type_index as usize]
             .property_flags
@@ -380,6 +389,7 @@ impl From<vk::ImageTiling> for Tiling {
 }
 
 impl MemoryMapping {
+    #[inline]
     pub fn memory_property_flags(self) -> vk::MemoryPropertyFlags {
         match self {
             Self::Mapped => visible_coherent_flags(),

@@ -204,6 +204,7 @@ impl ImageHeap {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }

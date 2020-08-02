@@ -83,6 +83,7 @@ primitive_enum! {
 pub type ChannelCount = Dimension;
 
 impl Format {
+    #[inline]
     pub fn is_depth_stencil(self) -> bool {
         use vk::ImageAspectFlags as Flags;
         self.aspects().intersects(Flags::DEPTH_BIT | Flags::STENCIL_BIT)

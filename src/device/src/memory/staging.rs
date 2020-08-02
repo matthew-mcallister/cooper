@@ -28,22 +28,27 @@ impl StagingBuffer {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.buffer.device()
     }
 
+    #[inline]
     pub fn inner(&self) -> &DeviceBuffer {
         &self.buffer
     }
 
+    #[inline]
     pub fn used(&self) -> usize {
         self.allocator.used() as _
     }
 
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.allocator.capacity() as _
     }
 
+    #[inline]
     pub fn alloc(&mut self, size: usize) -> Option<BufferRange<'_>> {
         let blk = self.allocator.alloc(size as _, 1)?;
         Some(BufferRange {
@@ -53,6 +58,7 @@ impl StagingBuffer {
         })
     }
 
+    #[inline]
     pub unsafe fn clear(&mut self) {
         self.allocator.clear();
     }

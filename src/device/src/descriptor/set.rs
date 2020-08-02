@@ -27,18 +27,22 @@ impl Drop for Set {
 }
 
 impl Set {
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.layout.device()
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::DescriptorSet {
         self.inner
     }
 
+    #[inline]
     pub fn layout(&self) -> &Arc<DescriptorSetLayout> {
         &self.layout
     }
 
+    #[inline]
     pub fn write_buffer(
         &mut self,
         binding: u32,
@@ -95,6 +99,7 @@ impl Set {
         }
     }
 
+    #[inline]
     pub unsafe fn write_image(
         &mut self,
         binding: u32,

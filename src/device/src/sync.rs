@@ -53,10 +53,12 @@ impl Drop for SemaphoreInner {
 }
 
 impl SemaphoreInner {
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::Semaphore {
         self.raw
     }
@@ -90,18 +92,22 @@ impl BinarySemaphore {
         } }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.inner.device()
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::Semaphore {
         self.inner.raw()
     }
 
+    #[inline]
     pub fn inner_mut(&mut self) -> &mut SemaphoreInner {
         &mut self.inner
     }
 
+    #[inline]
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.inner.set_name(name);
     }
@@ -137,6 +143,7 @@ impl TimelineSemaphore {
         } }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         self.inner.device()
     }
@@ -145,10 +152,12 @@ impl TimelineSemaphore {
         self.device().table()
     }
 
+    #[inline]
     pub fn raw(&self) -> vk::Semaphore {
         self.inner.raw()
     }
 
+    #[inline]
     pub fn inner_mut(&mut self) -> &mut SemaphoreInner {
         &mut self.inner
     }

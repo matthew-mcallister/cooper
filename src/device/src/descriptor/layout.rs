@@ -63,6 +63,7 @@ fn validate_layout(desc: &SetLayoutDesc) {
 }
 
 impl Layout {
+    #[inline]
     pub fn new(device: Arc<Device>, desc: SetLayoutDesc) -> Self {
         let dt = device.table();
 
@@ -109,26 +110,32 @@ impl Layout {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn inner(&self) -> vk::DescriptorSetLayout {
         self.inner
     }
 
+    #[inline]
     pub fn desc(&self) -> &SetLayoutDesc {
         &self.desc
     }
 
+    #[inline]
     pub fn bindings(&self) -> &[SetLayoutBinding] {
         &self.desc().bindings
     }
 
+    #[inline]
     pub fn counts(&self) -> &Counts {
         &self.counts
     }
 
+    #[inline]
     pub fn required_pool_flags(&self) -> vk::DescriptorPoolCreateFlags {
         Default::default()
     }
@@ -153,6 +160,7 @@ pub struct DescriptorSetLayoutCache {
 }
 
 impl SetLayoutCache {
+    #[inline]
     pub fn new(device: Arc<Device>) -> Self {
         Self {
             device,
@@ -160,14 +168,17 @@ impl SetLayoutCache {
         }
     }
 
+    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
+    #[inline]
     pub fn commit(&mut self) {
         self.inner.commit();
     }
 
+    #[inline]
     pub fn get_committed(&self, desc: &SetLayoutDesc) ->
         Option<&Arc<SetLayout>>
     {
@@ -177,7 +188,7 @@ impl SetLayoutCache {
     pub fn get_or_create_named(
         &self,
         desc: &SetLayoutDesc,
-        name: Option<String>,
+        name: Option<impl Into<String>>,
     ) -> Cow<Arc<SetLayout>> {
         self.inner.get_or_insert_with(desc, move || {
             let mut layout =
@@ -187,7 +198,8 @@ impl SetLayoutCache {
         })
     }
 
+    #[inline]
     pub fn get_or_create(&self, desc: &SetLayoutDesc) -> Cow<Arc<SetLayout>> {
-        self.get_or_create_named(desc, None)
+        self.get_or_create_named(desc, None: Option<&str>)
     }
 }

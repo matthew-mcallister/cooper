@@ -40,7 +40,7 @@ impl SceneDescriptors {
             (Binding::ViewUniforms as _, UniformBuffer,
                 VERTEX_BIT | FRAGMENT_BIT),
             (Binding::InstanceUniforms as _, StorageBuffer, VERTEX_BIT),
-        ], Some("scene_descriptors".to_owned())).into_owned()
+        ], Some("scene_descriptors")).into_owned()
     }
 
     pub(super) fn new(state: &SystemState, globals: &Globals) -> Self {
