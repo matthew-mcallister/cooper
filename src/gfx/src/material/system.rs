@@ -1,78 +1,43 @@
 use std::sync::Arc;
 
-use device::{DescriptorSet, ShaderStageMap};
-use enum_map::enum_map;
+use base::partial_map;
+use device::{ShaderSpec, ShaderStage, ShaderStageMap};
 
-use crate::{SystemState, Globals};
+use crate::{Globals, GlobalShaders, ShaderConst, SystemState};
 use crate::resource::ResourceSystem;
 use super::*;
 
-#[allow(unused_variables)]
-pub(super) trait MaterialFactory: std::fmt::Debug + Send + Sync {
-    fn process_image_bindings(&self, images: &mut MaterialImageBindings) {}
-
-    fn create_descriptor_set(
-        &self,
-        state: &SystemState,
-        images: &MaterialImageState,
-    ) -> Option<DescriptorSet> {
-        None
-    }
-
-    // TODO: Not necessary.
-    fn select_shaders(&self) -> ShaderStageMap;
-}
-
 #[derive(Debug)]
 crate struct MaterialSystem {
-    factories: EnumMap<MaterialProgram, Arc<dyn MaterialFactory>>,
+    globals: Arc<Globals>,
     materials: MaterialStateTable,
 }
 
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[non_exhaustive]
+enum GeomVisMode {
+    Checker = 0,
+    Depth = 1,
+    Normal = 2,
+}
+
 impl MaterialSystem {
-    crate fn new(state: &SystemState, globals: &Arc<Globals>) -> Self {
-        let factories = enum_map! {
-            MaterialProgram::Checker =>
-                Arc::new(GeomVisMaterialFactory::new(
-                    state, globals, GeomVisMode::Checker,
-                )) as Arc<dyn MaterialFactory>,
-            MaterialProgram::GeomDepth =>
-                Arc::new(GeomVisMaterialFactory::new(
-                    state, globals, GeomVisMode::Depth,
-                )),
-            MaterialProgram::GeomNormal =>
-                Arc::new(GeomVisMaterialFactory::new(
-                    state, globals, GeomVisMode::Normal,
-                )),
-            MaterialProgram::Albedo =>
-                Arc::new(TextureVisMaterialFactory::new(
-                    state, globals, MaterialImage::Albedo,
-                )),
-            MaterialProgram::NormalMap =>
-                Arc::new(TextureVisMaterialFactory::new(
-                    state, globals, MaterialImage::Normal,
-                )),
-            MaterialProgram::MetallicRoughness =>
-                Arc::new(TextureVisMaterialFactory::new(
-                    state, globals, MaterialImage::MetallicRoughness,
-                )),
-        };
+    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
         Self {
-            factories,
-            materials: MaterialStateTable::new(),
+            globals: Arc::clone(globals),
+            materials: MaterialStateTable::new(globals),
         }
     }
 
     crate fn define_material(
         &self,
         program: MaterialProgram,
-        mut images: MaterialImageBindings,
+        images: MaterialImageBindings,
     ) -> Arc<MaterialDef> {
-        let factory = Arc::clone(&self.factories[program]);
-        factory.process_image_bindings(&mut images);
+        let stages = shader_stages(&self.globals, program);
         Arc::new(MaterialDef {
-            factory,
             program,
+            stages,
             image_bindings: images,
         })
     }
@@ -84,5 +49,50 @@ impl MaterialSystem {
         def: &Arc<MaterialDef>,
     ) -> Result<&Arc<Material>, ResourceUnavailable> {
         self.materials.get_or_create(state, resources, def)
+    }
+}
+
+fn shader_stages(globals: &Globals, prog: MaterialProgram) -> ShaderStageMap {
+    use MaterialProgram::*;
+    let shaders = &globals.shaders;
+    match prog {
+        Checker => geom_vis_stages(shaders, GeomVisMode::Checker),
+        GeomDepth => geom_vis_stages(shaders, GeomVisMode::Depth),
+        GeomNormal => geom_vis_stages(shaders, GeomVisMode::Normal),
+        Albedo => texture_vis_stages(shaders, MaterialImage::Albedo),
+        NormalMap => texture_vis_stages(shaders, MaterialImage::Normal),
+        MetallicRoughness =>
+            texture_vis_stages(shaders, MaterialImage::MetallicRoughness),
+    }
+}
+
+fn texture_vis_stages(shaders: &GlobalShaders, slot: MaterialImage) ->
+    ShaderStageMap
+{
+    // TODO: This could easily be made into a macro. Or a function
+    // taking an iterator. Or, better yet, ShaderSpec could just
+    // accept a hashmap as input.
+    let specialize = |shader| {
+        let mut spec = ShaderSpec::new(Arc::clone(shader));
+        spec.set(ShaderConst::TextureVisSlot as _, &(slot as u32));
+        Arc::new(spec)
+    };
+    partial_map! {
+        ShaderStage::Vertex => specialize(&shaders.static_vert),
+        ShaderStage::Fragment => specialize(&shaders.texture_vis_frag),
+    }
+}
+
+fn geom_vis_stages(shaders: &GlobalShaders, mode: GeomVisMode) ->
+    ShaderStageMap
+{
+    let specialize = |shader| {
+        let mut spec = ShaderSpec::new(Arc::clone(shader));
+        spec.set(ShaderConst::GeomVisMode as _, &(mode as u32));
+        Arc::new(spec)
+    };
+    partial_map! {
+        ShaderStage::Vertex => specialize(&shaders.static_vert),
+        ShaderStage::Fragment => specialize(&shaders.geom_vis_frag),
     }
 }
