@@ -415,17 +415,27 @@ macro_rules! pipeline_cache {
                 self.inner.commit();
             }
 
+            unsafe fn get_or_create_committed(
+                &mut self,
+                layout: &Arc<PipelineLayout>,
+                desc: &$desc,
+            ) -> &Arc<$pipeline> {
+                self.inner.get_or_insert_committed_with(desc, || {
+                    Arc::new($pipeline::new(Arc::clone(layout), desc.clone()))
+                })
+            }
+
             fn get_committed(&self, desc: &$desc) -> Option<&Arc<$pipeline>> {
                 self.inner.get_committed(desc)
             }
 
             unsafe fn get_or_create(
                 &self,
-                layout: Arc<PipelineLayout>,
+                layout: &Arc<PipelineLayout>,
                 desc: &$desc,
             ) -> Cow<Arc<$pipeline>> {
                 self.inner.get_or_insert_with(desc, || {
-                    Arc::new($pipeline::new(layout, desc.clone()))
+                    Arc::new($pipeline::new(Arc::clone(layout), desc.clone()))
                 })
             }
         }
@@ -456,11 +466,24 @@ impl PipelineLayoutCache {
         self.inner.get_committed(desc)
     }
 
+    pub fn get_or_create_committed(&mut self, desc: &PipelineLayoutDesc) ->
+        &Arc<PipelineLayout>
+    {
+        let device = &self.device;
+        self.inner.get_or_insert_committed_with(desc, || {
+            Arc::new(PipelineLayout::new(
+                Arc::clone(&device),
+                desc.clone(),
+            ))
+        })
+    }
+
     pub unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) ->
         Cow<Arc<PipelineLayout>>
     {
+        let device = &self.device;
         self.inner.get_or_insert_with(desc, || Arc::new(PipelineLayout::new(
-            Arc::clone(&self.device),
+            Arc::clone(&device),
             desc.clone(),
         )))
     }
@@ -485,10 +508,24 @@ impl PipelineCache {
         self.layouts.get_committed(desc)
     }
 
+    pub fn get_or_create_committed_layout(&mut self, desc: &PipelineLayoutDesc)
+        -> &Arc<PipelineLayout>
+    {
+        self.layouts.get_or_create_committed(desc)
+    }
+
     pub fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) ->
         Option<&Arc<GraphicsPipeline>>
     {
         self.gfx.get_committed(desc)
+    }
+
+    pub unsafe fn get_or_create_committed_gfx(
+        &mut self,
+        desc: &GraphicsPipelineDesc,
+    ) -> &Arc<GraphicsPipeline> {
+        let layout = self.layouts.get_or_create_committed(&desc.layout);
+        self.gfx.get_or_create_committed(&layout, desc)
     }
 
     pub unsafe fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) ->
@@ -500,8 +537,8 @@ impl PipelineCache {
     pub unsafe fn get_or_create_gfx(&self, desc: &GraphicsPipelineDesc) ->
         Cow<Arc<GraphicsPipeline>>
     {
-        let layout = self.get_or_create_layout(&desc.layout);
-        self.gfx.get_or_create(layout.into_owned(), desc)
+        let layout = self.layouts.get_or_create(&desc.layout);
+        self.gfx.get_or_create(&layout, desc)
     }
 }
 
@@ -512,7 +549,7 @@ mod tests {
     use crate::testing::*;
     use super::*;
 
-    unsafe fn create_test(vars: testing::TestVars) {
+    unsafe fn create(vars: testing::TestVars) {
         let device = vars.device();
         let resources = TestResources::new(device);
         let pass = TrivialPass::new(device);
@@ -527,7 +564,7 @@ mod tests {
         let _pipeline = create_graphics_pipeline(layout, desc);
     }
 
-    unsafe fn cache_test(vars: crate::testing::TestVars) {
+    unsafe fn cache(vars: crate::testing::TestVars) {
         let device = vars.device();
         let resources = TestResources::new(device);
         let pass = TrivialPass::new(device);
@@ -543,12 +580,12 @@ mod tests {
 
         cache.commit();
 
-        assert!(Arc::ptr_eq(cache.get_committed_gfx(&desc).unwrap(), &pipe1));
+        assert!(Arc::ptr_eq(cache.get_or_create_committed_gfx(&desc), &pipe1));
     }
 
     unit::declare_tests![
-        create_test,
-        cache_test,
+        create,
+        cache,
     ];
 }
 

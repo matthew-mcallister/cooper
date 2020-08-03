@@ -197,6 +197,16 @@ impl SamplerCache {
             *desc,
         )))
     }
+
+    pub fn get_or_create_committed(&mut self, desc: &SamplerDesc) ->
+        &Arc<Sampler>
+    {
+        let device = &self.device;
+        self.inner.get_or_insert_committed_with(desc, || Arc::new(Sampler::new(
+            Arc::clone(&device),
+            *desc,
+        )))
+    }
 }
 
 #[cfg(test)]
