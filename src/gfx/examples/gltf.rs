@@ -125,27 +125,33 @@ unsafe fn render_mesh(
 
 type MeshMaterials = [Arc<MaterialDef>; 6];
 
-fn mesh_materials(rl: &mut RenderLoop, meshes: &[Mesh]) -> Vec<MeshMaterials> {
+fn mesh_materials(rl: &mut RenderLoop, mesh: &Mesh) -> MeshMaterials {
     use MaterialProgram::*;
 
-    let checker_mat = rl.define_material(Checker, Default::default());
-    let geom_depth_mat = rl.define_material(GeomDepth, Default::default());
-    let geom_normal_mat = rl.define_material(GeomNormal, Default::default());
+    let vertex_layout = mesh.render_mesh.static_layout();
 
-    meshes.iter().map(|mesh| {
-        let albedo_mat = rl.define_material(Albedo, mesh.images.clone());
-        let normal_mat = rl.define_material(NormalMap, mesh.images.clone());
-        let met_rough_mat = rl.define_material(
-            MetallicRoughness, mesh.images.clone());
-        [
-            Arc::clone(&checker_mat),
-            Arc::clone(&geom_depth_mat),
-            Arc::clone(&geom_normal_mat),
-            albedo_mat,
-            normal_mat,
-            met_rough_mat,
-        ]
-    }).collect()
+    let checker_mat = rl.define_material(
+        vertex_layout.clone(), Checker, Default::default());
+    let geom_depth_mat = rl.define_material(
+        vertex_layout.clone(), GeomDepth, Default::default());
+    let geom_normal_mat = rl.define_material(
+        vertex_layout.clone(), GeomNormal, Default::default());
+
+    let albedo_mat = rl.define_material(
+        vertex_layout.clone(), Albedo, mesh.images.clone());
+    let normal_mat = rl.define_material(
+        vertex_layout.clone(), NormalMap, mesh.images.clone());
+    let met_rough_mat = rl.define_material(
+        vertex_layout.clone(), MetallicRoughness, mesh.images.clone());
+
+    [
+        checker_mat,
+        geom_depth_mat,
+        geom_normal_mat,
+        albedo_mat,
+        normal_mat,
+        met_rough_mat,
+    ]
 }
 
 fn main() {
@@ -177,7 +183,9 @@ unsafe fn unsafe_main_with_proxy(proxy: window::EventLoopProxy) ->
     let path = std::env::var("GLTF_PATH")?;
     let bundle = GltfBundle::import(&path)?;
     let meshes = bundle.load_meshes(&mut rloop)?;
-    let materials = mesh_materials(&mut rloop, &meshes);
+    let materials: Vec<_> = meshes.iter()
+        .map(|mesh| mesh_materials(&mut rloop, mesh))
+        .collect();
 
     let mut rloop = Some(Box::new(rloop));
     while !window.should_close() {

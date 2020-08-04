@@ -33,11 +33,11 @@ crate enum ShaderConst {
 }
 
 impl Globals {
-    crate fn new(state: &SystemState) -> Self {
+    crate fn new(state: &mut SystemState) -> Self {
         unsafe { Self::unsafe_new(state) }
     }
 
-    unsafe fn unsafe_new(state: &SystemState) -> Self {
+    unsafe fn unsafe_new(state: &mut SystemState) -> Self {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
@@ -99,7 +99,8 @@ impl Globals {
             anisotropy_level: AnisotropyLevel::Sixteen,
             ..Default::default()
         };
-        let empty_sampler = Arc::clone(&state.samplers.get_or_create(&desc));
+        let empty_sampler =
+            Arc::clone(&state.samplers.get_or_create_committed(&desc));
 
         let scene_desc_layout =
             SceneDescriptors::create_layout(&state.set_layouts);

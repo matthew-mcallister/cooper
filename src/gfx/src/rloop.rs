@@ -46,11 +46,11 @@ impl RenderLoop {
         let device = Arc::clone(swapchain.device());
         let gfx_queue = Arc::clone(&queues[0][0]);
 
-        let state = Box::new(SystemState::new(Arc::clone(&device)));
+        let mut state = Box::new(SystemState::new(Arc::clone(&device)));
         let image_heap = ImageHeap::new(Arc::clone(&device));
         let mut resources = ResourceSystem::new(&gfx_queue);
 
-        let globals = Arc::new(Globals::new(&state));
+        let globals = Arc::new(Globals::new(&mut state));
         globals.upload_images(&mut resources);
 
         let materials = MaterialStateTable::new(&state, &globals);

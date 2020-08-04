@@ -77,7 +77,8 @@ impl Layout {
         let mut samplers: SmallVec<_, 4> = SmallVec::new();
         let bindings: SmallVec<_, 4> = desc.bindings.iter().map(|binding| {
             if let Some(samplers) = &binding.samplers {
-                assert_eq!(samplers.len(), binding.count as usize);
+                assert_eq!(samplers.len(), binding.count as usize,
+                    "incorrect sampler count");
             }
             let vk_samplers: SmallVec<_, 2> = binding.samplers.iter()
                 .flat_map(|samplers| samplers.iter())

@@ -22,7 +22,7 @@ pub(super) fn define_material(
     images: MaterialImageBindings,
 ) -> Arc<MaterialDef> {
     let stages = shader_stages(&globals, program);
-    let set_layout = create_set_layout(state, &images);
+    let set_layout = create_set_layout(state, globals, &images);
     Arc::new(MaterialDef {
         vertex_layout,
         program,

@@ -61,12 +61,17 @@ impl<K: Enum<Option<V>>, V> PartialEnumMap<K, V> {
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.iter().count()
+        self.values().count()
     }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.inner.values().all(|x| x.is_none())
+    }
+
+    #[inline(always)]
+    pub fn capacity(&self) -> usize {
+        <K as Enum<Option<V>>>::POSSIBLE_VALUES
     }
 
     #[inline(always)]

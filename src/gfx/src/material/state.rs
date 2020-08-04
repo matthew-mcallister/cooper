@@ -161,16 +161,23 @@ fn create_image_view(
 
 pub(super) fn create_set_layout(
     state: &mut SystemState,
+    globals: &Globals,
     bindings: &MaterialImageBindings,
 ) -> Arc<DescriptorSetLayout> {
-    let samplers = bindings.values().map(|binding| {
-        state.samplers.get_or_create_committed(&binding.sampler_state).clone()
+    let default_sampler = &globals.empty_sampler;
+    let samplers = MaterialImage::values().map(|k| {
+        if let Some(binding) = bindings.get(k) {
+            let desc = &binding.sampler_state;
+            Arc::clone(state.samplers.get_or_create_committed(desc))
+        } else {
+            Arc::clone(default_sampler)
+        }
     }).collect();
     state.set_layouts.get_or_create(&SetLayoutDesc {
         bindings: smallvec![SetLayoutBinding {
             binding: 0,
             ty: DescriptorType::CombinedImageSampler,
-            count: bindings.len() as u32,
+            count: bindings.capacity() as u32,
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
             samplers: Some(samplers),
         }],
