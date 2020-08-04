@@ -4,7 +4,7 @@ use device::{Device, Image, ImageDef, ImageHeap, Queue};
 
 use super::*;
 
-// TODO: Get rid of this type and use the constituent types directly.
+// TODO: This type is somewhat unnecessary
 #[derive(Debug)]
 crate struct ResourceSystem {
     state: ResourceStateTable,
@@ -25,7 +25,7 @@ impl ResourceSystem {
     }
 
     crate fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
-        self.state.get_state(image, self.sched.avail_batch())
+        self.state.get_state(image)
     }
 
     // TODO: For stuff like storage images, it could potentially be
@@ -48,7 +48,7 @@ impl ResourceSystem {
     }
 
     crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>> {
-        self.state.get_image(image, self.sched.avail_batch())
+        self.state.get_image(image)
     }
 
     #[allow(dead_code)]
@@ -57,7 +57,9 @@ impl ResourceSystem {
     }
 
     crate fn query_status(&mut self) -> SchedulerStatus {
-        self.sched.query_tasks()
+        let status = self.sched.query_tasks();
+        self.state.set_avail_batch(self.sched.avail_batch());
+        status
     }
 
     crate fn schedule(&mut self, heap: &ImageHeap) {

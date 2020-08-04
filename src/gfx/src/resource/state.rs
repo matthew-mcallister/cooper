@@ -10,6 +10,7 @@ use super::ResourceState;
 
 #[derive(Debug)]
 crate struct ResourceStateTable {
+    avail_batch: u64,
     images: HashMap<ByPtr<Arc<ImageDef>>, ResourceInfo>,
 }
 
@@ -42,10 +43,14 @@ impl ResourceStateTable {
             .or_insert_with(|| (image.clone(), Default::default())).1
     }
 
-    crate fn get_state(&self, image: &Arc<ImageDef>, avail_batch: u64) ->
+    unsafe fn set_avail_batch(&mut self, avail_batch: u64) {
+        self.avail_batch = avail_batch;
+    }
+
+    crate fn get_state(&self, image: &Arc<ImageDef>) ->
         ResourceState
     {
-        tryopt!(self.images.get(ByPtr::by_ptr(image))?.state(avail_batch))
+        tryopt!(self.images.get(ByPtr::by_ptr(image))?.state(self.avail_batch))
             .unwrap_or(ResourceState::Unavailable)
     }
 
@@ -67,15 +72,11 @@ impl ResourceStateTable {
         })
     }
 
-    crate fn get_image(&self, image: &Arc<ImageDef>, avail_batch: u64) ->
+    crate fn get_image(&self, image: &Arc<ImageDef>) ->
         Option<&Arc<Image>>
     {
-        trace!(
-            "ResourceStateTable::get_image(image: {:?}, avail_batch: {:?})",
-            fmt_named(&**image), avail_batch,
-        );
         let info = self.images.get(ByPtr::by_ptr(image))?;
-        guard(info.state(avail_batch) == ResourceState::Available)?;
+        guard(info.state(self.avail_batch) == ResourceState::Available)?;
         info.resource.as_ref()
     }
 
