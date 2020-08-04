@@ -14,22 +14,14 @@ enum GeomVisMode {
     Normal = 2,
 }
 
-pub(super) fn define_material(
+pub(super) fn create_def(
     state: &mut SystemState,
     globals: &Arc<Globals>,
-    vertex_layout: VertexInputLayout,
-    program: MaterialProgram,
-    images: MaterialImageBindings,
+    desc: Arc<MaterialDesc>,
 ) -> Arc<MaterialDef> {
-    let stages = shader_stages(&globals, program);
-    let set_layout = create_set_layout(state, globals, &images);
-    Arc::new(MaterialDef {
-        vertex_layout,
-        program,
-        stages,
-        set_layout,
-        image_bindings: images,
-    })
+    let stages = shader_stages(&globals, desc.program);
+    let set_layout = create_set_layout(state, globals, &desc.image_bindings);
+    Arc::new(MaterialDef { desc, stages, set_layout })
 }
 
 fn shader_stages(globals: &Globals, prog: MaterialProgram) -> ShaderStageMap {

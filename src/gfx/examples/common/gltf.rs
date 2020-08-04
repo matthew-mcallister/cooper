@@ -307,7 +307,6 @@ fn load_texture(
     ImageBindingDesc {
         subresources: image.all_subresources(),
         image,
-        flags: Default::default(),
         sampler_state,
     }
 }

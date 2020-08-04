@@ -7,6 +7,7 @@ use base::PartialEnumMap;
 use derivative::Derivative;
 use enum_map::Enum;
 use log::trace;
+use more_asserts::assert_lt;
 
 use crate::*;
 
@@ -255,6 +256,11 @@ unsafe fn create_graphics_pipeline(
 
     let vertex_shader = desc.vertex_stage().shader();
     let vertex_layout = &desc.vertex_layout;
+
+    let attrs = &vertex_layout.attributes;
+    for (a0, a1) in attrs[..attrs.len() - 1].iter().zip(attrs[1..].iter()) {
+        assert_lt!(a0.location, a1.location);
+    }
 
     for &location in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty

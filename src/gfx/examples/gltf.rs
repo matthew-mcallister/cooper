@@ -130,19 +130,37 @@ fn mesh_materials(rl: &mut RenderLoop, mesh: &Mesh) -> MeshMaterials {
 
     let vertex_layout = mesh.render_mesh.static_layout();
 
-    let checker_mat = rl.define_material(
-        vertex_layout.clone(), Checker, Default::default());
-    let geom_depth_mat = rl.define_material(
-        vertex_layout.clone(), GeomDepth, Default::default());
-    let geom_normal_mat = rl.define_material(
-        vertex_layout.clone(), GeomNormal, Default::default());
+    let checker_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: Checker,
+        ..Default::default()
+    });
+    let geom_depth_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: GeomDepth,
+        ..Default::default()
+    });
+    let geom_normal_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: GeomNormal,
+        ..Default::default()
+    });
 
-    let albedo_mat = rl.define_material(
-        vertex_layout.clone(), Albedo, mesh.images.clone());
-    let normal_mat = rl.define_material(
-        vertex_layout.clone(), NormalMap, mesh.images.clone());
-    let met_rough_mat = rl.define_material(
-        vertex_layout.clone(), MetallicRoughness, mesh.images.clone());
+    let albedo_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: Albedo,
+        image_bindings: mesh.images.clone(),
+    });
+    let normal_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: NormalMap,
+        image_bindings: mesh.images.clone(),
+    });
+    let met_rough_mat = rl.define_material(&MaterialDesc {
+        vertex_layout: vertex_layout.clone(),
+        program: MetallicRoughness,
+        image_bindings: mesh.images.clone(),
+    });
 
     [
         checker_mat,

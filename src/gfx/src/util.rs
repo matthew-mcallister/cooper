@@ -56,3 +56,19 @@ macro_rules! set_name {
         }
     }
 }
+
+#[inline(always)]
+crate fn ptr_eq<P, T>(lhs: &P, rhs: &P) -> bool
+    where P: std::ops::Deref<Target = T>
+{
+    lhs.deref() as *const _ == rhs.deref() as *const _
+}
+
+#[inline(always)]
+crate fn ptr_hash<P, H>(ptr: &P, state: &mut H)
+where
+    P: std::ops::Deref,
+    H: std::hash::Hasher,
+{
+    std::hash::Hash::hash(&(ptr.deref() as *const P::Target), state)
+}

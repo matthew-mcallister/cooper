@@ -68,7 +68,7 @@ pub enum SampleCount {
 // Don't use std::ops::Range b/c it's not Copy
 pub type ResourceRange = [u32; 2];
 
-#[derive(Clone, Constructor, Copy, Debug)]
+#[derive(Clone, Constructor, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ImageSubresources {
     pub aspects: vk::ImageAspectFlags,
     pub mip_levels: ResourceRange,

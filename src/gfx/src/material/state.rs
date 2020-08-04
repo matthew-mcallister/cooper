@@ -38,6 +38,7 @@ crate struct MaterialState {
 #[derive(Debug)]
 crate struct MaterialStateTable {
     globals: Arc<Globals>,
+    defs: HashMap<Arc<MaterialDesc>, Arc<MaterialDef>>,
     materials: HashMap<ByPtr<Arc<MaterialDef>>, MaterialState>,
 }
 
@@ -55,6 +56,7 @@ impl MaterialStateTable {
     crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
         Self {
             globals: Arc::clone(globals),
+            defs: Default::default(),
             materials: Default::default(),
         }
     }
@@ -62,13 +64,14 @@ impl MaterialStateTable {
     crate fn define(
         &mut self,
         state: &mut SystemState,
-        vertex_layout: VertexInputLayout,
-        program: MaterialProgram,
-        images: MaterialImageBindings,
+        desc: &MaterialDesc,
     ) -> Arc<MaterialDef> {
-        let def = define_material(
-            state, &self.globals, vertex_layout, program, images);
-        self.materials.insert(ByPtr::new(Arc::clone(&def)), Default::default());
+        tryopt! { return Arc::clone(self.defs.get(desc)?) };
+        let def = create_def(state, &self.globals, Arc::new(desc.clone()));
+        self.materials.insert(
+            ByPtr::new(Arc::clone(&def)),
+            Default::default(),
+        );
         def
     }
 
@@ -111,8 +114,8 @@ unsafe fn create_pipeline(
     desc: &mut GraphicsPipelineDesc,
     def: &MaterialDef,
 ) -> Arc<GraphicsPipeline> {
-    desc.stages = def.stages.clone();
-    desc.vertex_layout = def.vertex_layout.clone();
+    desc.stages = def.stages().clone();
+    desc.vertex_layout = def.vertex_layout().clone();
     // A little clunky, but should be flexible enough
     desc.layout.set_layouts[1] = Arc::clone(def.set_layout());
     Arc::clone(state.pipelines.get_or_create_committed_gfx(&desc))
@@ -126,7 +129,7 @@ fn try_resolve_material_resources(
     resources: &ResourceSystem,
     def: &Arc<MaterialDef>,
 ) -> Option<MaterialResources> {
-    let images: PartialEnumMap<_, _> = def.image_bindings.iter()
+    let images: PartialEnumMap<_, _> = def.image_bindings().iter()
         .map(|(k, binding)| {
             let image = resources.get_image(&binding.image)?;
             Some((k, (binding, image)))
@@ -152,7 +155,7 @@ fn create_image_view(
     // but it may be worthwhile to cache and share views.
     unsafe { Arc::new(ImageView::new(
         image,
-        binding.flags,
+        Default::default(),
         binding.image.format(),
         Default::default(),
         binding.subresources,

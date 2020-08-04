@@ -9,10 +9,8 @@ use parking_lot::Mutex;
 /// Implements the caching logic used by pipelines and samplers.
 /// Committed cache hits require no synchronization, which is ideal for
 /// objects which are often used but rarely created.
-// TODO: This doesn't actually allow *parallel* object creation due to
-// the lock. The staging area could be stratified somewhat. Or async
-// programming could be employed.
-// TODO: Parameterize over hash function: FNV is a poor choice for pipes
+// TODO: Doesn't belong in this crate
+// TODO: Parameterize hash function: FNV is a poor choice for pipelines
 #[derive(Derivative)]
 #[derivative(Debug(bound = "FnvHashMap<K, V>: Debug"))]
 crate struct StagedCache<K, V> {

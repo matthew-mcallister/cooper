@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use base::PartialEnumMap;
+use derivative::Derivative;
 use device::{
-    DescriptorSetLayout, Image, ImageDef, ImageSubresources, ImageViewFlags,
-    SamplerDesc, ShaderStageMap, VertexInputLayout,
+    DescriptorSetLayout, Image, ImageDef, ImageSubresources, SamplerDesc,
+    ShaderStageMap, VertexInputLayout,
 };
 use enum_map::Enum;
 
 use crate::SystemState;
+use crate::util::{ptr_eq, ptr_hash};
 
 mod state;
 mod system;
@@ -17,9 +19,11 @@ use system::*;
 
 /// An identifier of a particular material rendering technique.
 // TODO: Should be serializable to/from a string.
-#[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Derivative, Enum, Eq, Hash, PartialEq)]
+#[derivative(Default)]
 #[non_exhaustive]
 pub enum MaterialProgram {
+    #[derivative(Default)]
     Checker,
     GeomDepth,
     GeomNormal,
@@ -37,41 +41,51 @@ pub enum MaterialImage {
 }
 
 // TODO: Probably should be called MaterialTextureDesc or something
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Derivative)]
+#[derivative(Hash, PartialEq)]
 pub struct ImageBindingDesc {
+    #[derivative(Hash(hash_with = "ptr_hash"))]
+    #[derivative(PartialEq(compare_with = "ptr_eq"))]
     pub image: Arc<ImageDef>,
-    // TODO: Should not be exposed to the user
-    pub flags: ImageViewFlags,
     pub subresources: ImageSubresources,
     pub sampler_state: SamplerDesc,
 }
+impl Eq for ImageBindingDesc {}
 
 pub type MaterialImageBindings =
     PartialEnumMap<MaterialImage, ImageBindingDesc>;
 
-// TODO: Bake VkPipeline object(s) at material creation time.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct MaterialDesc {
+    pub vertex_layout: VertexInputLayout,
+    pub program: MaterialProgram,
+    pub image_bindings: MaterialImageBindings,
+}
+
 // TODO: Allow descriptor set layout to be customized somewhat?
-// TODO: Hash and memoized
 #[derive(Debug)]
 pub struct MaterialDef {
-    vertex_layout: VertexInputLayout,
-    program: MaterialProgram,
+    desc: Arc<MaterialDesc>,
     stages: ShaderStageMap,
     set_layout: Arc<DescriptorSetLayout>,
-    image_bindings: MaterialImageBindings,
 }
 
 impl MaterialDef {
-    pub fn program(&self) -> MaterialProgram {
-        self.program
+    fn vertex_layout(&self) -> &VertexInputLayout {
+        &self.desc.vertex_layout
     }
 
-    pub fn shader_stages(&self) -> &ShaderStageMap {
+    #[allow(dead_code)]
+    fn program(&self) -> MaterialProgram {
+        self.desc.program
+    }
+
+    fn image_bindings(&self) -> &MaterialImageBindings {
+        &self.desc.image_bindings
+    }
+
+    fn stages(&self) -> &ShaderStageMap {
         &self.stages
-    }
-
-    pub fn image_bindings(&self) -> &MaterialImageBindings {
-        &self.image_bindings
     }
 
     fn set_layout(&self) -> &Arc<DescriptorSetLayout> {

@@ -143,14 +143,10 @@ impl RenderLoop {
         self.resources.upload_image(image, src, src_offset)
     }
 
-    pub fn define_material(
-        &mut self,
-        vertex_layout: VertexInputLayout,
-        program: MaterialProgram,
-        images: MaterialImageBindings,
-    ) -> Arc<MaterialDef> {
+    pub fn define_material(&mut self, desc: &MaterialDesc) -> Arc<MaterialDef>
+    {
         let state = &mut *self.state.as_mut().unwrap();
-        self.materials.define(state, vertex_layout, program, images)
+        self.materials.define(state, desc)
     }
 
     crate fn new_frame(&mut self) {
