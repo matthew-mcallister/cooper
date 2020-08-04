@@ -50,15 +50,19 @@ fn count_descriptors(bindings: &[SetLayoutBinding]) -> Counts {
 
 fn validate_layout(desc: &SetLayoutDesc) {
     assert_ne!(desc.bindings.len(), 0);
-    let mut b0 = desc.bindings[0].binding;
-    for binding in desc.bindings[1..].iter() {
+
+    for binding in desc.bindings.iter() {
         assert_ne!(binding.count, 0);
-        // Ensure that there are no duplicates and there are no
-        // redundant permutations of the same bindings in the cache
-        let b1 = binding.binding;
-        assert_lt!(b0, b1);
-        b0 = b1;
     }
+
+    // Ensure that there are no duplicates and there are no
+    // redundant permutations of the same bindings in the cache
+    for (b0, b1) in desc.bindings[..desc.bindings.len()].iter()
+        .zip(desc.bindings[1..].iter())
+    {
+        assert_lt!(b0.binding, b1.binding);
+    }
+
     // TODO: wrap stage flags
 }
 

@@ -134,6 +134,26 @@ mod tests {
         );
     }
 
+    fn layout_zero_count(vars: TestVars) {
+        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
+            (0, UniformBuffer[0]),
+        ]);
+    }
+
+    fn layout_duplicate_binding(vars: TestVars) {
+        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
+            (0, UniformBuffer),
+            (0, UniformBuffer),
+        ]);
+    }
+
+    fn layout_unordered_bindings(vars: TestVars) {
+        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
+            (1, UniformBuffer),
+            (0, UniformBuffer),
+        ]);
+    }
+
     fn layout_cache(vars: TestVars) {
         let mut cache = SetLayoutCache::new(Arc::clone(vars.device()));
         let desc = set_layout_desc![
@@ -159,6 +179,9 @@ mod tests {
     unit::declare_tests![
         alloc,
         write,
+        (#[should_err] layout_zero_count),
+        (#[should_err] layout_duplicate_binding),
+        (#[should_err] layout_unordered_bindings),
         layout_cache,
     ];
 }

@@ -2,6 +2,8 @@ use std::ptr;
 use std::sync::{Arc, Weak};
 
 use derivative::Derivative;
+use log::trace;
+use more_asserts::assert_lt;
 use parking_lot::Mutex;
 use vk::traits::*;
 
@@ -142,6 +144,14 @@ impl Set {
         layout: vk::ImageLayout,
         sampler: Option<&Arc<Sampler>>,
     ) {
+        trace!(
+            concat!(
+                "DescriptorSet::write_image_element(self: {:?}, binding: {}, ",
+                "element: {}, view: {:?}, layout: {:?}, sampler: {:?})",
+            ),
+            fmt_named(&*self), binding, element, view, layout, sampler,
+        );
+
         use DescriptorType as Dt;
         use vk::ImageLayout as Il;
 
@@ -153,7 +163,7 @@ impl Set {
 
         // Validation
         {
-            assert!(element < layout_binding.count);
+            assert_lt!(element, layout_binding.count);
             let flags = view.image().flags();
             match ty {
                 Dt::CombinedImageSampler | Dt::SampledImage =>
