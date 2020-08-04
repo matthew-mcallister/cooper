@@ -11,6 +11,7 @@ pub enum RenderObject {
     MeshInstance(MeshInstance),
 }
 
+// TODO maybe: Validate mesh is compatible with material vertex shader
 #[derive(Clone, Debug)]
 pub struct MeshInstance {
     pub mesh: Arc<RenderMesh>,

@@ -56,10 +56,6 @@ impl SceneDescriptors {
         &self.inner
     }
 
-    pub(super) fn layout(&self) -> &Arc<DescriptorSetLayout> {
-        self.inner.layout()
-    }
-
     crate fn write_view_uniforms(&mut self, buffer: BufferRange<'_>) {
         self.inner.write_buffer(Binding::ViewUniforms as _, buffer);
     }

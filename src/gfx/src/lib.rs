@@ -68,7 +68,6 @@ pub use device::{
 };
 
 unit::collect_tests![
-    mesh,
     resource,
     world,
 ];

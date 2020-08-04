@@ -3,15 +3,8 @@ use std::sync::Arc;
 use base::partial_map;
 use device::{ShaderSpec, ShaderStage, ShaderStageMap};
 
-use crate::{Globals, GlobalShaders, ShaderConst, SystemState};
-use crate::resource::ResourceSystem;
+use crate::{Globals, GlobalShaders, ShaderConst};
 use super::*;
-
-#[derive(Debug)]
-crate struct MaterialSystem {
-    globals: Arc<Globals>,
-    materials: MaterialStateTable,
-}
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[non_exhaustive]
@@ -21,35 +14,22 @@ enum GeomVisMode {
     Normal = 2,
 }
 
-impl MaterialSystem {
-    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
-        Self {
-            globals: Arc::clone(globals),
-            materials: MaterialStateTable::new(globals),
-        }
-    }
-
-    crate fn define_material(
-        &self,
-        program: MaterialProgram,
-        images: MaterialImageBindings,
-    ) -> Arc<MaterialDef> {
-        let stages = shader_stages(&self.globals, program);
-        Arc::new(MaterialDef {
-            program,
-            stages,
-            image_bindings: images,
-        })
-    }
-
-    crate fn get_or_create(
-        &mut self,
-        state: &SystemState,
-        resources: &ResourceSystem,
-        def: &Arc<MaterialDef>,
-    ) -> Result<&Arc<Material>, ResourceUnavailable> {
-        self.materials.get_or_create(state, resources, def)
-    }
+pub(super) fn define_material(
+    state: &mut SystemState,
+    globals: &Arc<Globals>,
+    vertex_layout: VertexInputLayout,
+    program: MaterialProgram,
+    images: MaterialImageBindings,
+) -> Arc<MaterialDef> {
+    let stages = shader_stages(&globals, program);
+    let set_layout = create_set_layout(state, &images);
+    Arc::new(MaterialDef {
+        vertex_layout,
+        program,
+        stages,
+        set_layout,
+        image_bindings: images,
+    })
 }
 
 fn shader_stages(globals: &Globals, prog: MaterialProgram) -> ShaderStageMap {

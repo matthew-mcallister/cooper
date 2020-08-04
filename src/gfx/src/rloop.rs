@@ -16,6 +16,7 @@ pub struct RenderLoop {
     renderer: WorldRenderer,
     image_heap: ImageHeap,
     resources: ResourceSystem,
+    materials: MaterialStateTable,
     master_sem: TimelineSemaphore,
     // This is declared last so that it will be dropped last
     state: Option<Box<SystemState>>,
@@ -52,6 +53,7 @@ impl RenderLoop {
         let globals = Arc::new(Globals::new(&state));
         globals.upload_images(&mut resources);
 
+        let materials = MaterialStateTable::new(&state, &globals);
         let renderer = WorldRenderer::new(
             &state,
             &image_heap,
@@ -74,6 +76,7 @@ impl RenderLoop {
             swapchain,
             globals,
             renderer,
+            materials,
             image_heap,
             resources,
             master_sem,
@@ -89,8 +92,8 @@ impl RenderLoop {
         &self.state.as_ref().unwrap()
     }
 
-    fn state_mut(&mut self) -> &mut SystemState {
-        &mut *self.state.as_mut().unwrap()
+    crate fn globals(&self) -> &Globals {
+        &self.globals
     }
 
     crate fn frame_num(&self) -> u64 {
@@ -141,18 +144,23 @@ impl RenderLoop {
     }
 
     pub fn define_material(
-        &self,
+        &mut self,
+        vertex_layout: VertexInputLayout,
         program: MaterialProgram,
         images: MaterialImageBindings,
     ) -> Arc<MaterialDef> {
-        self.renderer.materials().define_material(program, images)
+        let state = &mut *self.state.as_mut().unwrap();
+        self.materials.define(state, vertex_layout, program, images)
     }
 
     crate fn new_frame(&mut self) {
         self.frame_num += 1;
         debug!("beginning frame {}", self.frame_num);
-        self.state_mut().frame_over();
+        let state = &mut *self.state.as_mut().unwrap();
+        state.frame_over();
         self.resources.schedule(&self.image_heap);
+        self.materials.update_resolved_resources(state, &self.resources);
+        self.renderer.create_pipelines(state, &mut self.materials);
     }
 
     crate fn wait_for_render(&self) {
@@ -168,6 +176,7 @@ impl RenderLoop {
         self.renderer.run(
             Arc::clone(&state),
             &self.resources,
+            &self.materials,
             world,
             self.frame_num(),
             self.swapchain.image_index(),

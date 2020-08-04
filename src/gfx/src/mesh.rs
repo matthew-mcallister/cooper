@@ -11,6 +11,8 @@ pub struct RenderMesh {
     vertex_count: u32,
     index: Option<IndexBuffer>,
     bindings: PartialEnumMap<VertexAttr, AttrBuffer>,
+    // FIXME: This is a band-aid solution
+    static_layout: VertexInputLayout,
 }
 
 #[derive(Debug)]
@@ -29,19 +31,24 @@ crate struct IndexBuffer {
 #[derive(Debug)]
 pub struct RenderMeshBuilder<'a> {
     buffers: &'a Arc<BufferHeap>,
+    shaders: &'a GlobalShaders,
     lifetime: Lifetime,
     mesh: RenderMesh,
 }
 
 impl RenderMesh {
     /// The number of vertices in the mesh.
-    crate fn vertex_count(&self) -> u32 {
+    pub fn vertex_count(&self) -> u32 {
         self.vertex_count
     }
 
     #[allow(dead_code)]
     crate fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer> {
         &self.bindings
+    }
+
+    pub fn static_layout(&self) -> VertexInputLayout {
+        self.static_layout.clone()
     }
 
     crate fn vertex_layout(&self) -> VertexStreamLayout {
@@ -72,6 +79,7 @@ impl<'a> RenderMeshBuilder<'a> {
     pub fn from_world(world: &'a RenderWorld) -> Self {
         Self {
             buffers: &world.state().buffers,
+            shaders: &world.globals().shaders,
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -80,6 +88,7 @@ impl<'a> RenderMeshBuilder<'a> {
     pub fn from_loop(rloop: &'a RenderLoop) -> Self {
         Self {
             buffers: &rloop.state().buffers,
+            shaders: &rloop.globals().shaders,
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -122,8 +131,15 @@ impl<'a> RenderMeshBuilder<'a> {
         self.mesh.vertex_count = min;
     }
 
+    fn set_static_layout(&mut self) {
+        let shader = &self.shaders.static_vert;
+        self.mesh.static_layout = self.mesh.vertex_layout()
+            .input_layout_for_shader(shader);
+    }
+
     pub unsafe fn build(mut self) -> RenderMesh {
         self.set_vertex_count();
+        self.set_static_layout();
         self.mesh
     }
 }
@@ -158,43 +174,3 @@ impl IndexBuffer {
         (self.alloc.size() / self.ty.size() as vk::DeviceSize) as _
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use device::*;
-    use prelude::*;
-    use super::*;
-
-    unsafe fn create_mesh(vars: crate::testing::TestVars) {
-        let buffers = BufferHeap::new(Arc::clone(vars.device()));
-        let mut builder = RenderMeshBuilder {
-            buffers: &buffers,
-            lifetime: Lifetime::Frame,
-            mesh: Default::default(),
-        };
-
-        let pos: &[[f32; 3]] = &[
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [1.0, 1.0, 0.0],
-        ];
-        let normal: &[[f32; 3]] = &[[0.0, 0.0, -1.0]; 4];
-        let idxs: &[u16] = &[
-            0, 3, 1,
-            0, 2, 3,
-        ];
-        builder.index(IndexType::U16, idxs.as_bytes())
-            .attr(VertexAttr::Position, Format::RGB32F, pos.as_bytes())
-            .attr(VertexAttr::Normal, Format::RGB32F, normal.as_bytes());
-
-        let _ = builder.build();
-    }
-
-    unit::declare_tests![
-        create_mesh,
-    ];
-}
-
-unit::collect_tests![tests];

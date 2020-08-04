@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use device::*;
+use smallvec::smallvec;
 
 use crate::*;
 
@@ -84,6 +85,7 @@ unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
 }
 
 /// Top-level renderer.
+// NB: Try to ensure this this type persists no state between frames.
 #[derive(Debug)]
 crate struct WorldRenderer {
     globals: Arc<Globals>,
@@ -91,7 +93,6 @@ crate struct WorldRenderer {
     basic_pass: BasicPass,
     framebuffers: Vec<Arc<Framebuffer>>,
     clear_values: [vk::ClearValue; 2],
-    materials: MaterialSystem,
 }
 
 impl WorldRenderer {
@@ -106,14 +107,12 @@ impl WorldRenderer {
         let basic_pass = BasicPass::new(Arc::clone(&state.device));
         let framebuffers = basic_pass.create_framebuffers(&heap, &swapchain);
         let clear_values = [clear_color([0.0; 4]), clear_depth(0.0)];
-        let materials = MaterialSystem::new(state, &globals);
         Self {
             globals,
             scheduler,
             basic_pass,
             framebuffers,
             clear_values,
-            materials,
         }
     }
 
@@ -123,14 +122,32 @@ impl WorldRenderer {
         self.scheduler
     }
 
-    crate fn materials(&self) -> &MaterialSystem {
-        &self.materials
+    crate fn base_desc(&self) -> GraphicsPipelineDesc {
+        let subpass = self.basic_pass.subpass.clone();
+        let mut desc = GraphicsPipelineDesc::new(subpass);
+        let layout = Arc::clone(&self.globals.scene_desc_layout);
+        desc.layout.set_layouts = smallvec![layout; 2];
+        // FIXME: Supposed to be part of material
+        desc.cull_mode = CullMode::Back;
+        desc.depth_test = true;
+        desc.depth_write = true;
+        desc.depth_cmp_op = vk::CompareOp::GREATER;
+        desc
+    }
+
+    crate fn create_pipelines(
+        &self,
+        state: &mut SystemState,
+        materials: &mut MaterialStateTable,
+    ) {
+        unsafe { materials.create_pipelines(state, &mut self.base_desc()); }
     }
 
     fn objects_pass(
         &mut self,
         state: &Arc<Box<SystemState>>,
         resources: &ResourceSystem,
+        materials: &MaterialStateTable,
         mut descriptors: SceneDescriptors,
         view: SceneViewState,
         pass: &mut RenderPassNode,
@@ -141,13 +158,13 @@ impl WorldRenderer {
         if objects.is_empty() { return; }
 
         let items: Vec<_> = lower_objects(
-            &state, &view.uniforms, resources, &mut self.materials,
-            &mut descriptors, objects.into_iter(),
+            &state, &view.uniforms, resources, &materials, &mut descriptors,
+            objects.into_iter(),
         ).collect();
 
         let mut inst = InstanceRenderer::new(&state, &self.globals);
         pass.add_task(0, Box::new(move |cmds| {
-            inst.render(&view, &descriptors, &items, cmds);
+            inst.render(&descriptors, &items, cmds);
         }));
     }
 
@@ -155,6 +172,7 @@ impl WorldRenderer {
         &mut self,
         state: Arc<Box<SystemState>>,
         resources: &ResourceSystem,
+        materials: &MaterialStateTable,
         world: RenderWorldData,
         frame_num: u64,
         swapchain_image: u32,
@@ -175,7 +193,9 @@ impl WorldRenderer {
 
         let objects = world.objects; // TODO: reuse this memory
         self.objects_pass(
-            &state, resources, descriptors, view, &mut pass, objects);
+            &state, resources, materials, descriptors, view, &mut pass,
+            objects,
+        );
 
         self.scheduler.schedule_pass(
             pass,

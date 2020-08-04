@@ -4,6 +4,7 @@ use device::{Device, Image, ImageDef, ImageHeap, Queue};
 
 use super::*;
 
+// TODO: Get rid of this type and use the constituent types directly.
 #[derive(Debug)]
 crate struct ResourceSystem {
     state: ResourceStateTable,

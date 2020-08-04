@@ -1,13 +1,15 @@
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 
-use device::{BufferBinding, BufferBox, Lifetime};
+use device::{
+    BufferBinding, BufferBox, DescriptorSet, GraphicsPipeline, Lifetime,
+};
 use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
 
 use crate::{RenderMesh, ResourceUnavailable, SystemState};
-use crate::material::{Material, MaterialSystem};
+use crate::material::MaterialStateTable;
 use crate::render::{PerInstanceData, SceneDescriptors, SceneViewUniforms};
 use crate::resource::ResourceSystem;
 use super::*;
@@ -16,8 +18,8 @@ use super::*;
 #[derive(Debug)]
 crate struct RenderItem {
     crate mesh: Arc<RenderMesh>,
-    // TODO: Possibly lower Material to a more primitive representation
-    crate material: Arc<Material>,
+    crate pipeline: Arc<GraphicsPipeline>,
+    crate descriptors: Arc<DescriptorSet>,
 }
 
 #[derive(Debug)]
@@ -25,7 +27,7 @@ struct LowerCtx<'ctx> {
     state: &'ctx SystemState,
     uniforms: &'ctx SceneViewUniforms,
     resources: &'ctx ResourceSystem,
-    materials: &'ctx mut MaterialSystem,
+    materials: &'ctx MaterialStateTable,
     instance_data: &'static mut [PerInstanceData],
 }
 
@@ -39,7 +41,7 @@ impl<'ctx> LowerCtx<'ctx> {
         state: &'ctx SystemState,
         uniforms: &'ctx SceneViewUniforms,
         resources: &'ctx ResourceSystem,
-        materials: &'ctx mut MaterialSystem,
+        materials: &'ctx MaterialStateTable,
         descs: &'ctx mut SceneDescriptors,
         object_count: usize,
     ) -> Self {
@@ -67,7 +69,7 @@ crate fn lower_objects<'a>(
     state: &'a SystemState,
     uniforms: &'a SceneViewUniforms,
     resources: &'a ResourceSystem,
-    materials: &'a mut MaterialSystem,
+    materials: &'a MaterialStateTable,
     descs: &'a mut SceneDescriptors,
     objects: impl ExactSizeIterator<Item = RenderObject> + 'a,
 ) -> impl Iterator<Item = RenderItem> + 'a {
@@ -98,15 +100,16 @@ impl Lower for MeshInstance {
         let xform = ctx.uniforms.view * self.xform();
         ctx.instance_data[instance as usize].set_xform(xform);
 
-        let material = Arc::clone(ctx.materials.get_or_create(
-            ctx.state,
-            ctx.resources,
-            &self.material,
-        )?);
-
-        Ok(RenderItem {
-            mesh: self.mesh,
-            material,
-        })
+        let state = ctx.materials.get(&self.material)
+            .ok_or(ResourceUnavailable)?;
+        (tryopt! {
+            let pipeline = Arc::clone(state.pipeline()?);
+            let descriptors = Arc::clone(state.desc()?);
+            RenderItem {
+                mesh: self.mesh,
+                pipeline,
+                descriptors,
+            }
+        }).ok_or(ResourceUnavailable)
     }
 }

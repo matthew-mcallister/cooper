@@ -3,16 +3,15 @@ use std::sync::Arc;
 use base::ByPtr;
 use derive_more::Display;
 use device::{
-    DescriptorSet, DescriptorType, ImageView, Lifetime, SetLayoutBinding,
-    SetLayoutDesc,
+    DescriptorSet, DescriptorType, GraphicsPipeline, GraphicsPipelineDesc,
+    ImageView, Lifetime, SetLayoutBinding, SetLayoutDesc,
 };
 use enum_map::EnumMap;
 use fnv::FnvHashMap as HashMap;
-use log::trace;
 use smallvec::smallvec;
 
 use crate::Globals;
-use crate::resource::{ResourceState, ResourceSystem};
+use crate::resource::ResourceSystem;
 use crate::util::SmallVec;
 use super::*;
 
@@ -22,162 +21,170 @@ crate struct ResourceUnavailable;
 impl std::error::Error for ResourceUnavailable {}
 impl_from_via_default!(ResourceUnavailable, std::option::NoneError);
 
-#[derive(Clone, Debug)]
-struct ImageBindingState {
-    crate view: Arc<ImageView>,
-    crate sampler: Arc<Sampler>,
-}
+type MaterialImageState = EnumMap<MaterialImage, Arc<ImageView>>;
 
-type MaterialImageState = EnumMap<MaterialImage, ImageBindingState>;
-
-/// A loaded material with all shader bindings available.
 #[derive(Debug)]
-crate struct Material {
-    def: Arc<MaterialDef>,
+struct MaterialResources {
     images: MaterialImageState,
-    desc: Option<DescriptorSet>,
+    desc: Arc<DescriptorSet>,
+}
+
+#[derive(Debug, Default)]
+crate struct MaterialState {
+    pipeline: Option<Arc<GraphicsPipeline>>,
+    resources: Option<MaterialResources>,
 }
 
 #[derive(Debug)]
-pub(super) struct MaterialStateTable {
+crate struct MaterialStateTable {
     globals: Arc<Globals>,
-    materials: HashMap<ByPtr<Arc<MaterialDef>>, Arc<Material>>,
+    materials: HashMap<ByPtr<Arc<MaterialDef>>, MaterialState>,
 }
 
-#[allow(dead_code)]
-impl Material {
-    crate fn def(&self) -> &Arc<MaterialDef> {
-        &self.def
+impl MaterialState {
+    crate fn pipeline(&self) -> Option<&Arc<GraphicsPipeline>> {
+        self.pipeline.as_ref()
     }
 
-    crate fn desc(&self) -> Option<&DescriptorSet> {
-        self.desc.as_ref()
-    }
-
-    crate fn select_shaders(&self) -> ShaderStageMap {
-        self.def.shader_stages().clone()
+    crate fn desc(&self) -> Option<&Arc<DescriptorSet>> {
+        Some(&self.resources.as_ref()?.desc)
     }
 }
 
 impl MaterialStateTable {
-    pub(super) fn new(globals: &Arc<Globals>) -> Self {
+    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
         Self {
             globals: Arc::clone(globals),
             materials: Default::default(),
         }
     }
 
-    #[allow(dead_code)]
-    pub(super) fn get_state(&self, def: &Arc<MaterialDef>) -> ResourceState {
-        tryopt!(resource_state(self.materials.get(ByPtr::by_ptr(def))))
-            .unwrap_or(ResourceState::Unavailable)
-    }
-
-    pub(super) fn get_or_create(
+    crate fn define(
         &mut self,
-        state: &SystemState,
+        state: &mut SystemState,
+        vertex_layout: VertexInputLayout,
+        program: MaterialProgram,
+        images: MaterialImageBindings,
+    ) -> Arc<MaterialDef> {
+        let def = define_material(
+            state, &self.globals, vertex_layout, program, images);
+        self.materials.insert(ByPtr::new(Arc::clone(&def)), Default::default());
+        def
+    }
+
+    crate fn update_resolved_resources(
+        &mut self,
+        state: &mut SystemState,
         resources: &ResourceSystem,
-        def: &Arc<MaterialDef>,
-    ) -> Result<&Arc<Material>, ResourceUnavailable> {
-        // borrowck is braindead
-        let materials = unsafe { &*(&self.materials as *const HashMap<_, _>) };
-        tryopt! { return Ok(materials.get(ByPtr::by_ptr(def))?); };
+    ) {
+        for (def, mat) in self.materials.iter_mut()
+            .filter(|(_, mat)| mat.resources.is_none())
+        {
+            mat.resources = try_resolve_material_resources(
+                state, &self.globals, resources, ByPtr::by_value(def));
+        }
+    }
 
-        let material = create_material(state, &self.globals, resources, def)?;
-        let material = self.materials.entry(Arc::clone(def).into())
-            .insert(Arc::new(material)).into_mut();
-        Ok(material)
+    // TODO: Multiple pipelines per material keyed by the base pipeline
+    // descriptor.
+    crate unsafe fn create_pipelines(
+        &mut self,
+        state: &mut SystemState,
+        base_desc: &mut GraphicsPipelineDesc,
+    ) {
+        for (def, mat) in self.materials.iter_mut()
+            .filter(|(_, mat)| mat.pipeline.is_none())
+        {
+            mat.pipeline = Some(create_pipeline(state, base_desc, def));
+        }
+    }
+
+    crate fn get(&self, def: &Arc<MaterialDef>) ->
+        Option<&MaterialState>
+    {
+        self.materials.get(ByPtr::by_ptr(def))
     }
 }
 
-#[allow(dead_code)]
-fn resource_state(state: Option<&Arc<Material>>) -> ResourceState {
-    if state.is_some() {
-        ResourceState::Available
-    } else {
-        ResourceState::Unavailable
-    }
+unsafe fn create_pipeline(
+    state: &mut SystemState,
+    desc: &mut GraphicsPipelineDesc,
+    def: &MaterialDef,
+) -> Arc<GraphicsPipeline> {
+    desc.stages = def.stages.clone();
+    desc.vertex_layout = def.vertex_layout.clone();
+    // A little clunky, but should be flexible enough
+    desc.layout.set_layouts[1] = Arc::clone(def.set_layout());
+    Arc::clone(state.pipelines.get_or_create_committed_gfx(&desc))
 }
 
-fn create_material(
-    state: &SystemState,
+// TODO: Resolve resources as they become available rather than
+// checking all resources every time.
+fn try_resolve_material_resources(
+    state: &mut SystemState,
     globals: &Globals,
     resources: &ResourceSystem,
     def: &Arc<MaterialDef>,
-) -> Option<Material> {
-    let images = def.image_bindings.iter()
+) -> Option<MaterialResources> {
+    let images: PartialEnumMap<_, _> = def.image_bindings.iter()
         .map(|(k, binding)| {
             let image = resources.get_image(&binding.image)?;
             Some((k, (binding, image)))
         }: Option<_>)
         .collect::<Option<_>>()?;
-    let images = create_image_states(state, globals, images);
-    let desc = create_descriptor_set(state, &images);
-    Some(Material {
-        def: Arc::clone(def),
-        images,
-        desc,
-    })
-}
-
-fn create_image_states(
-    state: &SystemState,
-    globals: &Globals,
-    bindings: PartialEnumMap<MaterialImage, (&ImageBindingDesc, &Arc<Image>)>,
-) -> MaterialImageState {
-    trace!("create_image_states(bindings: {:?})", bindings);
-    let default_image_state = || ImageBindingState {
-        view: Arc::clone(&globals.immediate_image_2d),
-        sampler: Arc::clone(&globals.empty_sampler),
-    };
-    EnumMap::from(|k| {
-        let state = if let Some((binding, image)) = bindings.get(k) {
-            create_image_state(state, binding, Arc::clone(image))
-        } else { default_image_state() };
+    let default_view = &globals.immediate_image_2d;
+    let images = EnumMap::from(|k| {
+        let state = if let Some((binding, image)) = images.get(k) {
+            create_image_view(binding, Arc::clone(image))
+        } else { Arc::clone(default_view) };
         state
-    })
+    });
+    let desc = Arc::new(create_descriptor_set(
+        state, def.set_layout(), &images));
+    Some(MaterialResources { images, desc })
 }
 
-fn create_image_state(
-    state: &SystemState,
+fn create_image_view(
     binding: &ImageBindingDesc,
     image: Arc<Image>,
-) -> ImageBindingState {
+) -> Arc<ImageView> {
     // TODO: We currently create a new ImageView for every image,
     // but it may be worthwhile to cache and share views.
-    let view = unsafe { Arc::new(ImageView::new(
+    unsafe { Arc::new(ImageView::new(
         image,
         binding.flags,
         binding.image.format(),
         Default::default(),
         binding.subresources,
-    )) };
-    let sampler = state.samplers.get_or_create(&binding.sampler_state)
-        .into_owned();
-    ImageBindingState { view, sampler }
+    )) }
 }
 
-fn create_descriptor_set(
-    state: &SystemState,
-    images: &MaterialImageState,
-) -> Option<DescriptorSet> {
-    let samplers =
-        images.values().map(|img| Arc::clone(&img.sampler)).collect();
-    let layout = state.set_layouts.get_or_create(&SetLayoutDesc {
+pub(super) fn create_set_layout(
+    state: &mut SystemState,
+    bindings: &MaterialImageBindings,
+) -> Arc<DescriptorSetLayout> {
+    let samplers = bindings.values().map(|binding| {
+        state.samplers.get_or_create_committed(&binding.sampler_state).clone()
+    }).collect();
+    state.set_layouts.get_or_create(&SetLayoutDesc {
         bindings: smallvec![SetLayoutBinding {
             binding: 0,
             ty: DescriptorType::CombinedImageSampler,
-            count: images.len() as u32,
+            count: bindings.len() as u32,
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
             samplers: Some(samplers),
         }],
         ..Default::default()
-    }).into_owned();
+    }).into_owned()
+}
 
-    let mut set =
-        state.descriptors.alloc(Lifetime::Static, &layout);
-    let views: SmallVec<_, {MaterialImage::SIZE}> =
-        images.values().map(|img| &img.view).collect();
+fn create_descriptor_set(
+    state: &SystemState,
+    layout: &Arc<DescriptorSetLayout>,
+    images: &MaterialImageState,
+) -> DescriptorSet {
+    let mut set = state.descriptors.alloc(Lifetime::Static, &layout);
+    let views: SmallVec<_, {MaterialImage::SIZE}> = images.values().collect();
     unsafe {
         set.write_images(
             0, 0,
@@ -186,5 +193,5 @@ fn create_descriptor_set(
             None,
         );
     }
-    Some(set)
+    set
 }

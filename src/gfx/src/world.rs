@@ -32,6 +32,10 @@ impl RenderWorld {
         self.rloop.state()
     }
 
+    crate fn globals(&self) -> &Globals {
+        self.rloop.globals()
+    }
+
     pub fn view(&self) -> &SceneView {
         &self.data.view
     }
