@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use anyhow as any;
 use cooper_gfx::*;
+use log::debug;
 use math::vector::*;
 use math::matrix::*;
 
@@ -201,6 +202,7 @@ unsafe fn unsafe_main_with_proxy(proxy: window::EventLoopProxy) ->
     let path = std::env::var("GLTF_PATH")?;
     let bundle = GltfBundle::import(&path)?;
     let meshes = bundle.load_meshes(&mut rloop)?;
+    debug!("meshes: {:?}", meshes);
     let materials: Vec<_> = meshes.iter()
         .map(|mesh| mesh_materials(&mut rloop, mesh))
         .collect();

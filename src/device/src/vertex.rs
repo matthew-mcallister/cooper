@@ -54,11 +54,6 @@ wrap_vk_enum! {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct VertexData<'a> {
-    pub attributes: PartialEnumMap<VertexAttr, BufferRange<'a>>,
-}
-
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct VertexStreamLayout {
     pub topology: PrimitiveTopology,
@@ -90,15 +85,6 @@ impl IndexType {
             Self::U16 => 2,
             Self::U32 => 4,
         }
-    }
-}
-
-impl<'a> VertexData<'a> {
-    pub(super) fn map_bindings<'b>(&'b self, layout: &'b VertexInputLayout) ->
-        impl Iterator<Item = BufferRange<'a>> + 'b
-    {
-        layout.attributes.iter()
-            .map(move |binding| self.attributes[binding.attribute])
     }
 }
 

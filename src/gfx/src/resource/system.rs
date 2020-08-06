@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use device::{Device, Image, ImageDef, ImageHeap, Queue};
+use device::{
+    BufferAlloc, BufferHeap, Device, Image, ImageDef, ImageHeap, MemoryRegion,
+    Queue,
+};
 
 use super::*;
 
-// TODO: This type is somewhat unnecessary
 #[derive(Debug)]
 crate struct ResourceSystem {
     state: ResourceStateTable,
@@ -42,13 +44,36 @@ impl ResourceSystem {
         self.sched.add_task(ImageUploadTask {
             src,
             src_offset,
-            image: Arc::clone(image),
             subresources: image.all_subresources(),
+            image: Arc::clone(image),
         });
+    }
+
+    crate fn upload_buffer(
+        &mut self,
+        heap: &Arc<BufferHeap>,
+        buffer: &Arc<BufferDef>,
+        src: Arc<Vec<u8>>,
+        src_offset: usize,
+    ) {
+        let alloc = Arc::get_mut(self.state.alloc_buffer(buffer, heap))
+            .unwrap();
+        if let Some(slice) = alloc.try_as_bytes_mut() {
+            slice.copy_from_slice(&src[src_offset..][..buffer.size as usize]);
+            self.state.make_buffer_available(buffer);
+        } else {
+            todo!("discrete memory support unavailable");
+        }
     }
 
     crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>> {
         self.state.get_image(image)
+    }
+
+    crate fn get_buffer(&self, image: &Arc<BufferDef>) ->
+        Option<&Arc<BufferAlloc>>
+    {
+        self.state.get_buffer(image)
     }
 
     #[allow(dead_code)]
@@ -56,9 +81,13 @@ impl ResourceSystem {
         self.state.invalidate_image(image);
     }
 
+    crate fn update_avail(&mut self) {
+        unsafe { self.state.set_avail_batch(self.sched.avail_batch()); }
+    }
+
     crate fn query_status(&mut self) -> SchedulerStatus {
         let status = self.sched.query_tasks();
-        self.state.set_avail_batch(self.sched.avail_batch());
+        self.update_avail();
         status
     }
 
@@ -71,6 +100,7 @@ impl ResourceSystem {
     #[allow(dead_code)]
     crate fn flush(&mut self, heap: &ImageHeap) {
         self.sched.flush(&mut self.state, heap);
+        self.update_avail();
     }
 }
 

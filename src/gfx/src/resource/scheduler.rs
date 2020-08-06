@@ -10,6 +10,7 @@ use log::{debug, trace};
 
 use super::*;
 
+// TODO: A non-queued version of this type for per-frame uploads
 #[derive(Debug)]
 pub(super) struct UploadScheduler {
     queue: Arc<Queue>,
@@ -95,7 +96,8 @@ fn upload_image(
     task: &ImageUploadTask,
 ) -> Result<(), StagingOutOfMemory> {
     assert!(!task.image.flags().contains(ImageFlags::NO_SAMPLE));
-    let image = resources.prepare_for_upload(&task.image, batch_num, &heap);
+    let image = resources.prepare_image_for_upload(
+        &task.image, batch_num, &heap);
     let buf = staging.stage_image(
         image,
         true,

@@ -102,10 +102,8 @@ impl MaterialStateTable {
         }
     }
 
-    crate fn get(&self, def: &Arc<MaterialDef>) ->
-        Option<&MaterialState>
-    {
-        self.materials.get(ByPtr::by_ptr(def))
+    crate fn get(&self, def: &Arc<MaterialDef>) -> &MaterialState {
+        &self.materials[ByPtr::by_ptr(def)]
     }
 }
 

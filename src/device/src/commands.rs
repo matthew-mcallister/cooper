@@ -456,12 +456,7 @@ impl SubpassCmds {
         self.inner.reset_dynamic_state(&self.framebuffer);
     }
 
-    // TODO: Allow binding multiple in one call
-    pub fn bind_gfx_descs(
-        &mut self,
-        index: u32,
-        set: &DescriptorSet,
-    ) {
+    pub fn bind_gfx_descs(&mut self, index: u32, set: &DescriptorSet) {
         self.ensure_recording();
         let bind_point = vk::PipelineBindPoint::GRAPHICS;
         let pipeline = self.gfx_pipe.as_ref().unwrap();
@@ -503,37 +498,39 @@ impl SubpassCmds {
         self.gfx_pipe = Some(Arc::clone(pipeline));
     }
 
-    pub unsafe fn bind_index_buffer<'a>(
+    pub fn bind_index_buffer(
         &mut self,
-        buffer: BufferRange<'a>,
+        buffer: BufferRange<'_>,
         ty: IndexType,
     ) {
-        self.dt().cmd_bind_index_buffer(
-            self.raw(),
-            buffer.raw(),
-            buffer.offset(),
-            ty.into(),
-        );
+        unsafe {
+            self.dt().cmd_bind_index_buffer(
+                self.raw(),
+                buffer.raw(),
+                buffer.offset(),
+                ty.into(),
+            );
+        }
     }
 
-    pub fn bind_vertex_buffers(&mut self, data: &VertexData<'_>) {
-        let pipe = self.gfx_pipe.as_ref().unwrap();
-        let layout = pipe.vertex_layout();
-
-        let mut buffers = Vec::new();
-        let mut offsets = Vec::new();
-        for buffer in data.map_bindings(layout) {
-            buffers.push(buffer.raw());
+    pub fn bind_vertex_buffers<'a>(
+        &mut self,
+        buffers: impl IntoIterator<Item = BufferRange<'a>>,
+    ) {
+        let mut raw: SmallVec<_, 16> = Default::default();
+        let mut offsets: SmallVec<_, 16> = Default::default();
+        for buffer in buffers {
+            raw.push(buffer.raw());
             offsets.push(buffer.offset());
         }
-        assert!(!buffers.is_empty());
+        assert!(!raw.is_empty());
 
         unsafe {
             self.dt().cmd_bind_vertex_buffers(
                 self.raw(),
                 0,
-                buffers.len() as _,
-                buffers.as_ptr(),
+                raw.len() as _,
+                raw.as_ptr(),
                 offsets.as_ptr(),
             );
         }
@@ -541,7 +538,7 @@ impl SubpassCmds {
 
     fn pre_draw(&mut self) {
         self.ensure_recording();
-        // TODO: Check bound vertex buffer bounds (including instances)
+        // TODO: Check vertex buffer bounds
         // TODO: Check bound descriptor sets
         assert!(self.gfx_pipe.is_some());
     }
@@ -583,6 +580,15 @@ impl SubpassCmds {
         vertex_offset: i32,
         first_instance: u32,
     ) {
+        trace!(
+            concat!(
+                "SubpassCmds::draw_indexed_offset(vertex_count: {}, ",
+                "instance_count: {}, first_index: {}, vertex_offset: {}, ",
+                "first_instance: {})",
+            ),
+            vertex_count, instance_count, first_index, vertex_offset,
+            first_instance,
+        );
         self.pre_draw();
         self.dt().cmd_draw_indexed(
             self.raw(),

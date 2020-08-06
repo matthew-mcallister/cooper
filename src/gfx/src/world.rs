@@ -24,16 +24,12 @@ impl RenderWorld {
         &self.rloop
     }
 
+    pub fn render_loop_mut(&mut self) -> &mut RenderLoop {
+        &mut self.rloop
+    }
+
     pub fn into_inner(self) -> Box<RenderLoop> {
         self.rloop
-    }
-
-    crate fn state(&self) -> &SystemState {
-        self.rloop.state()
-    }
-
-    crate fn globals(&self) -> &Globals {
-        self.rloop.globals()
     }
 
     pub fn view(&self) -> &SceneView {

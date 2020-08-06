@@ -14,6 +14,7 @@ macro_rules! insert_unique {
     }
 }
 
+#[inline(always)]
 pub fn opt(b: bool) -> Option<()> {
     if b { Some(()) } else { None }
 }

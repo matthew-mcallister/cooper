@@ -21,6 +21,14 @@ crate enum SchedulerStatus {
     Idle,
 }
 
+#[derive(Debug)]
+pub struct BufferDef {
+    pub binding: device::BufferBinding,
+    pub lifetime: device::Lifetime,
+    pub mapping: device::MemoryMapping,
+    pub size: vk::DeviceSize,
+}
+
 unit::collect_tests![
     staging,
     system,

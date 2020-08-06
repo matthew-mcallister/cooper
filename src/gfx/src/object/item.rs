@@ -2,24 +2,48 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use device::{
-    BufferBinding, BufferBox, DescriptorSet, GraphicsPipeline, Lifetime,
+    BufferAlloc, BufferBinding, BufferBox, DescriptorSet, GraphicsPipeline,
+    Lifetime, VertexInputLayout,
 };
 use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
 
-use crate::{RenderMesh, ResourceUnavailable, SystemState};
+use crate::{ResourceUnavailable, SystemState};
 use crate::material::MaterialStateTable;
+use crate::mesh::{AttrBuffer, IndexBuffer, RenderMesh};
 use crate::render::{PerInstanceData, SceneDescriptors, SceneViewUniforms};
 use crate::resource::ResourceSystem;
+use crate::util::SmallVec;
 use super::*;
 
-// TODO: This is going to create a lot of work managing refcounts
 #[derive(Debug)]
 crate struct RenderItem {
-    crate mesh: Arc<RenderMesh>,
+    crate mesh: MeshData,
     crate pipeline: Arc<GraphicsPipeline>,
     crate descriptors: Arc<DescriptorSet>,
+}
+
+#[derive(Debug)]
+crate struct MeshData {
+    crate vertex_count: u32,
+    crate index: Option<IndexBuffer<BufferAlloc>>,
+    crate attrs: SmallVec<AttrBuffer<BufferAlloc>, 6>,
+}
+
+#[allow(dead_code)]
+impl MeshData {
+    crate fn vertex_count(&self) -> u32 {
+        self.vertex_count
+    }
+
+    crate fn index(&self) -> Option<&IndexBuffer<BufferAlloc>> {
+        self.index.as_ref()
+    }
+
+    crate fn attrs(&self) -> &[AttrBuffer<BufferAlloc>] {
+        &self.attrs
+    }
 }
 
 #[derive(Debug)]
@@ -84,7 +108,7 @@ crate fn lower_objects<'a>(
 }
 
 impl Lower for RenderObject {
-    fn lower<'ctx>(self, instance: u32, ctx: &mut LowerCtx<'ctx>) ->
+    fn lower(self, instance: u32, ctx: &mut LowerCtx<'_>) ->
         Result<RenderItem, ResourceUnavailable>
     {
         match self {
@@ -94,22 +118,44 @@ impl Lower for RenderObject {
 }
 
 impl Lower for MeshInstance {
-    fn lower<'ctx>(self, instance: u32, ctx: &mut LowerCtx<'ctx>) ->
+    fn lower(self, instance: u32, ctx: &mut LowerCtx<'_>) ->
         Result<RenderItem, ResourceUnavailable>
     {
         let xform = ctx.uniforms.view * self.xform();
         ctx.instance_data[instance as usize].set_xform(xform);
 
-        let state = ctx.materials.get(&self.material)
-            .ok_or(ResourceUnavailable)?;
-        (tryopt! {
-            let pipeline = Arc::clone(state.pipeline()?);
-            let descriptors = Arc::clone(state.desc()?);
-            RenderItem {
-                mesh: self.mesh,
-                pipeline,
-                descriptors,
-            }
-        }).ok_or(ResourceUnavailable)
+        let state = ctx.materials.get(&self.material);
+        let pipeline = Arc::clone(state.pipeline()?);
+        let descriptors = Arc::clone(state.desc()?);
+
+        let mesh = resolve_mesh(
+            &self.mesh, ctx.resources, pipeline.vertex_layout())?;
+
+        Ok(RenderItem {
+            mesh,
+            pipeline,
+            descriptors,
+        })
     }
+}
+
+crate fn resolve_mesh(
+    mesh: &RenderMesh,
+    resources: &ResourceSystem,
+    layout: &VertexInputLayout,
+) -> Option<MeshData> {
+    let index = tryopt! {
+        let index = mesh.index()?;
+        let buffer = Arc::clone(resources.get_buffer(&index.buffer)?);
+        IndexBuffer { ty: index.ty, buffer }
+    };
+
+    let attrs = layout.attributes.iter().map(move |binding| {
+        let attr = &mesh.bindings()[binding.attribute];
+        assert_eq!(attr.format, binding.format);
+        let buffer = Arc::clone(resources.get_buffer(&attr.buffer)?);
+        Some(AttrBuffer { format: attr.format, buffer })
+    }).collect::<Option<_>>()?;
+
+    Some(MeshData { vertex_count: mesh.vertex_count(), index, attrs })
 }

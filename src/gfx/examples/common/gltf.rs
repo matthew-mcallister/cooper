@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{self as any, anyhow, Context, Error};
 use base::{PartialEnumMap, partial_map_opt};
 use cooper_gfx::*;
+use derive_more::Constructor;
 use fehler::{throw, throws};
 use gltf::{accessor, mesh};
 use math::vector::{Vector3, vec};
@@ -11,7 +12,7 @@ use math::vector::{Vector3, vec};
 crate struct GltfBundle {
     crate path: String,
     crate document: gltf::Document,
-    crate buffers: Vec<gltf::buffer::Data>,
+    crate buffers: Vec<Arc<Vec<u8>>>,
     crate images: Vec<ImageData>,
 }
 
@@ -24,6 +25,13 @@ crate struct ImageData {
 }
 
 crate type BBox = [Vector3<f32>; 2];
+
+#[derive(Constructor, Debug)]
+struct SharedSlice {
+    data: Arc<Vec<u8>>,
+    offset: usize,
+    len: usize,
+}
 
 #[derive(Debug)]
 crate struct Mesh {
@@ -47,42 +55,45 @@ impl GltfBundle {
         let path = path.into();
         let (document, buffers, images) = gltf::import(&path)?;
 
-        let images = images.into_iter()
-            .map(ImageData::from)
+        let buffers = buffers.into_iter()
+            .map(|data| Arc::new(data.0))
             .collect();
+        let images = images.into_iter().map(ImageData::from).collect();
 
         Ok(Self { path, document, buffers, images })
     }
 
     #[throws]
     #[inline]
-    fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) -> &[u8] {
+    fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) ->
+        (&Arc<Vec<u8>>, usize)
+    {
         let view = accessor.view().ok_or(anyhow!("sparse accessor"))?;
-        &self.buffers[view.buffer().index()][view.offset()..]
+        (&self.buffers[view.buffer().index()], view.offset())
     }
 
     #[throws]
     fn read_attr_accessor(&self, accessor: &gltf::Accessor<'_>) ->
-        (Format, &[u8])
+        (Format, SharedSlice)
     {
         let format = map_format(
             accessor.data_type(),
             accessor.dimensions(),
             accessor.normalized(),
         )?;
-        let data = self.accessor_view_data(accessor)?;
+        let (data, offset) = self.accessor_view_data(accessor)?;
         let len = accessor.count() * format.size();
-        (format, &data[..len])
+        (format, SharedSlice::new(Arc::clone(data), offset, len))
     }
 
     #[throws]
     fn read_index_accessor(&self, accessor: &gltf::Accessor<'_>) ->
-        (IndexType, &[u8])
+        (IndexType, SharedSlice)
     {
         let ty = map_index_type(accessor.data_type())?;
-        let data = self.accessor_view_data(accessor)?;
+        let (data, offset) = self.accessor_view_data(accessor)?;
         let len = accessor.count() * ty.size();
-        (ty, &data[..len])
+        (ty, SharedSlice::new(Arc::clone(data), offset, len))
     }
 
     crate fn load_meshes(&self, rloop: &mut RenderLoop) ->
@@ -162,8 +173,8 @@ fn load_mesh(
             accessor.count(), vertex_count,
         );
         let attr = map_semantic(&sem)?;
-        let (format, data) = bundle.read_attr_accessor(&accessor)?;
-        attrs.insert(attr, (format, data));
+        let (format, slice) = bundle.read_attr_accessor(&accessor)?;
+        attrs.insert(attr, (format, slice));
     )?; }
 
     for &attr in &[Position, Normal, Texcoord0] {
@@ -178,18 +189,18 @@ fn load_mesh(
 
 fn build_mesh(
     rloop: &mut RenderLoop,
-    attrs: PartialEnumMap<VertexAttr, (Format, &[u8])>,
-    index: Option<(IndexType, &[u8])>,
+    mut attrs: PartialEnumMap<VertexAttr, (Format, SharedSlice)>,
+    index: Option<(IndexType, SharedSlice)>,
 ) -> Arc<RenderMesh> {
     let mut builder = RenderMeshBuilder::from_loop(rloop);
     builder.lifetime(Lifetime::Static);
 
-    for (attr, &(fmt, data)) in attrs.iter() {
-        builder.attr(attr, fmt, data);
+    for (attr, (fmt, slice)) in attrs.drain() {
+        builder.attr(attr, fmt, slice.data, slice.offset, slice.len);
     }
 
-    if let Some((ty, buf)) = index {
-        builder.index(ty, buf);
+    if let Some((ty, slice)) = index {
+        builder.index(ty, slice.data, slice.offset, slice.len);
     }
 
     unsafe { Arc::new(builder.build()) }
@@ -328,9 +339,7 @@ fn format(format: gltf::image::Format) -> Format {
         GltfFormat::R8G8B8 => Format::RGB8,
         GltfFormat::R8G8B8A8 => Format::RGBA8,
         GltfFormat::B8G8R8A8 => Format::BGRA8,
-        // Can't find enough data on the web to know if other formats
-        // are commonly supported in shaders.
-        _ => throw!(anyhow!("incompatible image format")),
+        _ => throw!(anyhow!("unsupported image format")),
     }
 }
 

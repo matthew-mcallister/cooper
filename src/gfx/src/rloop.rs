@@ -88,12 +88,8 @@ impl RenderLoop {
         &self.device
     }
 
-    crate fn state(&self) -> &SystemState {
-        &self.state.as_ref().unwrap()
-    }
-
-    crate fn globals(&self) -> &Globals {
-        &self.globals
+    crate fn shaders(&self) -> &GlobalShaders {
+        &self.globals.shaders
     }
 
     crate fn frame_num(&self) -> u64 {
@@ -126,6 +122,16 @@ impl RenderLoop {
         Arc::new(def)
     }
 
+    pub fn define_buffer(
+        &self,
+        binding: BufferBinding,
+        lifetime: Lifetime,
+        mapping: MemoryMapping,
+        size: vk::DeviceSize,
+    ) -> Arc<BufferDef> {
+        Arc::new(BufferDef { binding, lifetime, mapping, size })
+    }
+
     pub fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
         self.resources.get_image_state(image)
     }
@@ -141,6 +147,23 @@ impl RenderLoop {
         src_offset: usize,
     ) {
         self.resources.upload_image(image, src, src_offset)
+    }
+
+    pub fn upload_buffer(
+        &mut self,
+        buffer: &Arc<BufferDef>,
+        src: Arc<Vec<u8>>,
+        src_offset: usize,
+    ) {
+        trace!(
+            concat!(
+                "RenderLoop::upload_buffer(buffer: {:?}, src.len: {}, ",
+                "src_offset: {})",
+            ),
+            buffer, src.len(), src_offset,
+        );
+        let heap = &self.state.as_ref().unwrap().buffers;
+        self.resources.upload_buffer(heap, buffer, src, src_offset)
     }
 
     pub fn define_material(&mut self, desc: &MaterialDesc) -> Arc<MaterialDef>

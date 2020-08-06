@@ -2,38 +2,28 @@ use std::sync::Arc;
 
 use base::PartialEnumMap;
 use device::*;
-use itertools::Itertools;
 
 use crate::*;
 
 #[derive(Debug, Default)]
 pub struct RenderMesh {
     vertex_count: u32,
-    index: Option<IndexBuffer>,
-    bindings: PartialEnumMap<VertexAttr, AttrBuffer>,
+    index: Option<IndexBuffer<BufferDef>>,
+    bindings: PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>,
     // FIXME: This is a band-aid solution
     static_layout: VertexInputLayout,
 }
 
 #[derive(Debug)]
-crate struct AttrBuffer {
-    alloc: BufferAlloc,
-    format: Format,
+crate struct AttrBuffer<B> {
+    crate buffer: Arc<B>,
+    crate format: Format,
 }
 
 #[derive(Debug)]
-crate struct IndexBuffer {
-    alloc: BufferAlloc,
-    ty: IndexType,
-}
-
-/// Allows building a mesh without directly using the device interface.
-#[derive(Debug)]
-pub struct RenderMeshBuilder<'a> {
-    buffers: &'a Arc<BufferHeap>,
-    shaders: &'a GlobalShaders,
-    lifetime: Lifetime,
-    mesh: RenderMesh,
+crate struct IndexBuffer<B> {
+    crate buffer: Arc<B>,
+    crate ty: IndexType,
 }
 
 impl RenderMesh {
@@ -42,8 +32,13 @@ impl RenderMesh {
         self.vertex_count
     }
 
-    #[allow(dead_code)]
-    crate fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer> {
+    crate fn index(&self) -> Option<&IndexBuffer<BufferDef>> {
+        self.index.as_ref()
+    }
+
+    crate fn bindings(&self) ->
+        &PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>
+    {
         &self.bindings
     }
 
@@ -61,34 +56,35 @@ impl RenderMesh {
                 .collect(),
         }
     }
+}
 
-    crate fn data(&self) -> VertexData<'_> {
-        VertexData {
-            attributes: self.bindings.iter()
-                .map(|(name, binding)| (name, binding.alloc.range()))
-                .collect()
-        }
-    }
-
-    crate fn index(&self) -> Option<&IndexBuffer> {
-        self.index.as_ref()
+impl AttrBuffer<BufferDef> {
+    fn count(&self) -> u32 {
+        self.buffer.size as u32 / self.format.size() as u32
     }
 }
 
+impl IndexBuffer<BufferDef> {
+    fn count(&self) -> u32 {
+        self.buffer.size as u32 / self.ty.size() as u32
+    }
+}
+
+#[derive(Debug)]
+pub struct RenderMeshBuilder<'a> {
+    rloop: &'a mut RenderLoop,
+    lifetime: Lifetime,
+    mesh: RenderMesh,
+}
+
 impl<'a> RenderMeshBuilder<'a> {
-    pub fn from_world(world: &'a RenderWorld) -> Self {
-        Self {
-            buffers: &world.state().buffers,
-            shaders: &world.globals().shaders,
-            lifetime: Lifetime::Static,
-            mesh: Default::default(),
-        }
+    pub fn from_world(world: &'a mut RenderWorld) -> Self {
+        Self::from_loop(&mut world.rloop)
     }
 
-    pub fn from_loop(rloop: &'a RenderLoop) -> Self {
+    pub fn from_loop(rloop: &'a mut RenderLoop) -> Self {
         Self {
-            buffers: &rloop.state().buffers,
-            shaders: &rloop.globals().shaders,
+            rloop,
             lifetime: Lifetime::Static,
             mesh: Default::default(),
         }
@@ -99,40 +95,59 @@ impl<'a> RenderMeshBuilder<'a> {
         self
     }
 
-    pub fn index(&mut self, ty: IndexType, data: &[u8]) -> &mut Self {
-        assert_eq!(data.len() % ty.size(), 0);
-        let binding = BufferBinding::Index;
-        let lifetime = self.lifetime;
-        let alloc = BufferBox::into_inner(
-            self.buffers.box_slice(binding, lifetime, data));
-        self.mesh.index = Some(IndexBuffer { alloc, ty });
+    pub fn index(
+        &mut self,
+        ty: IndexType,
+        src: Arc<Vec<u8>>,
+        src_offset: usize,
+        src_len: usize,
+    ) -> &mut Self {
+        assert_eq!(src_len % ty.size(), 0);
+        let buffer = self.rloop.define_buffer(
+            BufferBinding::Index,
+            self.lifetime,
+            MemoryMapping::DeviceLocal,
+            src_len as _,
+        );
+        self.rloop.upload_buffer(&buffer, src, src_offset);
+        self.mesh.index = Some(IndexBuffer { buffer, ty });
         self
     }
 
-    pub fn attr(&mut self, attr: VertexAttr, format: Format, data: &[u8]) ->
-        &mut Self
-    {
-        assert_eq!(data.len() % format.size(), 0);
-        let binding = BufferBinding::Vertex;
-        let lifetime = self.lifetime;
-        let alloc = BufferBox::into_inner(
-            self.buffers.box_slice(binding, lifetime, data));
-        self.mesh.bindings.insert(attr, AttrBuffer { alloc, format });
+    pub fn attr(
+        &mut self,
+        attr: VertexAttr,
+        format: Format,
+        src: Arc<Vec<u8>>,
+        src_offset: usize,
+        src_len: usize,
+    ) -> &mut Self {
+        assert_eq!(src_len % format.size(), 0);
+        let buffer = self.rloop.define_buffer(
+            BufferBinding::Vertex,
+            self.lifetime,
+            MemoryMapping::DeviceLocal,
+            src_len as _,
+        );
+        self.rloop.upload_buffer(&buffer, src, src_offset);
+        self.mesh.bindings.insert(attr, AttrBuffer { buffer, format });
         self
     }
 
     fn set_vertex_count(&mut self) {
-        // TODO: Why doesn't enum_map::Values implement Clone!
-        let (min, max) = self.mesh.bindings.values()
-            .map(|attr| attr.count())
-            .minmax().into_option()
-            .unwrap();
-        assert_eq!(min, max);
-        self.mesh.vertex_count = min;
+        if let Some(index) = &self.mesh.index {
+            self.mesh.vertex_count = index.count();
+        } else {
+            let mut counts = self.mesh.bindings.values()
+                .map(|attr| attr.count());
+            let count = counts.next().unwrap();
+            for other in counts { assert_eq!(other, count); }
+            self.mesh.vertex_count = count;
+        }
     }
 
     fn set_static_layout(&mut self) {
-        let shader = &self.shaders.static_vert;
+        let shader = &self.rloop.shaders().static_vert;
         self.mesh.static_layout = self.mesh.vertex_layout()
             .input_layout_for_shader(shader);
     }
@@ -141,36 +156,5 @@ impl<'a> RenderMeshBuilder<'a> {
         self.set_vertex_count();
         self.set_static_layout();
         self.mesh
-    }
-}
-
-#[allow(dead_code)]
-impl AttrBuffer {
-    crate fn data(&self) -> BufferRange<'_> {
-        self.alloc.range()
-    }
-
-    crate fn format(&self) -> Format {
-        self.format
-    }
-
-    /// The number of elements in the buffer.
-    crate fn count(&self) -> u32 {
-        (self.alloc.size() / self.format.size() as vk::DeviceSize) as _
-    }
-}
-
-impl IndexBuffer {
-    crate fn data(&self) -> BufferRange<'_> {
-        self.alloc.range()
-    }
-
-    crate fn ty(&self) -> IndexType {
-        self.ty
-    }
-
-    /// The number of elements in the buffer.
-    crate fn count(&self) -> u32 {
-        (self.alloc.size() / self.ty.size() as vk::DeviceSize) as _
     }
 }

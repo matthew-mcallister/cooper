@@ -85,6 +85,7 @@ pub struct Image {
     alloc: DeviceAlloc,
 }
 
+// TODO: Convenient, but belongs in application code.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageDef {
     flags: ImageFlags,

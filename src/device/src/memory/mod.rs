@@ -6,6 +6,8 @@ use std::sync::Arc;
 use derivative::Derivative;
 use enum_map::Enum;
 use log::{debug, trace};
+use more_asserts::assert_ge;
+use prelude::guard;
 
 use crate::*;
 
@@ -284,8 +286,18 @@ pub trait MemoryRegion {
     #[inline]
     fn as_mut_slice<T>(&mut self, len: usize) -> &mut [MaybeUninit<T>] {
         let ptr = self.as_ptr::<T>();
-        assert!(self.size() as usize >= len * std::mem::size_of::<T>());
+        assert_ge!(self.size() as usize, len * std::mem::size_of::<T>());
         unsafe { std::slice::from_raw_parts_mut(ptr, len) }
+    }
+
+    #[inline]
+    fn try_as_bytes_mut(&mut self) -> Option<&mut [u8]> {
+        let ptr = self.memory().ptr as *mut u8;
+        guard(!ptr.is_null())?;
+        unsafe { Some(std::slice::from_raw_parts_mut(
+            ptr.offset(self.offset() as _),
+            self.size() as _,
+        )) }
     }
 }
 
@@ -329,7 +341,7 @@ impl DeviceMemory {
     }
 
     /// Memory-mapped pointer when host-visible.
-    ///     #[inline]
+    #[inline]
     pub fn ptr(&self) -> *mut c_void {
         self.ptr
     }

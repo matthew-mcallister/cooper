@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 use std::hash::Hash;
 use std::iter::FromIterator;
 use std::ops::{Index, IndexMut};
@@ -8,13 +8,12 @@ use enum_map::{Enum, EnumMap};
 
 /// A statically-sized partial mapping whose keys are members of an
 /// enum.
-// TODO: Impl into_iter, drain, etc. when [V; N] implements into_iter.
+// TODO: Impl into_iter when [V; N] implements into_iter.
 #[derive(Derivative)]
 #[derivative(
     Clone(bound = "K::Array: Clone"),
     Copy(bound = "K::Array: Copy"),
     Default(bound = ""),
-    Debug(bound = "K: Debug, V: Debug"),
     Eq(bound = "V: Eq"),
     Hash(bound = "V: Hash"),
     PartialEq(bound = "V: PartialEq"),
@@ -52,6 +51,11 @@ impl<K: Enum<Option<V>>, V> PartialEnumMap<K, V> {
     #[inline(always)]
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (K, &mut V)> {
         self.inner.iter_mut().filter_map(|(k, v)| Some((k, v.as_mut()?)))
+    }
+
+    #[inline(always)]
+    pub fn drain(&mut self) -> impl Iterator<Item = (K, V)> + '_ {
+        self.inner.iter_mut().filter_map(|(k, v)| Some((k, v.take()?)))
     }
 
     #[inline(always)]
@@ -97,6 +101,20 @@ impl<K: Enum<Option<V>>, V> PartialEnumMap<K, V> {
     #[inline(always)]
     pub fn remove(&mut self, key: K) -> Option<V> {
         self.inner[key].take()
+    }
+}
+
+impl<K, V> fmt::Debug for PartialEnumMap<K, V>
+where
+    K: Enum<Option<V>> + fmt::Debug,
+    V: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut f = f.debug_map();
+        for (k, v) in self.iter() {
+            f.entry(&k, &v);
+        }
+        f.finish()
     }
 }
 
