@@ -12,25 +12,8 @@ use crate::SystemState;
 use crate::util::{ptr_eq, ptr_hash};
 
 mod state;
-mod system;
 
 crate use state::*;
-use system::*;
-
-/// An identifier of a particular material rendering technique.
-// TODO: Should be serializable to/from a string.
-#[derive(Clone, Copy, Debug, Derivative, Enum, Eq, Hash, PartialEq)]
-#[derivative(Default)]
-#[non_exhaustive]
-pub enum MaterialProgram {
-    #[derivative(Default)]
-    Checker,
-    GeomDepth,
-    GeomNormal,
-    Albedo,
-    NormalMap,
-    MetallicRoughness,
-}
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 #[non_exhaustive]
@@ -58,7 +41,7 @@ pub type MaterialImageBindings =
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct MaterialDesc {
     pub vertex_layout: VertexInputLayout,
-    pub program: MaterialProgram,
+    pub stages: ShaderStageMap,
     pub image_bindings: MaterialImageBindings,
 }
 
@@ -66,7 +49,6 @@ pub struct MaterialDesc {
 #[derive(Debug)]
 pub struct MaterialDef {
     desc: Arc<MaterialDesc>,
-    stages: ShaderStageMap,
     set_layout: Arc<DescriptorSetLayout>,
 }
 
@@ -75,17 +57,12 @@ impl MaterialDef {
         &self.desc.vertex_layout
     }
 
-    #[allow(dead_code)]
-    fn program(&self) -> MaterialProgram {
-        self.desc.program
-    }
-
     fn image_bindings(&self) -> &MaterialImageBindings {
         &self.desc.image_bindings
     }
 
     fn stages(&self) -> &ShaderStageMap {
-        &self.stages
+        &self.desc.stages
     }
 
     fn set_layout(&self) -> &Arc<DescriptorSetLayout> {

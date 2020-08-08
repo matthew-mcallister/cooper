@@ -10,20 +10,19 @@ pub struct RenderMesh {
     vertex_count: u32,
     index: Option<IndexBuffer<BufferDef>>,
     bindings: PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>,
-    // FIXME: This is a band-aid solution
-    static_layout: VertexInputLayout,
+}
+
+// TODO: constant/dummy attributes (buffer stride = 0)
+#[derive(Debug)]
+pub struct AttrBuffer<B> {
+    pub buffer: Arc<B>,
+    pub format: Format,
 }
 
 #[derive(Debug)]
-crate struct AttrBuffer<B> {
-    crate buffer: Arc<B>,
-    crate format: Format,
-}
-
-#[derive(Debug)]
-crate struct IndexBuffer<B> {
-    crate buffer: Arc<B>,
-    crate ty: IndexType,
+pub struct IndexBuffer<B> {
+    pub buffer: Arc<B>,
+    pub ty: IndexType,
 }
 
 impl RenderMesh {
@@ -32,21 +31,17 @@ impl RenderMesh {
         self.vertex_count
     }
 
-    crate fn index(&self) -> Option<&IndexBuffer<BufferDef>> {
+    pub fn index(&self) -> Option<&IndexBuffer<BufferDef>> {
         self.index.as_ref()
     }
 
-    crate fn bindings(&self) ->
+    pub fn bindings(&self) ->
         &PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>
     {
         &self.bindings
     }
 
-    pub fn static_layout(&self) -> VertexInputLayout {
-        self.static_layout.clone()
-    }
-
-    crate fn vertex_layout(&self) -> VertexStreamLayout {
+    pub fn vertex_layout(&self) -> VertexStreamLayout {
         VertexStreamLayout {
             topology: PrimitiveTopology::TriangleList,
             attributes: self.bindings.iter()
@@ -146,15 +141,8 @@ impl<'a> RenderMeshBuilder<'a> {
         }
     }
 
-    fn set_static_layout(&mut self) {
-        let shader = &self.rloop.shaders().static_vert;
-        self.mesh.static_layout = self.mesh.vertex_layout()
-            .input_layout_for_shader(shader);
-    }
-
     pub unsafe fn build(mut self) -> RenderMesh {
         self.set_vertex_count();
-        self.set_static_layout();
         self.mesh
     }
 }

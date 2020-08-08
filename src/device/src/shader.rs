@@ -20,6 +20,8 @@ pub struct Shader {
 }
 
 /// A choice of shader plus specialization constant values.
+// TODO: How to properly hash this? Especially considering all consts
+// have defaults defined in the shader.
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct ShaderSpec {
     shader: Arc<Shader>,

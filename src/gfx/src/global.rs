@@ -8,6 +8,7 @@ use crate::*;
 crate struct Globals {
     crate device: Arc<Device>,
     crate shaders: GlobalShaders,
+    crate specs: GlobalShaderSpecs,
     crate empty_uniform_buffer: Arc<BufferAlloc>,
     crate empty_storage_buffer: Arc<BufferAlloc>,
     crate immediate_image_2d: Arc<ImageView>,
@@ -15,21 +16,6 @@ crate struct Globals {
     crate empty_image_2d: Arc<ImageDef>,
     crate empty_sampler: Arc<Sampler>,
     crate scene_desc_layout: Arc<DescriptorSetLayout>,
-}
-
-#[derive(Debug)]
-crate struct GlobalShaders {
-    crate trivial_vert: Arc<Shader>,
-    crate trivial_frag: Arc<Shader>,
-    crate static_vert: Arc<Shader>,
-    crate geom_vis_frag: Arc<Shader>,
-    crate texture_vis_frag: Arc<Shader>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-crate enum ShaderConst {
-    GeomVisMode = 0,
-    TextureVisSlot = 1,
 }
 
 impl Globals {
@@ -41,6 +27,7 @@ impl Globals {
         let device = Arc::clone(&state.device);
 
         let shaders = GlobalShaders::new(&device);
+        let specs = GlobalShaderSpecs::new(&shaders);
 
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
@@ -108,6 +95,7 @@ impl Globals {
         Globals {
             device,
             shaders,
+            specs,
             empty_uniform_buffer,
             empty_storage_buffer,
             immediate_image_2d,
@@ -125,56 +113,5 @@ impl Globals {
             Arc::clone(&image_data),
             0,
         );
-    }
-}
-
-mod shader_sources {
-    macro_rules! include_shaders {
-        ($($ident:ident = $name:expr;)*) => {
-            $(crate mod $ident {
-                macro_rules! name {
-                    () => {
-                        concat!(
-                            env!("CARGO_MANIFEST_DIR"),
-                            "/generated/shaders/", $name, ".spv",
-                        )
-                    }
-                }
-                crate const NAME: &'static str = name!();
-                crate static CODE: &'static [u32] = include_u32!(name!());
-            })*
-        }
-    }
-
-    include_shaders! {
-        trivial_vert = "trivial_vert";
-        trivial_frag = "trivial_frag";
-        static_vert = "static_vert";
-        geom_vis_frag = "geom_vis_frag";
-        texture_vis_frag = "texture_vis_frag";
-    }
-}
-
-impl GlobalShaders {
-    crate unsafe fn new(device: &Arc<Device>) -> Self {
-        macro_rules! build {
-            ($($name:ident,)*) => {
-                GlobalShaders {
-                    $($name: Arc::new(Shader::new(
-                        Arc::clone(&device),
-                        shader_sources::$name::CODE.into(),
-                        Some(shader_sources::$name::NAME.to_owned()),
-                    )),)*
-                }
-            }
-        }
-
-        build! {
-            trivial_vert,
-            trivial_frag,
-            static_vert,
-            geom_vis_frag,
-            texture_vis_frag,
-        }
     }
 }

@@ -67,11 +67,12 @@ impl MaterialStateTable {
         desc: &MaterialDesc,
     ) -> Arc<MaterialDef> {
         tryopt! { return Arc::clone(self.defs.get(desc)?) };
-        let def = create_def(state, &self.globals, Arc::new(desc.clone()));
+        let desc = Arc::new(desc.clone());
+        let set_layout = create_set_layout(
+            state, &self.globals, &desc.image_bindings);
+        let def = Arc::new(MaterialDef { desc, set_layout });
         self.materials.insert(
-            ByPtr::new(Arc::clone(&def)),
-            Default::default(),
-        );
+            ByPtr::new(Arc::clone(&def)), Default::default());
         def
     }
 

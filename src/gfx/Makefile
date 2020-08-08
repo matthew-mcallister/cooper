@@ -10,7 +10,7 @@ SHADER_SRC_FILES := \
     trivial_frag.glsl \
     static_vert.glsl \
     geom_vis_frag.glsl \
-    texture_vis_frag.glsl
+    tex_vis_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
 
 SHADER_HDR_FILES := \

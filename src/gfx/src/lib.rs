@@ -47,6 +47,7 @@ mod object;
 mod render;
 mod resource;
 mod rloop;
+mod shader;
 mod state;
 mod world;
 
@@ -57,6 +58,7 @@ pub use object::*;
 pub use render::*;
 pub use resource::*;
 pub use rloop::*;
+pub use shader::*;
 crate use state::*;
 pub use world::*;
 

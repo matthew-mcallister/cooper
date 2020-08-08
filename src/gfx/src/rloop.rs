@@ -88,12 +88,16 @@ impl RenderLoop {
         &self.device
     }
 
-    crate fn shaders(&self) -> &GlobalShaders {
+    crate fn frame_num(&self) -> u64 {
+        self.frame_num
+    }
+
+    pub fn shaders(&self) -> &GlobalShaders {
         &self.globals.shaders
     }
 
-    crate fn frame_num(&self) -> u64 {
-        self.frame_num
+    pub fn specs(&self) -> &GlobalShaderSpecs {
+        &self.globals.specs
     }
 
     pub fn define_image(
@@ -170,6 +174,13 @@ impl RenderLoop {
     {
         let state = &mut *self.state.as_mut().unwrap();
         self.materials.define(state, desc)
+    }
+
+    // TODO: Shouldn't be unsafe
+    pub unsafe fn read_shader(&mut self, path: impl Into<String>) ->
+        std::io::Result<Arc<Shader>>
+    {
+        Ok(Arc::new(Shader::from_path(Arc::clone(self.device()), path)?))
     }
 
     crate fn new_frame(&mut self) {

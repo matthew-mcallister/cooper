@@ -11,7 +11,9 @@
 use std::sync::Arc;
 
 use anyhow as any;
+use base::partial_map;
 use cooper_gfx::*;
+use device::{ShaderSpec, ShaderStage};
 use log::debug;
 use math::vector::*;
 use math::matrix::*;
@@ -127,39 +129,47 @@ unsafe fn render_mesh(
 type MeshMaterials = [Arc<MaterialDef>; 6];
 
 fn mesh_materials(rl: &mut RenderLoop, mesh: &Mesh) -> MeshMaterials {
-    use MaterialProgram::*;
+    let vertex_shader = Arc::clone(&rl.shaders().static_vert);
+    let vertex_layout = mesh.render_mesh.vertex_layout()
+        .input_layout_for_shader(&vertex_shader);
+    let vertex_stage = &Arc::new(ShaderSpec::new(vertex_shader));
 
-    let vertex_layout = mesh.render_mesh.static_layout();
+    macro_rules! stages {
+        ($vertex_stage:expr, $frag_stage:expr) => { partial_map! {
+            ShaderStage::Vertex => Arc::clone($vertex_stage),
+            ShaderStage::Fragment => Arc::clone($frag_stage),
+        } }
+    }
 
     let checker_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: Checker,
+        stages: stages![vertex_stage, &rl.specs().checker_frag],
         ..Default::default()
     });
     let geom_depth_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: GeomDepth,
+        stages: stages![vertex_stage, &rl.specs().geom_depth_frag],
         ..Default::default()
     });
     let geom_normal_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: GeomNormal,
+        stages: stages![vertex_stage, &rl.specs().geom_normal_frag],
         ..Default::default()
     });
 
     let albedo_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: Albedo,
+        stages: stages![vertex_stage, &rl.specs().albedo_frag],
         image_bindings: mesh.images.clone(),
     });
     let normal_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: NormalMap,
+        stages: stages![vertex_stage, &rl.specs().tex_normal_frag],
         image_bindings: mesh.images.clone(),
     });
     let met_rough_mat = rl.define_material(&MaterialDesc {
         vertex_layout: vertex_layout.clone(),
-        program: MetallicRoughness,
+        stages: stages![vertex_stage, &rl.specs().metal_rough_frag],
         image_bindings: mesh.images.clone(),
     });
 
