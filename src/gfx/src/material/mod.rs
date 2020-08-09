@@ -38,11 +38,14 @@ impl Eq for ImageBindingDesc {}
 pub type MaterialImageBindings =
     PartialEnumMap<MaterialImage, ImageBindingDesc>;
 
+// Maybe, instead of taking a material, the render mesh should just be
+// adjoined to create a "render primitive" type.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct MaterialDesc {
     pub vertex_layout: VertexInputLayout,
     pub stages: ShaderStageMap,
     pub image_bindings: MaterialImageBindings,
+    //pub cull_mode: CullMode,
 }
 
 // TODO: Allow descriptor set layout to be customized somewhat?

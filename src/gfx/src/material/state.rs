@@ -30,6 +30,9 @@ struct MaterialResources {
     desc: Arc<DescriptorSet>,
 }
 
+// Idea: each subpass has its own pipeline cache. When a material
+// is created, any subpass in which it will be used has to create a
+// pipeline, e.g. depth pass, deferred pass, translucent/forward pass.
 #[derive(Debug, Default)]
 crate struct MaterialState {
     pipeline: Option<Arc<GraphicsPipeline>>,
@@ -72,8 +75,7 @@ impl MaterialStateTable {
         let set_layout = create_set_layout(
             state, &self.globals, &desc.image_bindings);
         let def = Arc::new(MaterialDef { desc, set_layout });
-        self.materials.insert(
-            ByPtr::new(Arc::clone(&def)), Default::default());
+        self.materials.insert(Arc::clone(&def).into(), Default::default());
         def
     }
 

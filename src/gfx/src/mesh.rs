@@ -141,7 +141,7 @@ impl<'a> RenderMeshBuilder<'a> {
         }
     }
 
-    pub unsafe fn build(mut self) -> RenderMesh {
+    pub fn build(mut self) -> RenderMesh {
         self.set_vertex_count();
         self.mesh
     }

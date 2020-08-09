@@ -1,0 +1,19 @@
+[package]
+name = "cooper-asset"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+base = { path = "../base", package = "cooper-base" }
+base64 = "0.12.3"
+derive_more = "0.99.9"
+device = { path = "../device", package = "cooper-device" }
+fehler = "1.0.0"
+fnv = "1.0"
+gfx = { path = "../gfx", package = "cooper-gfx" }
+gltf = { version = "0.15.1", features = ["names", "utils"] }
+image = "0.23.8"
+math = { path = "../math", package = "cooper-math" }
+prelude = { path = "../prelude", package = "cooper-prelude" }

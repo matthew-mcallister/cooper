@@ -9,6 +9,7 @@ use prelude::*;
 
 use super::*;
 
+// TODO: Maybe allow purging buffers/images with no external references.
 #[derive(Debug)]
 crate struct ResourceStateTable {
     avail_batch: u64,

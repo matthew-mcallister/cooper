@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "src/asset",
     "src/base",
     "src/device",
     "src/gfx",
