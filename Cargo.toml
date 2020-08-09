@@ -10,5 +10,5 @@ members = [
     "src/window",
 ]
 
-[profile.dev]
+[profile.dev.package."*"]
 opt-level = 3

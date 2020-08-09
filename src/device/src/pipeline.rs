@@ -258,8 +258,8 @@ unsafe fn create_graphics_pipeline(
     let vertex_layout = &desc.vertex_layout;
 
     let attrs = &vertex_layout.attributes;
-    for (a0, a1) in attrs[..attrs.len() - 1].iter().zip(attrs[1..].iter()) {
-        assert_lt!(a0.location, a1.location);
+    for attr in attrs.windows(2) {
+        assert_lt!(attr[0].location, attr[1].location);
     }
 
     for &location in vertex_shader.inputs().iter() {

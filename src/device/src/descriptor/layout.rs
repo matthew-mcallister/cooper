@@ -57,10 +57,8 @@ fn validate_layout(desc: &SetLayoutDesc) {
 
     // Ensure that there are no duplicates and there are no
     // redundant permutations of the same bindings in the cache
-    for (b0, b1) in desc.bindings[..desc.bindings.len()].iter()
-        .zip(desc.bindings[1..].iter())
-    {
-        assert_lt!(b0.binding, b1.binding);
+    for binding in desc.bindings.windows(2) {
+        assert_lt!(binding[0].binding, binding[1].binding);
     }
 
     // TODO: wrap stage flags

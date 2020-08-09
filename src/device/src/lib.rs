@@ -14,6 +14,7 @@
     maybe_uninit_extra,
     maybe_uninit_ref,
     maybe_uninit_slice_assume_init,
+    nonnull_slice_from_raw_parts,
     or_patterns,
     trait_alias,
     try_blocks,

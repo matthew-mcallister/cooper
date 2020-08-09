@@ -58,7 +58,7 @@ impl ResourceSystem {
     ) {
         let alloc = Arc::get_mut(self.state.alloc_buffer(buffer, heap))
             .unwrap();
-        if let Some(slice) = alloc.try_as_bytes_mut() {
+        if let Some(slice) = alloc.as_bytes_mut() {
             slice.copy_from_slice(&src[src_offset..][..buffer.size as usize]);
             self.state.make_buffer_available(buffer);
         } else {

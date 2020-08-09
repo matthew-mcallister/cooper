@@ -6,6 +6,7 @@ use enum_map::{Enum, EnumMap};
 use parking_lot::Mutex;
 use prelude::*;
 
+use crate::util::as_uninit_slice;
 use super::*;
 
 #[derive(Clone, Debug)]
@@ -45,8 +46,10 @@ pub struct BufferAlloc {
     size: vk::DeviceSize,
 }
 
-/// Warning: This type does *not* call `T::drop`. Unfortunately Rust
-/// does not allow us to express this as a type constraint yet.
+/// # Caveats
+///
+/// This type will *not* ever call `T::drop`, so it is recommended you
+/// avoid using `T` with a non-trivial destructor.
 #[derive(Debug)]
 pub struct BufferBox<T: ?Sized> {
     alloc: BufferAlloc,
@@ -261,6 +264,7 @@ impl BufferAlloc {
     /// Destroys `self` without deallocating memory.
     fn leak(self) {
         let this = MaybeUninit::new(self);
+        // Decrement the reference count
         unsafe { std::ptr::read(&this.get_ref().buffer as *const Arc<_>); }
     }
 }
@@ -274,11 +278,30 @@ impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
     }
 }
 
-impl<T: ?Sized> BufferBox<T> {
-    unsafe fn new(alloc: BufferAlloc, ptr: *mut T) -> Self {
-        BufferBox { alloc, ptr: NonNull::new(ptr).unwrap() }
+impl<T> BufferBox<MaybeUninit<T>> {
+    pub fn new(alloc: BufferAlloc) -> Self {
+        Self { ptr: unsafe { alloc.as_ptr().unwrap() }, alloc }
     }
 
+    pub unsafe fn assume_init(self) -> BufferBox<T> {
+        BufferBox { ptr: self.ptr.cast(), alloc: self.alloc }
+    }
+}
+
+impl<T> BufferBox<[MaybeUninit<T>]> {
+    pub fn new_slice(alloc: BufferAlloc, len: usize) -> Self {
+        Self { ptr: unsafe { alloc.as_slice_ptr(len).unwrap() }, alloc }
+    }
+
+    pub unsafe fn assume_init_slice(self) -> BufferBox<[T]> {
+        BufferBox {
+            ptr: std::mem::transmute(self.ptr),
+            alloc: self.alloc
+        }
+    }
+}
+
+impl<T: ?Sized> BufferBox<T> {
     #[inline]
     pub fn alloc(this: &Self) -> &BufferAlloc {
         &this.alloc
@@ -306,33 +329,33 @@ impl<T: ?Sized> BufferBox<T> {
 
 impl<T> BufferBox<T> {
     #[inline]
-    pub fn from_val(mut alloc: BufferAlloc, val: T) -> Self {
-        let ptr = alloc.as_mut::<T>().write(val) as _;
-        unsafe { BufferBox::new(alloc, ptr) }
+    pub fn from_val(alloc: BufferAlloc, val: T) -> Self {
+        let mut buf = BufferBox::new(alloc);
+        buf.write(val);
+        unsafe { buf.assume_init() }
     }
 }
 
 impl<T> BufferBox<[T]> {
     fn from_iter(
-        mut alloc: BufferAlloc,
+        alloc: BufferAlloc,
         iter: impl Iterator<Item = T> + ExactSizeIterator,
     ) -> Self {
-        let slice = alloc.as_mut_slice::<T>(iter.len());
-        for (dst, src) in slice.iter_mut().zip(iter) {
+        let len = alloc.size() as usize / std::mem::size_of::<T>();
+        let mut buf = BufferBox::new_slice(alloc, len);
+        for (dst, src) in buf.iter_mut().zip(iter) {
             dst.write(src);
         }
-        let ptr = slice as *mut _ as _;
-        unsafe { BufferBox::new(alloc, ptr) }
+        unsafe { buf.assume_init_slice() }
     }
 }
 
 impl<T: Copy> BufferBox<[T]> {
     #[inline]
-    pub fn copy_from_slice(mut alloc: BufferAlloc, src: &[T]) -> Self {
-        let slice = alloc.as_mut_slice::<T>(src.len());
-        slice.copy_from_slice(as_uninit_slice(src));
-        let slice = slice as *mut _ as _;
-        unsafe { BufferBox::new(alloc, slice) }
+    pub fn copy_from_slice(alloc: BufferAlloc, src: &[T]) -> Self {
+        let mut buf = BufferBox::new_slice(alloc, src.len());
+        buf.copy_from_slice(as_uninit_slice(src));
+        unsafe { buf.assume_init_slice() }
     }
 }
 
@@ -489,10 +512,9 @@ impl BufferHeap {
         len: usize,
     ) -> BufferBox<[MaybeUninit<T>]> {
         let size = std::mem::size_of::<T>() * len;
-        let mut alloc = self.alloc(
+        let alloc = self.alloc(
             binding, lifetime, MemoryMapping::Mapped, size as _);
-        let ptr = alloc.as_mut_slice::<T>(len) as *mut _;
-        unsafe { BufferBox::new(alloc, ptr) }
+        BufferBox::new_slice(alloc, len)
     }
 
     /// Invalidates frame-scope allocations.

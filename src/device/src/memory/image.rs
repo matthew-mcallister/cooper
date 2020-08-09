@@ -133,7 +133,7 @@ impl HeapPool {
             inner: mem,
             size,
             type_index: self.type_index,
-            ptr: 0 as _,
+            ptr: None,
             tiling: Tiling::Nonlinear,
             lifetime: Lifetime::Static,
             dedicated_content: None,

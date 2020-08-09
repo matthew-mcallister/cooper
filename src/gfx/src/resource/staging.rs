@@ -1,4 +1,3 @@
-use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use derive_more::Display;
@@ -111,10 +110,10 @@ impl UploadStage {
             ..Default::default()
         });
 
-        unsafe {
-            let slice = alloc.as_mut_slice::<u8>(size);
-            Ok(&mut *(MaybeUninit::slice_get_mut(slice) as *mut _))
-        }
+        // The returned slice borrows self, which owns the backing
+        // buffer, so this doesn't risk use-after-free.
+        let bytes = alloc.as_bytes_mut().unwrap();
+        Ok(unsafe { &mut *(bytes as *mut _) })
     }
 
     crate unsafe fn record_cmds(&self, cmds: &mut XferCmds) {

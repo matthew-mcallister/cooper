@@ -1,13 +1,13 @@
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::ptr;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 use derivative::Derivative;
 use enum_map::Enum;
 use log::{debug, trace};
 use more_asserts::assert_ge;
-use prelude::guard;
 
 use crate::*;
 
@@ -34,7 +34,7 @@ pub struct DeviceMemory {
     inner: vk::DeviceMemory,
     size: vk::DeviceSize,
     type_index: u32,
-    ptr: *mut c_void,
+    ptr: Option<NonNull<c_void>>,
     tiling: Tiling,
     // Lifetime of any memory allocated from this object.
     lifetime: Lifetime,
@@ -184,7 +184,7 @@ unsafe fn alloc_resource_memory(
         inner,
         size: reqs.size,
         type_index,
-        ptr: ptr::null_mut(),
+        ptr: None,
         tiling,
         lifetime: Default::default(),
         dedicated_content: content,
@@ -266,38 +266,55 @@ pub trait MemoryRegion {
 
     #[inline]
     fn as_raw(&self) -> *mut c_void {
-        assert!(!self.memory().ptr.is_null());
-        unsafe { self.memory().ptr.add(self.offset() as _) }
+        unsafe { std::mem::transmute(self.as_void()) }
     }
 
     #[inline]
-    fn as_ptr<T>(&self) -> *mut MaybeUninit<T> {
-        let ptr = self.as_raw() as *mut MaybeUninit<T>;
-        assert_eq!(ptr as usize % std::mem::align_of::<T>(), 0);
-        ptr
+    fn as_void(&self) -> Option<NonNull<c_void>> {
+        unsafe {
+            let ptr = self.memory().ptr()?.as_ptr().add(self.offset() as _);
+            Some(NonNull::new_unchecked(ptr))
+        }
     }
 
     #[inline]
-    fn as_mut<T>(&mut self) -> &mut MaybeUninit<T> {
-        assert!(std::mem::size_of::<T>() as vk::DeviceSize <= self.size());
-        unsafe { &mut *self.as_ptr::<T>() }
+    unsafe fn as_ptr<T>(&self) -> Option<NonNull<T>> {
+        let ptr = self.as_void()?;
+        assert_ge!(self.size() as usize, std::mem::size_of::<T>());
+        assert_eq!(ptr.as_ptr() as usize % std::mem::align_of::<T>(), 0);
+        Some(ptr.cast())
     }
 
     #[inline]
-    fn as_mut_slice<T>(&mut self, len: usize) -> &mut [MaybeUninit<T>] {
-        let ptr = self.as_ptr::<T>();
+    fn as_ref<T>(&self) -> Option<&MaybeUninit<T>> {
+        unsafe { Some(&*self.as_ptr()?.as_ptr()) }
+    }
+
+    #[inline]
+    fn as_mut<T>(&mut self) -> Option<&mut MaybeUninit<T>> {
+        unsafe { Some(&mut *self.as_ptr()?.as_ptr()) }
+    }
+
+    #[inline]
+    unsafe fn as_slice_ptr<T>(&self, len: usize) -> Option<NonNull<[T]>> {
+        let ptr = self.as_void()?;
         assert_ge!(self.size() as usize, len * std::mem::size_of::<T>());
-        unsafe { std::slice::from_raw_parts_mut(ptr, len) }
+        assert_eq!(ptr.as_ptr() as usize % std::mem::align_of::<T>(), 0);
+        Some(NonNull::slice_from_raw_parts(ptr.cast(), len))
     }
 
     #[inline]
-    fn try_as_bytes_mut(&mut self) -> Option<&mut [u8]> {
-        let ptr = self.memory().ptr as *mut u8;
-        guard(!ptr.is_null())?;
-        unsafe { Some(std::slice::from_raw_parts_mut(
-            ptr.offset(self.offset() as _),
-            self.size() as _,
-        )) }
+    fn as_mut_slice<T>(&mut self, len: usize) -> Option<&mut [MaybeUninit<T>]>
+    {
+        unsafe { Some(&mut *self.as_slice_ptr(len)?.as_ptr()) }
+    }
+
+    #[inline]
+    fn as_bytes_mut(&mut self) -> Option<&mut [u8]> {
+        unsafe {
+            let slice = self.as_mut_slice(self.size() as _)?;
+            Some(MaybeUninit::slice_get_mut(slice))
+        }
     }
 }
 
@@ -342,7 +359,7 @@ impl DeviceMemory {
 
     /// Memory-mapped pointer when host-visible.
     #[inline]
-    pub fn ptr(&self) -> *mut c_void {
+    pub fn ptr(&self) -> Option<NonNull<c_void>> {
         self.ptr
     }
 
@@ -353,7 +370,7 @@ impl DeviceMemory {
 
     #[inline]
     pub fn mapped(&self) -> bool {
-        !self.ptr.is_null()
+        self.ptr.is_some()
     }
 
     #[inline]
@@ -374,11 +391,12 @@ impl DeviceMemory {
     }
 
     unsafe fn map(&mut self) {
-        assert!(self.ptr.is_null());
         let dt = &*self.device.table;
         let flags = Default::default();
-        dt.map_memory(self.inner, 0, self.size, flags, &mut self.ptr)
+        let mut ptr = 0 as *mut c_void;
+        dt.map_memory(self.inner, 0, self.size, flags, &mut ptr)
             .check().expect("failed to map device memory");
+        self.ptr = NonNull::new(ptr);
     }
 }
 
