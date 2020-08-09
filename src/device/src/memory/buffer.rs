@@ -699,6 +699,8 @@ impl<A: Allocator> BufferPool<A> {
     fn alloc(&mut self, size: vk::DeviceSize) -> BufferAlloc {
         assert_ne!(size, 0);
         let alignment = self.alignment();
+        let orig_size = size;
+        let size = align(alignment, size);
 
         let limits = self.device.limits();
         match self.binding {
@@ -719,7 +721,7 @@ impl<A: Allocator> BufferPool<A> {
         BufferAlloc {
             buffer,
             offset: block.offset(),
-            size: block.size(),
+            size: orig_size,
         }
     }
 
@@ -731,7 +733,12 @@ impl<A: Allocator> BufferPool<A> {
             "alloc: {:?},\nself.chunks[alloc.chunk]: {:?}",
             alloc, chunk,
         );
-        self.allocator.free(to_block(alloc));
+
+        let alignment = self.alignment();
+        let adj_size = align(alignment, alloc.size());
+        let mut block = to_block(alloc);
+        block.end = block.start + adj_size;
+        self.allocator.free(block);
     }
 
     unsafe fn clear(&mut self) {
@@ -779,8 +786,7 @@ mod tests {
         use Lifetime::*;
         use MemoryMapping::*;
 
-        let device = Arc::clone(&vars.swapchain.device);
-        let heap = Arc::new(BufferHeap::new(device));
+        let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
 
         let x = heap.boxed(Uniform, Static, [0.0f32, 0.5, 0.5, 1.0]);
         assert_eq!(x[1], 0.5);
@@ -791,24 +797,35 @@ mod tests {
     }
 
     unsafe fn oversized_alloc(vars: testing::TestVars) {
-        use BufferBinding::*;
-        use Lifetime::*;
-
-        let device = Arc::clone(&vars.swapchain.device);
+        let device = Arc::clone(vars.device());
         let heap = Arc::new(BufferHeap::new(Arc::clone(&device)));
-
         let _ = heap.alloc(
-            Uniform,
-            Static,
+            BufferBinding::Uniform,
+            Lifetime::Static,
             MemoryMapping::Mapped,
             (2 * device.limits().max_uniform_buffer_range) as _
         );
+    }
+
+    unsafe fn alloc_size_is_exact(vars: testing::TestVars) {
+        use BufferBinding::*;
+        use Lifetime::*;
+        use MemoryMapping::*;
+
+        let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
+        let alloc = heap.alloc(Uniform, Static, Mapped, 15);
+        assert_eq!(alloc.size(), 15);
+        let alloc = heap.alloc(Uniform, Static, Mapped, 32);
+        assert_eq!(alloc.size(), 32);
+        let alloc = heap.alloc(Uniform, Static, Mapped, 35);
+        assert_eq!(alloc.size(), 35);
     }
 
     unit::declare_tests![
         create_buffer,
         heap_alloc,
         (#[should_err] oversized_alloc),
+        alloc_size_is_exact,
     ];
 }
 
