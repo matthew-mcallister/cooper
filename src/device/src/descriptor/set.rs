@@ -5,6 +5,7 @@ use derivative::Derivative;
 use log::trace;
 use more_asserts::assert_lt;
 use parking_lot::Mutex;
+use prelude::tryopt;
 use vk::traits::*;
 
 use crate::*;

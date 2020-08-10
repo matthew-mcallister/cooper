@@ -9,6 +9,7 @@ use device::{
 use enum_map::EnumMap;
 use fnv::FnvHashMap as HashMap;
 use smallvec::smallvec;
+use prelude::tryopt;
 
 use crate::Globals;
 use crate::resource::ResourceSystem;

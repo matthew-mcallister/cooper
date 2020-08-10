@@ -14,6 +14,11 @@ macro_rules! insert_unique {
     }
 }
 
+#[macro_export]
+macro_rules! tryopt {
+    ($($body:tt)*) => { (try { $($body)* }: Option<_>) }
+}
+
 #[inline(always)]
 pub fn opt(b: bool) -> Option<()> {
     if b { Some(()) } else { None }

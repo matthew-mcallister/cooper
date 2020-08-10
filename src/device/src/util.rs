@@ -8,10 +8,6 @@ use prelude::*;
 
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
-macro_rules! tryopt {
-    ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
-}
-
 macro_rules! bit {
     ($bit:expr) => {
         (1 << $bit)

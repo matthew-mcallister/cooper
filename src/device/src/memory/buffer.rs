@@ -203,7 +203,9 @@ impl<'a> MemoryRegion for BufferRange<'a> {
 
 impl Drop for BufferAlloc {
     fn drop(&mut self) {
-        unsafe { tryopt! { Weak::upgrade(&self.buffer.heap)?.free(self) }; }
+        if self.buffer.lifetime() == Lifetime::Static {
+            unsafe { Weak::upgrade(&self.buffer.heap).unwrap().free(self); }
+        }
     }
 }
 
@@ -427,14 +429,31 @@ impl BufferHeap {
         heap
     }
 
+    // Assign weak back-pointer to self on each static pool/buffer
+    // (this sucks on multiple layers).
     fn assign_backpointers(self: &Arc<Self>) {
-        // Assign weak back-pointer to heap on each pool
+        impl BufferHeapEntry<FreeListAllocator> {
+            fn assign_backpointers(&mut self, ptr: &Arc<BufferHeap>) {
+                self.mapped_pool.assign_backpointers(ptr);
+                tryopt! {
+                    self.unmapped_pool.as_mut()?.assign_backpointers(ptr);
+                };
+            }
+        }
+
+        impl BufferPool<FreeListAllocator> {
+            fn assign_backpointers(&mut self, ptr: &Arc<BufferHeap>) {
+                self.heap = Arc::downgrade(ptr);
+                for chunk in self.chunks.iter_mut() {
+                    let buffer = Arc::get_mut(chunk).unwrap();
+                    buffer.heap = Arc::downgrade(ptr);
+                }
+            }
+        }
+
         let mut inner = self.inner.lock();
         for entry in inner.static_pools.values_mut() {
-            entry.mapped_pool.heap = Arc::downgrade(self);
-            if let Some(ref mut pool) = entry.unmapped_pool {
-                pool.heap = Arc::downgrade(self);
-            }
+            entry.assign_backpointers(self);
         }
     }
 
@@ -538,7 +557,9 @@ impl<A: Allocator> BufferHeapEntry<A> {
             MemoryMapping::Mapped,
         );
 
-        // Pre-allocate a chunk of memory to infer if we're on UMA.
+        // We must call GetBufferMemoryRequirements to find out which
+        // memory type index we will use. Thus, we pre-allocate a chunk
+        // of memory to infer if we're on UMA.
         // TODO: Free memory afterward?
         unsafe { mapped_pool.add_chunk(1) };
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
@@ -767,6 +788,7 @@ impl BufferBinding {
 
 #[cfg(test)]
 mod tests {
+    use more_asserts::assert_ge;
     use vk::traits::*;
     use super::*;
 
@@ -821,11 +843,40 @@ mod tests {
         assert_eq!(alloc.size(), 35);
     }
 
+    unsafe fn non_overlapping(vars: testing::TestVars) {
+        use BufferBinding::*;
+        use Lifetime::*;
+        use MemoryMapping::*;
+
+        let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
+        let alloc0 = heap.alloc(Uniform, Static, Mapped, 513);
+        let alloc1 = heap.alloc(Uniform, Static, Mapped, 1024);
+        assert_eq!(alloc0.offset(), 0);
+        assert_ge!(alloc1.offset(), alloc0.size());
+    }
+
+    unsafe fn free(vars: testing::TestVars) {
+        use BufferBinding::*;
+        use Lifetime::*;
+        use MemoryMapping::*;
+
+        let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
+        std::mem::drop([
+            heap.alloc(Uniform, Static, Mapped, 98),
+            heap.alloc(Uniform, Static, Mapped, 99),
+            heap.alloc(Uniform, Static, Mapped, 100),
+        ]);
+        let alloc = heap.alloc(Uniform, Static, Mapped, 32);
+        assert_eq!(alloc.offset(), 0);
+    }
+
     unit::declare_tests![
         create_buffer,
         heap_alloc,
         (#[should_err] oversized_alloc),
         alloc_size_is_exact,
+        non_overlapping,
+        free,
     ];
 }
 

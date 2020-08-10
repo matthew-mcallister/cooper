@@ -6,7 +6,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use more_asserts::assert_lt;
-use prelude::SliceExt;
+use prelude::{SliceExt, tryopt};
 
 use crate::{Device, Named, Sampler, StagedCache};
 use crate::util::SmallVec;

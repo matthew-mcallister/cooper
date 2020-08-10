@@ -5,6 +5,7 @@ use std::hash::Hash;
 use derivative::Derivative;
 use fnv::FnvHashMap;
 use parking_lot::Mutex;
+use prelude::tryopt;
 
 /// Implements the caching logic used by pipelines and samplers.
 /// Committed cache hits require no synchronization, which is ideal for

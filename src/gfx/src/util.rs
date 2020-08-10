@@ -2,10 +2,6 @@ use math::{Matrix4, Matrix4x3};
 
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
-macro_rules! tryopt {
-    ($($body:tt)*) => { (try { $($body)* }: Option<_>) };
-}
-
 macro_rules! impl_from_via_default {
     ($name:ident, $from:ty) => {
         impl From<$from> for $name {
