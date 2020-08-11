@@ -2,6 +2,7 @@ use std::mem::MaybeUninit;
 use std::ptr::{self, NonNull};
 use std::sync::{Arc, Weak};
 
+use bitflags::bitflags;
 use enum_map::Enum;
 
 use crate::util::as_uninit_slice;
@@ -11,10 +12,24 @@ use super::*;
 pub struct DeviceBuffer {
     pub(super) memory: Arc<DeviceMemory>,
     pub(super) inner: vk::Buffer,
-    pub(super) usage: vk::BufferUsageFlags,
+    pub(super) usage: BufferUsage,
     pub(super) binding: Option<BufferBinding>,
     pub(super) heap: Weak<BufferHeap>,
     pub(super) name: Option<String>,
+}
+
+bitflags! {
+    #[derive(Default)]
+    pub struct BufferUsage: u32 {
+        const STORAGE_BUFFER = vk::BufferUsageFlags::STORAGE_BUFFER_BIT.0;
+        const UNIFORM_BUFFER = vk::BufferUsageFlags::UNIFORM_BUFFER_BIT.0;
+        const STORAGE_TEXEL_BUFFER = vk::BufferUsageFlags::STORAGE_TEXEL_BUFFER_BIT.0;
+        const UNIFORM_TEXEL_BUFFER = vk::BufferUsageFlags::UNIFORM_TEXEL_BUFFER_BIT.0;
+        const VERTEX_BUFFER = vk::BufferUsageFlags::VERTEX_BUFFER_BIT.0;
+        const INDEX_BUFFER = vk::BufferUsageFlags::INDEX_BUFFER_BIT.0;
+        const TRANSFER_SRC = vk::BufferUsageFlags::TRANSFER_SRC_BIT.0;
+        const TRANSFER_DST = vk::BufferUsageFlags::TRANSFER_DST_BIT.0;
+    }
 }
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
@@ -54,6 +69,25 @@ pub struct BufferBox<T: ?Sized> {
     ptr: NonNull<T>,
 }
 
+impl BufferBinding {
+    pub(super) fn usage(self) -> BufferUsage {
+        match self {
+            Self::Storage => BufferUsage::STORAGE_BUFFER,
+            Self::Uniform => BufferUsage::UNIFORM_BUFFER,
+            Self::StorageTexel => BufferUsage::STORAGE_TEXEL_BUFFER,
+            Self::UniformTexel => BufferUsage::UNIFORM_TEXEL_BUFFER,
+            Self::Vertex => BufferUsage::VERTEX_BUFFER,
+            Self::Index => BufferUsage::INDEX_BUFFER,
+        }
+    }
+}
+
+impl From<BufferUsage> for vk::BufferUsageFlags {
+    fn from(usage: BufferUsage) -> Self {
+        Self(usage.bits)
+    }
+}
+
 impl Drop for DeviceBuffer {
     fn drop(&mut self) {
         let dt = self.device().table();
@@ -61,42 +95,42 @@ impl Drop for DeviceBuffer {
     }
 }
 
-unsafe fn create_buffer(
+fn create_buffer(
     device: Arc<Device>,
     size: vk::DeviceSize,
-    usage: vk::BufferUsageFlags,
+    usage: BufferUsage,
     mapping: MemoryMapping,
     lifetime: Lifetime,
-    chunk: Option<u32>,
 ) -> DeviceBuffer {
-    trace!("create_buffer({:?}, {:?}, {:?}, {:?}, {:?}, {:?})",
-        device, size, usage, mapping, lifetime, chunk);
+    trace!("create_buffer({:?}, {:?}, {:?}, {:?}, {:?})",
+        device, size, usage, mapping, lifetime);
 
     let dt = device.table();
 
     let create_info = vk::BufferCreateInfo {
         size,
-        usage,
+        usage: usage.into(),
         ..Default::default()
     };
     let mut buffer = vk::null();
-    dt.create_buffer(&create_info, ptr::null(), &mut buffer)
-        .check().unwrap();
+    unsafe {
+        dt.create_buffer(&create_info, ptr::null(), &mut buffer)
+            .check().unwrap();
+    }
 
-    let (reqs, dedicated_reqs) = get_buffer_memory_reqs(&device, buffer);
+    let (reqs, dedicated_reqs) = unsafe {
+        get_buffer_memory_reqs(&device, buffer)
+    };
     let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
         .then_some(DedicatedAllocContent::Buffer(buffer));
-    let mut memory = alloc_resource_memory(
+    let mut memory = unsafe { alloc_resource_memory(
         device,
         mapping,
         &reqs,
         content,
         Tiling::Linear,
-    );
+    ) };
     memory.lifetime = lifetime;
-    if let Some(chunk) = chunk {
-        memory.chunk = chunk;
-    }
 
     let mut buffer = DeviceBuffer {
         memory: Arc::new(memory),
@@ -106,21 +140,20 @@ unsafe fn create_buffer(
         heap: Weak::new(),
         name: None,
     };
-    buffer.bind();
+    unsafe { buffer.bind(); }
 
     buffer
 }
 
 impl DeviceBuffer {
-    pub(super) unsafe fn new(
+    pub(super) fn new(
         device: Arc<Device>,
         size: vk::DeviceSize,
-        usage: vk::BufferUsageFlags,
+        usage: BufferUsage,
         mapping: MemoryMapping,
         lifetime: Lifetime,
-        chunk: Option<u32>,
     ) -> Self {
-        create_buffer(device, size, usage, mapping, lifetime, chunk)
+        create_buffer(device, size, usage, mapping, lifetime)
     }
 
     #[inline]
@@ -159,7 +192,7 @@ impl DeviceBuffer {
     }
 
     #[inline]
-    pub fn usage(&self) -> vk::BufferUsageFlags {
+    pub fn usage(&self) -> BufferUsage {
         self.usage
     }
 
@@ -170,6 +203,10 @@ impl DeviceBuffer {
             assert_eq!(DedicatedAllocContent::Buffer(self.inner), content);
         }
         dt.bind_buffer_memory(self.inner, self.memory.inner(), 0);
+    }
+
+    pub fn set_chunk(&mut self, chunk: u32) {
+        Arc::get_mut(&mut self.memory).unwrap().chunk = chunk;
     }
 
     pub fn set_name(&mut self, name: impl Into<String>) {

@@ -60,7 +60,7 @@ impl BufferHeap {
     }
 
     // Assign weak back-pointer to self on each static pool/buffer
-    // (this sucks on multiple layers).
+    // (this sucks on multiple layers but at least it's safe).
     fn assign_backpointers(self: &Arc<Self>) {
         impl BufferHeapEntry<FreeListAllocator> {
             fn assign_backpointers(&mut self, ptr: &Arc<BufferHeap>) {
@@ -191,7 +191,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
         // memory type index we will use. Thus, we pre-allocate a chunk
         // of memory to infer if we're on UMA.
         // TODO: Free memory afterward?
-        unsafe { mapped_pool.add_chunk(1) };
+        mapped_pool.add_chunk(1);
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
         let device_local = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
         let unmapped_pool = (!flags.contains(device_local))
@@ -307,13 +307,13 @@ impl<A: Allocator> BufferPool<A> {
         }
     }
 
-    fn usage(&self) -> vk::BufferUsageFlags {
+    fn usage(&self) -> BufferUsage {
         self.binding.usage()
             // TODO: It's probably not necessary to set *both* flags,
             // but it is convenient to and I don't know of any
             // implementations that even read these bits
-            | vk::BufferUsageFlags::TRANSFER_SRC_BIT
-            | vk::BufferUsageFlags::TRANSFER_DST_BIT
+            | BufferUsage::TRANSFER_SRC
+            | BufferUsage::TRANSFER_DST
     }
 
     #[allow(dead_code)]
@@ -321,7 +321,7 @@ impl<A: Allocator> BufferPool<A> {
         self.mapping
     }
 
-    unsafe fn add_chunk(&mut self, min_size: vk::DeviceSize) {
+    fn add_chunk(&mut self, min_size: vk::DeviceSize) {
         let chunk = self.chunks.len() as u32;
         let size = align(self.chunk_size(), min_size);
         let mut buffer = DeviceBuffer::new(
@@ -330,10 +330,10 @@ impl<A: Allocator> BufferPool<A> {
             self.usage(),
             self.mapping,
             self.lifetime,
-            Some(chunk),
         );
         buffer.binding = Some(self.binding);
         buffer.heap = Weak::clone(&self.heap);
+        buffer.set_chunk(chunk);
 
         buffer.set_name(format!(
             "{:?}|{:?}|{:?}[{}]",
@@ -364,7 +364,7 @@ impl<A: Allocator> BufferPool<A> {
 
         let block = self.allocator.alloc(size, alignment)
             .or_else(|| {
-                unsafe { self.add_chunk(size); }
+                self.add_chunk(size);
                 self.allocator.alloc(size, alignment)
             })
             .unwrap();
@@ -401,21 +401,6 @@ impl<A: Allocator> BufferPool<A> {
     }
 }
 
-impl BufferBinding {
-    fn usage(self) -> vk::BufferUsageFlags {
-        use vk::BufferUsageFlags as Flags;
-        use BufferBinding::*;
-        match self {
-            Storage => Flags::STORAGE_BUFFER_BIT,
-            Uniform => Flags::UNIFORM_BUFFER_BIT,
-            StorageTexel => Flags::STORAGE_TEXEL_BUFFER_BIT,
-            UniformTexel => Flags::UNIFORM_TEXEL_BUFFER_BIT,
-            Vertex => Flags::VERTEX_BUFFER_BIT,
-            Index => Flags::INDEX_BUFFER_BIT,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use more_asserts::assert_ge;
@@ -426,10 +411,9 @@ mod tests {
         DeviceBuffer::new(
             Arc::clone(vars.device()),
             8 * (2 << 20),
-            vk::BufferUsageFlags::TRANSFER_SRC_BIT,
+            BufferUsage::TRANSFER_SRC,
             MemoryMapping::Mapped,
             Lifetime::Static,
-            None,
         );
     }
 

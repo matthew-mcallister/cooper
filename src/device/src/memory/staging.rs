@@ -9,16 +9,13 @@ pub struct StagingBuffer {
 
 impl StagingBuffer {
     pub fn new(device: Arc<Device>, capacity: usize) -> Self {
-        let mut buffer = unsafe {
-            DeviceBuffer::new(
-                device,
-                capacity as _,
-                vk::BufferUsageFlags::TRANSFER_SRC_BIT,
-                MemoryMapping::Mapped,
-                Lifetime::Static,
-                None,
-            )
-        };
+        let mut buffer = DeviceBuffer::new(
+            device,
+            capacity as _,
+            BufferUsage::TRANSFER_SRC,
+            MemoryMapping::Mapped,
+            Lifetime::Static,
+        );
         buffer.set_name("staging_buffer");
         let mut allocator = LinearAllocator::default();
         allocator.add_chunk(capacity as _);
