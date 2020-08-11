@@ -13,11 +13,13 @@ use crate::*;
 
 mod alloc;
 mod buffer;
+mod buffer_heap;
 mod image;
 mod staging;
 
 pub(self) use alloc::*;
 pub use buffer::*;
+pub use buffer_heap::*;
 pub use image::*;
 pub use staging::*;
 
@@ -428,4 +430,4 @@ impl MemoryMapping {
     }
 }
 
-unit::collect_tests![alloc, buffer, image, staging];
+unit::collect_tests![alloc, buffer_heap, image, staging];
