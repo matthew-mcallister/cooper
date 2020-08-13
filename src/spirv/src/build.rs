@@ -120,7 +120,6 @@ fn raise_variable(module: &mut Module, inst: &dr::Instruction) {
                 storage_class,
                 location,
                 name: decos.name.clone(),
-                ..Default::default()
             });
         },
         (_, Some(set), Some(binding)) => {
@@ -130,7 +129,6 @@ fn raise_variable(module: &mut Module, inst: &dr::Instruction) {
                 set,
                 binding,
                 name: decos.name.clone(),
-                ..Default::default()
             });
         },
         _ => {},

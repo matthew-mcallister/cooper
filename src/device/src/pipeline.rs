@@ -265,7 +265,7 @@ unsafe fn create_graphics_pipeline(
     for &location in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty
         assert!(vertex_layout.attributes.iter()
-            .find(|attr| attr.location == location).is_some());
+            .any(|attr| attr.location == location));
     }
 
     let bindings = vertex_layout.vk_bindings();

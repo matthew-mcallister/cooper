@@ -1,3 +1,5 @@
+#![allow(clippy::borrowed_box)]
+
 use std::ptr;
 use std::sync::Arc;
 

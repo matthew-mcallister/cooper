@@ -29,7 +29,6 @@ macro_rules! delegate {
 // TODO: Implement for any RHS that derefs to P::Target
 impl<P: Deref> PartialEq for ByPtr<P> {
     delegate!(PartialEq::eq -> bool);
-    delegate!(PartialEq::ne -> bool);
 }
 
 impl<P: Deref> Eq for ByPtr<P> {}
@@ -58,22 +57,22 @@ impl<P: Deref> Hash for ByPtr<P> {
 impl<P> ByPtr<P> {
     #[inline(always)]
     pub fn by_value(this: &Self) -> &P {
-        unsafe { std::mem::transmute(this) }
+        unsafe { &*(this as *const _ as *const P) }
     }
 
     #[inline(always)]
     pub fn by_value_mut(this: &mut Self) -> &mut P {
-        unsafe { std::mem::transmute(this) }
+        unsafe { &mut *(this as *mut _ as *mut P) }
     }
 
     #[inline(always)]
     pub fn by_ptr(ptr: &P) -> &Self {
-        unsafe { std::mem::transmute(ptr) }
+        unsafe { &*(ptr as *const _ as *const Self) }
     }
 
     #[inline(always)]
     pub fn by_ptr_mut(ptr: &mut P) -> &mut Self {
-        unsafe { std::mem::transmute(ptr) }
+        unsafe { &mut *(ptr as *mut _ as *mut Self) }
     }
 }
 

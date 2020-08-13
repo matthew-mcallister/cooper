@@ -17,7 +17,7 @@ macro_rules! impl_enum {
             $($member = $value,)*
         }
         impl $name {
-            const VALUES: &'static [$name] = &[$($name::$member,)*];
+            const VALUES: &[$name] = &[$($name::$member,)*];
         }
         impl std::convert::TryFrom<$type> for $name {
             type Error = EnumValueError;

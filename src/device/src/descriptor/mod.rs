@@ -42,19 +42,13 @@ type DescriptorCounts = EnumVector<DescriptorType, u32>;
 impl DescriptorType {
     #[inline]
     pub fn is_buffer(self) -> bool {
-        match self {
-            Self::UniformBuffer | Self::StorageBuffer => true,
-            _ => false,
-        }
+        matches!(self, Self::UniformBuffer | Self::StorageBuffer)
     }
 
     #[inline]
     pub fn is_image(self) -> bool {
-        match self {
-            Self::CombinedImageSampler | Self::SampledImage
-                | Self::StorageImage | Self::InputAttachment => true,
-            _ => false,
-        }
+        matches!(self, Self::CombinedImageSampler | Self::SampledImage
+            | Self::StorageImage | Self::InputAttachment)
     }
 }
 

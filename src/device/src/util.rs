@@ -151,7 +151,6 @@ macro_rules! set_layout_desc {
             bindings: smallvec::smallvec![
                 $($crate::set_layout_desc!(@binding ($($binding)*)),)*
             ],
-            ..Default::default()
         }
     };
     (@binding (

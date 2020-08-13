@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::ops::*;
 
 use base::impl_bin_ops;
@@ -153,11 +155,6 @@ impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(&self.elems[..], &other.elems[..])
-    }
-
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        PartialEq::ne(&self.elems[..], &other.elems[..])
     }
 }
 

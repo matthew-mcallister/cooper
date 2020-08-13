@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
+
 use std::ops::*;
 
 use base::impl_bin_ops;
@@ -216,13 +218,8 @@ impl<F: PartialEq, const M: usize, const N: usize> PartialEq
     for Matrix<F, M, N>
 {
     #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        self.iter().zip(other.iter()).any(|(a, b)| PartialEq::ne(a, b))
-    }
-
-    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
-        !PartialEq::ne(self, other)
+        self.iter().zip(other.iter()).all(|(a, b)| PartialEq::eq(a, b))
     }
 }
 

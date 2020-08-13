@@ -28,7 +28,7 @@ crate struct TestVars {
     crate gfx_queue: Arc<Queue>,
 }
 
-const WINDOW_NAME: &'static str = "cooper test";
+const WINDOW_NAME: &str = "cooper test";
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
 fn app_info() -> AppInfo {
@@ -37,7 +37,6 @@ fn app_info() -> AppInfo {
         version: [0, 1, 0],
         debug: true,
         test: true,
-        ..Default::default()
     }
 }
 

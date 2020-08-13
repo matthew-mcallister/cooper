@@ -186,7 +186,6 @@ pub(super) fn create_set_layout(
             stage_flags: vk::ShaderStageFlags::FRAGMENT_BIT,
             samplers: Some(samplers),
         }],
-        ..Default::default()
     }).into_owned()
 }
 

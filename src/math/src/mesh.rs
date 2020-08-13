@@ -4,7 +4,7 @@
 pub struct UnitCube;
 
 impl UnitCube {
-    const INDEX_BUFFER: &'static [u32] = &[
+    const INDEX_BUFFER: &[u32] = &[
         // x = 0
         1, 0, 2,
         1, 2, 3,
@@ -25,7 +25,7 @@ impl UnitCube {
         21, 22, 23,
     ];
 
-    const VERTS: &'static [[[[f32; 3]; 2]; 2]; 2] = &[
+    const VERTS: &[[[[f32; 3]; 2]; 2]; 2] = &[
         [
             [[-1.0, -1.0, -1.0], [-1.0, -1.0,  1.0]],
             [[-1.0,  1.0, -1.0], [-1.0,  1.0,  1.0]],
@@ -36,7 +36,7 @@ impl UnitCube {
         ],
     ];
 
-    const POS_BUFFER: &'static [[f32; 3]] = &[
+    const POS_BUFFER: &[[f32; 3]] = &[
         // x = 0
         Self::VERTS[0][0][0], Self::VERTS[0][1][0], Self::VERTS[0][0][1], Self::VERTS[0][1][1],
         // x = 1
@@ -51,13 +51,13 @@ impl UnitCube {
         Self::VERTS[0][0][1], Self::VERTS[0][1][1], Self::VERTS[1][0][1], Self::VERTS[1][1][1],
     ];
 
-    const NORMALS: &'static [[f32; 3]] = &[
+    const NORMALS: &[[f32; 3]] = &[
         [-1.0,  0.0,  0.0], [1.0, 0.0, 0.0],
         [ 0.0, -1.0,  0.0], [0.0, 1.0, 0.0],
         [ 0.0,  0.0, -1.0], [0.0, 0.0, 1.0],
     ];
 
-    const NORMAL_BUFFER: &'static [[f32; 3]] = &[
+    const NORMAL_BUFFER: &[[f32; 3]] = &[
         Self::NORMALS[0], Self::NORMALS[0], Self::NORMALS[0], Self::NORMALS[0],
         Self::NORMALS[1], Self::NORMALS[1], Self::NORMALS[1], Self::NORMALS[1],
         Self::NORMALS[2], Self::NORMALS[2], Self::NORMALS[2], Self::NORMALS[2],

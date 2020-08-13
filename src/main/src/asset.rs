@@ -149,7 +149,7 @@ mod dir_bundle_tests {
     use std::collections::{HashMap, HashSet};
     use super::*;
 
-    const TEST_DIR: &'static str =
+    const TEST_DIR: &str =
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assets");
 
     #[test]

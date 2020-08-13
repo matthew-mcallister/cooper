@@ -29,7 +29,6 @@
 #![allow(
     clippy::missing_safety_doc,
     clippy::module_inception,
-    clippy::needless_range_loop,
     clippy::or_fun_call,
     clippy::too_many_arguments,
     clippy::try_err,

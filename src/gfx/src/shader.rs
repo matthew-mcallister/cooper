@@ -51,8 +51,8 @@ mod shader_sources {
                         )
                     }
                 }
-                crate const NAME: &'static str = name!();
-                crate static CODE: &'static [u32] = include_u32!(name!());
+                crate const NAME: &str = name!();
+                crate static CODE: &[u32] = include_u32!(name!());
             })*
         }
     }

@@ -15,7 +15,7 @@ pub struct TestContext {
     proxy: window::EventLoopProxy,
 }
 
-const WINDOW_NAME: &'static str = "cooper test";
+const WINDOW_NAME: &str = "cooper test";
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
 
 fn app_info() -> AppInfo {

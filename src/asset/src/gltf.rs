@@ -109,7 +109,7 @@ impl Bundle {
 #[throws]
 fn read_data_uri(uri: &str) -> Option<Vec<u8>> {
     if !uri.starts_with("data:") { return None; }
-    let data = uri.splitn(2, ",").nth(1).ok_or("invalid data URI")?;
+    let data = uri.splitn(2, ',').nth(1).ok_or("invalid data URI")?;
     Some(base64::decode(data)?)
 }
 
@@ -126,7 +126,7 @@ crate fn load_gltf(
 }
 
 #[throws]
-fn load_scene<'a, 'st, 'dat>(loader: &'a mut Loader<'st, 'dat>) -> Scene {
+fn load_scene<'st, 'dat>(loader: &mut Loader<'st, 'dat>) -> Scene {
     let meshes = loader.bundle.document.meshes().map(|mesh| {
         load_mesh(loader, mesh)
     }).collect::<Result<Vec<_>>>()?;

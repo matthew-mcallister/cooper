@@ -10,7 +10,7 @@ mod asset;
 
 pub use asset::*;
 
-const TITLE_BASE: &'static str = "Cooper Demo";
+const TITLE_BASE: &str = "Cooper Demo";
 
 fn make_title(fps: f32) -> CString {
     let title = format!("{} | {:.2} fps", TITLE_BASE, fps);

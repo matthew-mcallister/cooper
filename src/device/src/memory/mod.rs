@@ -395,7 +395,7 @@ impl DeviceMemory {
     unsafe fn map(&mut self) {
         let dt = &*self.device.table;
         let flags = Default::default();
-        let mut ptr = 0 as *mut c_void;
+        let mut ptr = ptr::null_mut();
         dt.map_memory(self.inner, 0, self.size, flags, &mut ptr)
             .check().expect("failed to map device memory");
         self.ptr = NonNull::new(ptr);

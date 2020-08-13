@@ -61,7 +61,7 @@ trait Lower {
 }
 
 impl<'ctx> LowerCtx<'ctx> {
-    fn new<'obj>(
+    fn new(
         state: &'ctx SystemState,
         uniforms: &'ctx SceneViewUniforms,
         resources: &'ctx ResourceSystem,

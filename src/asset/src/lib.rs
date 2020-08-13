@@ -8,6 +8,7 @@
     type_ascription,
 )]
 #![allow(incomplete_features)]
+#![allow(clippy::float_cmp)]
 
 unsafe fn extend_lt<T>(val: &T) -> &'static T { &*(val as *const T) }
 
