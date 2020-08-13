@@ -4,7 +4,7 @@ use base::PartialEnumMap;
 use derivative::Derivative;
 use device::{
     DescriptorSetLayout, Image, ImageDef, ImageSubresources, SamplerDesc,
-    ShaderStageMap, VertexInputLayout,
+    ShaderSpec, ShaderStage, ShaderStageMap, VertexInputLayout,
 };
 use enum_map::Enum;
 
@@ -55,7 +55,17 @@ pub struct MaterialDef {
     set_layout: Arc<DescriptorSetLayout>,
 }
 
+impl MaterialDesc {
+    pub fn vertex_stage(&self) -> Option<&Arc<ShaderSpec>> {
+        self.stages.get(ShaderStage::Vertex)
+    }
+}
+
 impl MaterialDef {
+    pub fn desc(&self) -> &MaterialDesc {
+        &self.desc
+    }
+
     fn vertex_layout(&self) -> &VertexInputLayout {
         &self.desc.vertex_layout
     }

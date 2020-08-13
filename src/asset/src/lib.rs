@@ -1,4 +1,5 @@
 #![feature(
+    backtrace,
     const_generics,
     crate_visibility_modifier,
     entry_insert,

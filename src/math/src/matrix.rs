@@ -5,6 +5,7 @@ use std::ops::*;
 use base::impl_bin_ops;
 use num::*;
 
+use crate::Dot;
 use crate::vector::*;
 
 /// A column-major, dense, M x N matrix meant for doing fast
@@ -64,15 +65,13 @@ impl<F, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 
     #[inline(always)]
-    pub fn iter(&self) ->
-        impl Iterator<Item=&Vector<F, M>> + ExactSizeIterator
-    {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Vector<F, M>> {
         self.columns.iter()
     }
 
     #[inline(always)]
     pub fn iter_mut(&mut self) ->
-        impl Iterator<Item = &mut Vector<F, M>> + ExactSizeIterator
+        impl ExactSizeIterator<Item = &mut Vector<F, M>>
     {
         self.columns.iter_mut()
     }
@@ -89,7 +88,6 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
         }
         mat
     }
-
     #[inline(always)]
     pub fn transpose(&self) -> Matrix<F, N, M> {
         let mut trans: Matrix<F, N, M> = Default::default();
@@ -294,6 +292,19 @@ impl_matvec_mul!({}, (Matrix<F, M, N>), (Vector<F, N>));
 impl_matvec_mul!({'rhs,}, (Matrix<F, M, N>), (&'rhs Vector<F, N>));
 impl_matvec_mul!({'lhs,}, (&'lhs Matrix<F, M, N>), (Vector<F, N>));
 impl_matvec_mul!({'lhs, 'rhs,}, (&'lhs Matrix<F, M, N>), (&'rhs Vector<F, N>));
+
+impl<F: Primitive, const M: usize, const N: usize> Matrix<F, M, N> {
+    #[inline(always)]
+    pub fn transpose_mul_vec(&self, vector: &Vector<F, M>) -> Vector<F, N> {
+        let mut prod: Vector<F, N> = Default::default();
+        // TODO: This implementation might be slower than simply
+        // constructing the tranpose and multiplying
+        for i in 0..N {
+            prod[i] = self[i].dot(vector);
+        }
+        prod
+    }
+}
 
 // Matrix--matrix mul
 

@@ -81,7 +81,8 @@ impl SceneViewState {
 
 fn view_uniforms(view: &SceneView) -> SceneViewUniforms {
     let view_inv = view.rot.translate(view.pos);
-    let view_mat = view.rot.transpose().translate(-view.pos);
+    let rot_inv = view.rot.transpose();
+    let view_mat = rot_inv.translate(rot_inv * (-view.pos));
     SceneViewUniforms {
         perspective: view.perspective.into(),
         view: view_mat,

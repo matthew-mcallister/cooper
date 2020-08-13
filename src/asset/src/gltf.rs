@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use base::{PartialEnumMap, partial_map, partial_map_opt};
@@ -7,6 +7,7 @@ use derive_more::Constructor;
 use fehler::{throw, throws};
 use gfx::*;
 use gltf::{accessor, mesh};
+use log::trace;
 use math::vector::vec;
 use prelude::tryopt;
 
@@ -16,6 +17,7 @@ use crate::asset::*;
 #[derive(Debug)]
 struct Bundle {
     source: String,
+    base: PathBuf,
     document: gltf::Document,
     buffers: Vec<Arc<Vec<u8>>>,
 }
@@ -47,7 +49,12 @@ impl Bundle {
         let gltf::Gltf { document, blob } =
             gltf::Gltf::from_reader_without_validation(file)?;
 
-        let mut bundle = Self { source, document, buffers: Vec::new() };
+        let mut bundle = Self {
+            base: Path::new(&source).parent().unwrap().into(),
+            source,
+            document,
+            buffers: Vec::new(),
+        };
 
         let blob = tryopt!(Arc::new(blob?));
         let bufs = bundle.document.buffers().map(|buf| Ok(match buf.source() {
@@ -61,6 +68,10 @@ impl Bundle {
         bundle.buffers = bufs;
 
         bundle
+    }
+
+    fn resolve_uri(&self, uri: &str) -> String {
+        self.base.join(uri).into_os_string().into_string().unwrap()
     }
 
     #[throws]
@@ -98,10 +109,9 @@ impl Bundle {
     }
 
     #[throws]
-    fn read_file(&self, rel_path: &str) -> Vec<u8> {
-        let path = Path::new(&self.source).join(rel_path)
-            .into_os_string().into_string()
-            .map_err(|_| "unicode error")?;
+    fn read_file(&self, uri: &str) -> Vec<u8> {
+        let path = self.resolve_uri(uri);
+        trace!("Bundle::read_file: path = {}", path);
         std::fs::read(path)?
     }
 }
@@ -334,7 +344,8 @@ fn get_image<'a, 'st, 'dat>(
             if let Some(data) = read_data_uri(uri)? {
                 load_data_image(loader, &data, index, mime_type)?
             } else {
-                Arc::clone(loader.assets.get_or_load_image(loader.rloop, uri)?)
+                let src = &loader.bundle.resolve_uri(uri);
+                Arc::clone(loader.assets.get_or_load_image(loader.rloop, src)?)
             },
     };
 

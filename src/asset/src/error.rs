@@ -1,8 +1,8 @@
 use std::io;
 use std::option::NoneError;
 
-use derive_more::{Display, From, Into};
-use image::error::ImageError;
+use derivative::Derivative;
+use derive_more::Display;
 
 macro_rules! tassert {
     ($cond:expr) => { if !$cond { throw!(); } };
@@ -11,58 +11,83 @@ macro_rules! tassert {
     };
 }
 
-macro_rules! impl_from {
-    ($src:ty, $dst:ty, $val:expr) => {
-        impl From<$src> for $dst {
-            fn from(_: $src) -> Self {
-                $val
-            }
-        }
+// Detailed/debug error type with backtraces.
+#[derive(Derivative, Display)]
+#[display(fmt = "failed to load asset: {}", _0)]
+#[derivative(Debug = "transparent")]
+pub struct Error(anyhow::Error);
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl std::error::Error for Error {
+    #[inline(always)]
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.chain().next()
+    }
+
+    #[inline(always)]
+    fn backtrace(&self) -> Option<&std::backtrace::Backtrace> {
+        Some(self.0.backtrace())
     }
 }
 
-#[derive(Debug, Display, From, Into)]
-#[display(fmt = "{}", _0)]
-pub struct Error(io::Error);
-
-impl std::error::Error for Error {}
-
 impl Default for Error {
+    #[inline(always)]
     fn default() -> Self {
         io::ErrorKind::InvalidData.into()
     }
 }
 
+impl From<&'static str> for Error {
+    #[inline(always)]
+    fn from(msg: &'static str) -> Self {
+        Self(anyhow::Error::msg(msg))
+    }
+}
+
+impl From<String> for Error {
+    #[inline(always)]
+    fn from(msg: String) -> Self {
+        Self(anyhow::Error::msg(msg))
+    }
+}
+
+impl From<NoneError> for Error {
+    #[inline(always)]
+    fn from(_: NoneError) -> Self {
+        Default::default()
+    }
+}
+
+macro_rules! impl_from {
+    ($ty:ty) => {
+        impl From<$ty> for Error {
+            #[inline(always)]
+            fn from(error: $ty) -> Self {
+                Self(anyhow::Error::new(error))
+            }
+        }
+    }
+}
+
+impl_from!(base64::DecodeError);
+impl_from!(gltf::Error);
+impl_from!(image::ImageError);
+impl_from!(io::Error);
+
 impl From<io::ErrorKind> for Error {
-    fn from(error: io::ErrorKind) -> Self {
-        Self(error.into())
+    #[inline(always)]
+    fn from(kind: io::ErrorKind) -> Self {
+        io::Error::from(kind).into()
     }
 }
 
-// TODO: This pattern could easily be a macro
-impl From<ImageError> for Error {
-    fn from(error: ImageError) -> Self {
-        match error {
-            ImageError::IoError(e) => e,
-            e => io::Error::new(io::ErrorKind::InvalidData, e),
-        }.into()
+impl From<Error> for io::Error {
+    #[inline(always)]
+    fn from(e: Error) -> Self {
+        match e.0.downcast::<Self>() {
+            Ok(e) => e,
+            Err(e) => Self::new(io::ErrorKind::InvalidData, e),
+        }
     }
 }
-
-impl From<gltf::Error> for Error {
-    fn from(error: gltf::Error) -> Self {
-        use gltf::Error;
-        match error {
-            Error::Io(e) => e,
-            e => io::Error::new(io::ErrorKind::InvalidData, e),
-        }.into()
-    }
-}
-
-// TODO: Enable better errors in debug builds
-impl_from!(&str, Error, Default::default());
-impl_from!(String, Error, Default::default());
-impl_from!(NoneError, Error, Default::default());
-impl_from!(base64::DecodeError, Error, Default::default());
-
-pub type Result<T> = std::result::Result<T, Error>;

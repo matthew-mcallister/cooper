@@ -33,14 +33,12 @@ impl<F, const N: usize> Vector<F, N> {
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> impl Iterator<Item=&F> + ExactSizeIterator {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item=&F> {
         self.elems.iter()
     }
 
     #[inline(always)]
-    pub fn iter_mut(&mut self) ->
-        impl Iterator<Item = &mut F> + ExactSizeIterator
-    {
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut F> {
         self.elems.iter_mut()
     }
 }

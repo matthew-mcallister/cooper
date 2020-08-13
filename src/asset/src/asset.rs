@@ -4,6 +4,7 @@ use device::*;
 use fehler::throws;
 use fnv::FnvHashMap as HashMap;
 use gfx::{MaterialDef, RenderLoop, RenderMesh};
+use log::trace;
 use image::GenericImageView;
 use math::vector::*;
 
@@ -15,7 +16,7 @@ pub struct Scene {
     pub meshes: Vec<Mesh>,
 }
 
-crate type BBox = [Vector3<f32>; 2];
+pub type BBox = [Vector3<f32>; 2];
 
 #[derive(Debug)]
 pub struct Mesh {
@@ -29,18 +30,29 @@ pub struct Primitive {
     pub material: Arc<MaterialDef>,
 }
 
-#[derive(Debug)]
+impl Scene {
+    pub fn primitives(&self) -> impl Iterator<Item = &Primitive> {
+        self.meshes.iter().flat_map(|mesh| mesh.primitives.iter())
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct AssetCache {
     images: HashMap<String, Arc<ImageDef>>,
     scenes: HashMap<String, Scene>,
 }
 
 impl AssetCache {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     #[throws]
     pub fn get_or_load_image(&mut self, rloop: &mut RenderLoop, path: &str) ->
         &Arc<ImageDef>
     {
         try_return_elem!(&self.images, path);
+        trace!("AssetCache: loading image {}", path);
         let image = image::open(path)?;
         let name = path.to_owned();
         let image = load_image(rloop, image, Some(name.clone()));
@@ -56,6 +68,7 @@ impl AssetCache {
         &Scene
     {
         try_return_elem!(&self.scenes, path);
+        trace!("AssetCache: loading scene {}", path);
         let scene = load_gltf(rloop, self, path)?;
         &*self.scenes.entry(path.into()).insert(scene).into_mut()
     }
