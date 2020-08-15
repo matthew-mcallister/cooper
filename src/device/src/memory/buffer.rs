@@ -61,8 +61,8 @@ pub struct BufferAlloc {
 
 /// # Caveats
 ///
-/// This type will *not* ever call `T::drop`, so it is recommended you
-/// avoid using `T` with a non-trivial destructor.
+/// This type requires that `T` have no drop implementation. That is,
+/// `std::mem::needs_drop::<T>()` must be false.
 #[derive(Debug)]
 pub struct BufferBox<T: ?Sized> {
     alloc: BufferAlloc,
@@ -306,6 +306,22 @@ impl BufferAlloc {
     }
 }
 
+impl<T> BufferBox<T> {
+    // The documentation says that this may give false positives,
+    // but it seems to work well enough.
+    const ASSERT: () = assert!(
+        !std::mem::needs_drop::<T>(),
+        "cannot instantiate BufferBox where T implements Drop",
+    );
+}
+
+impl<T> BufferBox<[T]> {
+    const ASSERT: () = assert!(
+        !std::mem::needs_drop::<T>(),
+        "cannot instantiate BufferBox where T implements Drop",
+    );
+}
+
 unsafe impl<T: ?Sized> Send for BufferBox<T> {}
 unsafe impl<T: ?Sized> Sync for BufferBox<T> {}
 
@@ -321,6 +337,7 @@ impl<T> BufferBox<MaybeUninit<T>> {
     }
 
     pub unsafe fn assume_init(self) -> BufferBox<T> {
+        BufferBox::<T>::ASSERT;
         BufferBox { ptr: self.ptr.cast(), alloc: self.alloc }
     }
 }
@@ -331,6 +348,7 @@ impl<T> BufferBox<[MaybeUninit<T>]> {
     }
 
     pub unsafe fn assume_init_slice(self) -> BufferBox<[T]> {
+        BufferBox::<[T]>::ASSERT;
         BufferBox {
             ptr: std::mem::transmute(self.ptr),
             alloc: self.alloc
@@ -396,6 +414,8 @@ impl<T: Copy> BufferBox<[T]> {
     }
 }
 
+// TODO: This isn't *really* safe unless T also has no trap values
+// because the graphics device may write to this memory.
 impl<T: ?Sized> std::ops::Deref for BufferBox<T> {
     type Target = T;
     #[inline(always)]
