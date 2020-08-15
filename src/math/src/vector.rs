@@ -1,11 +1,12 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::cmp::Ordering;
 use std::ops::*;
 
 use base::impl_bin_ops;
 use num::*;
 
-use crate::{Cross, Dot};
+use crate::{InfSup, InfSupResult};
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
@@ -40,6 +41,13 @@ impl<F, const N: usize> Vector<F, N> {
     #[inline(always)]
     pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut F> {
         self.elems.iter_mut()
+    }
+
+    #[inline(always)]
+    pub fn iter_zip<'a>(&'a self, other: &'a Self) ->
+        impl ExactSizeIterator<Item = (&'a F, &'a F)>
+    {
+        self.iter().zip(other.iter())
     }
 }
 
@@ -158,6 +166,89 @@ impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
 
 impl<F: Eq, const N: usize> Eq for Vector<F, N> {}
 
+impl<F: PartialOrd, const N: usize> PartialOrd for Vector<F, N> {
+    /// Implements the canonical product order on `F^N`:
+    /// `[a_1 ... a_N] ≤ [b_1 ... b_N]` iff `a_i ≤ b_i` for `1 ≤ i ≤ N`.
+    /// It is not a total order (it is, however, a lattice when F is).
+    #[inline(always)]
+    fn le(&self, other: &Self) -> bool {
+        self.iter_zip(other).all(|(a, b)| F::le(a, b))
+    }
+
+    /// Implements a *non-strict* product order on `F^N`:
+    /// `[a_1 ... a_N] < [b_1 ... b_N]` iff `a_i < b_i` for `1 < i < N`.
+    /// This is
+    #[inline(always)]
+    fn lt(&self, other: &Self) -> bool {
+        self.iter_zip(other).all(|(a, b)| F::lt(a, b))
+    }
+
+    #[inline(always)]
+    fn ge(&self, other: &Self) -> bool {
+        self.iter_zip(other).all(|(a, b)| F::ge(a, b))
+    }
+
+    #[inline(always)]
+    fn gt(&self, other: &Self) -> bool {
+        self.iter_zip(other).all(|(a, b)| F::gt(a, b))
+    }
+
+    /// Unfortunately, this method is not usable as this impl is not
+    /// conformant to the trait specification. (TODO: Complain online)
+    #[inline(always)]
+    fn partial_cmp(&self, _: &Self) -> Option<Ordering> {
+        unimplemented!("partial_cmp is undefined for Vector");
+    }
+}
+
+impl<F: Default + PartialOrd + Copy, const N: usize> Vector<F, N> {
+    /// Returns the infimum of two vectors, which is the minimum of the
+    /// two taken component-wise.
+    #[inline(always)]
+    fn inf(&self, other: &Self) -> Self {
+        let mut inf = Self::default();
+        for i in 0..N {
+            inf[i] = if self[i] <= other[i] { self[i] } else { other[i] };
+        }
+        inf
+    }
+
+    /// Returns the supremum of two vectors, which is the maximum of the
+    /// two taken component-wise.
+    #[inline(always)]
+    fn sup(&self, other: &Self) -> Self {
+        let mut sup = Self::default();
+        for i in 0..N {
+            sup[i] = if self[i] >= other[i] { self[i] } else { other[i] };
+        }
+        sup
+    }
+}
+
+impl<F: Default + PartialOrd + Copy, const N: usize> InfSup for Vector<F, N> {
+    impl_inf_sup!();
+}
+
+impl<'a, F: Default + PartialOrd + Copy + 'a, const N: usize> InfSup<&'a Self>
+    for Vector<F, N>
+{
+    fn infimum(mut iter: impl Iterator<Item = &'a Self>) -> Option<Self> {
+        let init = *iter.next()?;
+        Some(iter.fold(init, |a, b| a.inf(b)))
+    }
+
+    fn supremum(mut iter: impl Iterator<Item = &'a Self>) -> Option<Self> {
+        let init = *iter.next()?;
+        Some(iter.fold(init, |a, b| a.sup(b)))
+    }
+
+    fn infimum_and_supremum(iter: impl Iterator<Item = &'a Self>) ->
+        InfSupResult<Self>
+    {
+        Self::infimum_and_supremum(iter.copied())
+    }
+}
+
 // TODO: More ops, e.g. Hash
 
 // TODO: Maybe impl AsRef<[F]>, AsRef<[[F; N]]> for [Vector<F, N>]
@@ -249,18 +340,44 @@ impl<F: Primitive, const N: usize> std::iter::Sum for Vector<F, N> {
 
 // TODO: Bitwise ops (should work for a boolean vector as well)
 
+/// Provides the dot product for vectors.
+pub trait Dot<Rhs = Self> {
+    type Output;
+    fn dot(self, rhs: Rhs) -> Self::Output;
+}
+
+/// Provides the cross product for vectors.
+pub trait Cross<Rhs = Self> {
+    type Output;
+    fn cross(self, rhs: Rhs) -> Self::Output;
+}
+
+pub fn dot<Lhs, Rhs>(lhs: Lhs, rhs: Rhs) -> Lhs::Output
+    where Lhs: Dot<Rhs>,
+{
+    lhs.dot(rhs)
+}
+
+pub fn cross<Lhs, Rhs>(lhs: Lhs, rhs: Rhs) -> Lhs::Output
+    where Lhs: Cross<Rhs>,
+{
+    lhs.cross(rhs)
+}
+
 macro_rules! impl_dot {
     ({$($lt:tt)*}, ($Lhs:ty), ($Rhs:ty)) => {
         impl<$($lt)* F: Primitive, const N: usize> Dot<$Rhs> for $Lhs {
             type Output = F;
             #[inline(always)]
             fn dot(self, rhs: $Rhs) -> Self::Output {
-                self.iter().zip(rhs.iter()).map(|(l, r)| l * r).sum()
+                self.iter_zip(&rhs).map(|(l, r)| l * r).sum()
             }
         }
     }
 }
 
+// TODO: I don't think we want impls for both T and &T because then
+// x.dot(y) is ambiguous.
 impl_dot!({}, (Vector<F, N>), (Vector<F, N>));
 impl_dot!({'rhs,}, (Vector<F, N>), (&'rhs Vector<F, N>));
 impl_dot!({'lhs,}, (&'lhs Vector<F, N>), (Vector<F, N>));
@@ -295,8 +412,9 @@ impl<F: Primitive + Signed + FloatOps, const N: usize> Vector<F, N> {
         self.length_sq().sqrt()
     }
 
-    pub fn normalized(self) -> Self {
-        self / self.length()
+    pub fn normalized(mut self) -> Self {
+        self /= self.length();
+        self
     }
 
     pub fn normalize(&mut self) -> F {
@@ -331,7 +449,7 @@ impl<F: Copy> Vector4<F> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{dot, cross};
+    use crate::MathIterExt;
     use super::*;
 
     #[test]
@@ -452,5 +570,45 @@ mod tests {
         assert_eq!(a.xyz1(), vec4(1.0, 2.0, 3.0, 1.0));
         let b = vec4(1.0, 2.0, 3.0, 4.0);
         assert_eq!(b.xyz(), a);
+    }
+
+    #[test]
+    fn order() {
+        assert!(vec2(0.0, 0.0) <= Zero::zero());
+        assert!(vec2(0.0, 0.0) >= Zero::zero());
+        assert!(!(vec2(0.0, 0.0) < Zero::zero()));
+        assert!(!(vec2(0.0, 0.0) > Zero::zero()));
+
+        assert!(vec2(0.0, 1.0) < vec2(1.0, 2.0));
+        assert!(vec2(0.0, 1.0) <= vec2(1.0, 2.0));
+        assert!(!(vec2(0.0, 1.0) > vec2(1.0, 2.0)));
+        assert!(!(vec2(0.0, 1.0) >= vec2(1.0, 2.0)));
+    }
+
+    #[test]
+    fn inf_sup() {
+        assert_eq!(vec2(1.0, 0.0).inf(&vec2(0.0, 1.0)), vec2(0.0, 0.0));
+        assert_eq!(vec2(1.0, 0.0).sup(&vec2(0.0, 1.0)), vec2(1.0, 1.0));
+
+        let vecs = &[
+            vec2( 0.0, 0.0),
+            vec2(-1.0, 3.0),
+            vec2( 0.0, 1.0),
+            vec2( 2.0, 2.0),
+        ];
+        let inf = vec2(-1.0, 0.0);
+        let sup = vec2(2.0, 3.0);
+        assert_eq!(vecs.iter().inf(), Some(inf));
+        assert_eq!(vecs.iter().sup(), Some(sup));
+        assert_eq!(vecs.iter().infsup(), InfSupResult::InfSup(inf, sup));
+        assert_eq!(vecs.iter().copied().inf(), Some(inf));
+        assert_eq!(vecs.iter().copied().sup(), Some(sup));
+        assert_eq!(vecs.iter().copied().infsup(),
+            InfSupResult::InfSup(inf, sup));
+
+        assert_eq!([].iter().infsup::<Vector2<f32>>(), InfSupResult::Empty);
+        let vecs = &[vec2(1.0, 1.0)];
+        assert_eq!(vecs.iter().infsup(),
+            InfSupResult::Singleton(vec2(1.0, 1.0)));
     }
 }

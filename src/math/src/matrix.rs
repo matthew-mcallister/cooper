@@ -5,7 +5,6 @@ use std::ops::*;
 use base::impl_bin_ops;
 use num::*;
 
-use crate::Dot;
 use crate::vector::*;
 
 /// A column-major, dense, M x N matrix meant for doing fast
@@ -535,6 +534,8 @@ mod tests {
             [ 0.0, 3.0
             , 1.0, 4.0
             , 2.0, 5.0]);
+        assert_eq!(a.transpose_mul_vec(&vec2(1.0, 2.0)), vec2(1.0, 2.0));
+        assert_eq!(b.transpose_mul_vec(&vec3(0.0, 1.0, 2.0)), vec2(5.0, 14.0));
     }
 
     #[test]
