@@ -11,25 +11,27 @@ use log::trace;
 use math::{BBox, vec};
 use prelude::tryopt;
 
-use crate::{Error, Result, load_image};
+use crate::{Error, Result};
 use crate::asset::*;
+use crate::scene::*;
 
 #[derive(Debug)]
 struct Bundle {
     source: String,
     base: PathBuf,
     document: gltf::Document,
-    buffers: Vec<Arc<Vec<u8>>>,
 }
+
+type Buffer = Arc<Vec<u8>>;
 
 #[derive(Debug)]
 struct Loader<'st, 'dat> {
     bundle: &'dat Bundle,
+    buffers: &'dat [Buffer],
     rloop: &'st mut RenderLoop,
     assets: &'st mut AssetCache,
-    images: Vec<Option<Arc<ImageDef>>>,
-    // TODO: Maybe should dedup accessors in case the same mesh is
-    // reused with multiple materials
+    images: Vec<Arc<ImageDef>>,
+    meshes: Vec<Mesh>,
 }
 
 #[derive(Constructor, Debug)]
@@ -41,33 +43,13 @@ struct SharedSlice {
 
 impl Bundle {
     #[throws]
-    crate fn import(path: impl Into<String>) -> Self {
-        use gltf::buffer::Source;
-
+    crate fn import(path: impl Into<String>) -> (Self, Option<Vec<u8>>) {
         let source = path.into();
         let file = std::fs::File::open(&source)?;
         let gltf::Gltf { document, blob } =
             gltf::Gltf::from_reader_without_validation(file)?;
-
-        let mut bundle = Self {
-            base: Path::new(&source).parent().unwrap().into(),
-            source,
-            document,
-            buffers: Vec::new(),
-        };
-
-        let blob = tryopt!(Arc::new(blob?));
-        let bufs = bundle.document.buffers().map(|buf| Ok(match buf.source() {
-            Source::Bin => Arc::clone(blob.as_ref().unwrap()),
-            Source::Uri(uri) => if let Some(data) = read_data_uri(uri)? {
-                Arc::new(data)
-            } else {
-                Arc::new(bundle.read_file(uri)?)
-            },
-        })).collect::<Result<Vec<_>>>()?;
-        bundle.buffers = bufs;
-
-        bundle
+        let base = Path::new(&source).parent().unwrap().into();
+        (Self { base, source, document }, blob)
     }
 
     fn resolve_uri(&self, uri: &str) -> String {
@@ -75,8 +57,17 @@ impl Bundle {
     }
 
     #[throws]
+    fn read_file(&self, uri: &str) -> Vec<u8> {
+        let path = self.resolve_uri(uri);
+        trace!("Bundle::read_file: path = {}", path);
+        std::fs::read(path)?
+    }
+}
+
+impl<'st, 'dat> Loader<'st, 'dat> {
+    #[throws]
     fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) ->
-        (&Arc<Vec<u8>>, usize)
+        (&'dat Arc<Vec<u8>>, usize)
     {
         let view = accessor.view().ok_or("sparse accessor")?;
         (&self.buffers[view.buffer().index()], view.offset())
@@ -103,17 +94,67 @@ impl Bundle {
     }
 
     #[throws]
-    fn get_view(&self, view: &gltf::buffer::View<'_>) -> &[u8] {
+    fn get_view(&self, view: &gltf::buffer::View<'_>) -> &'dat [u8] {
         let buffer = &self.buffers[view.buffer().index()];
         buffer[view.offset()..][..view.length()].into()
     }
 
-    #[throws]
-    fn read_file(&self, uri: &str) -> Vec<u8> {
-        let path = self.resolve_uri(uri);
-        trace!("Bundle::read_file: path = {}", path);
-        std::fs::read(path)?
+    fn into_resources(self) -> SceneResources {
+        SceneResources { meshes: self.meshes }
     }
+}
+
+#[throws]
+crate fn load_gltf(
+    rloop: &mut RenderLoop,
+    assets: &mut AssetCache,
+    path: impl Into<String>,
+) -> SceneResources {
+    let (bundle, blob) = Bundle::import(path)?;
+    let buffers = load_buffers(&bundle, blob)?;
+    load_resources(rloop, assets, &bundle, &buffers)?
+}
+
+#[throws]
+fn load_resources(
+    rloop: &mut RenderLoop,
+    assets: &mut AssetCache,
+    bundle: &Bundle,
+    buffers: &[Buffer],
+) -> SceneResources {
+    let mut loader = Loader {
+        rloop,
+        assets,
+        bundle,
+        buffers,
+        images: Vec::new(),
+        meshes: Vec::new(),
+    };
+
+    loader.images = loader.bundle.document.images()
+        .map(|image| load_image(&mut loader, image))
+        .collect::<Result<_>>()?;
+    // TODO: Load accessors here (in case same data is reused on
+    // multiple meshes)
+    loader.meshes = loader.bundle.document.meshes()
+        .map(|mesh| load_mesh(&mut loader, mesh))
+        .collect::<Result<_>>()?;
+
+    loader.into_resources()
+}
+
+#[throws]
+fn load_buffers(bundle: &Bundle, blob: Option<Vec<u8>>) -> Vec<Buffer> {
+    use gltf::buffer::Source;
+    let blob = tryopt!(Arc::new(blob?));
+    bundle.document.buffers().map(|buf| Ok(match buf.source() {
+        Source::Bin => Arc::clone(blob.as_ref().unwrap()),
+        Source::Uri(uri) => if let Some(data) = read_data_uri(uri)? {
+            Arc::new(data)
+        } else {
+            Arc::new(bundle.read_file(uri)?)
+        },
+    })).collect::<Result<_>>()?
 }
 
 #[throws]
@@ -124,23 +165,41 @@ fn read_data_uri(uri: &str) -> Option<Vec<u8>> {
 }
 
 #[throws]
-crate fn load_gltf(
-    rloop: &mut RenderLoop,
-    assets: &mut AssetCache,
-    path: impl Into<String>,
-) -> Scene {
-    let bundle = &Bundle::import(path)?;
-    let images = vec![None; bundle.document.images().len()];
-    let mut loader = Loader { bundle, rloop, assets, images };
-    load_scene(&mut loader)?
+fn load_image<'st, 'dat>(
+    loader: &mut Loader<'st, 'dat>,
+    image: gltf::Image<'dat>,
+) -> Arc<ImageDef> {
+    use gltf::image::Source;
+
+    // TODO: Use a generic URI resolver instead of treating everything
+    // as a file. Sometimes you want to load from (e.g.) a zip archive.
+    let index = image.index();
+    match image.source() {
+        Source::View { view, mime_type } => {
+            let data = loader.get_view(&view)?;
+            load_data_image(loader, &data, index, Some(mime_type))?
+        },
+        Source::Uri { uri, mime_type } =>
+            if let Some(data) = read_data_uri(uri)? {
+                load_data_image(loader, &data, index, mime_type)?
+            } else {
+                let src = &loader.bundle.resolve_uri(uri);
+                Arc::clone(loader.assets.get_or_load_image(loader.rloop, src)?)
+            },
+    }
 }
 
+// TODO: Use mime type when available
 #[throws]
-fn load_scene<'st, 'dat>(loader: &mut Loader<'st, 'dat>) -> Scene {
-    let meshes = loader.bundle.document.meshes().map(|mesh| {
-        load_mesh(loader, mesh)
-    }).collect::<Result<Vec<_>>>()?;
-    Scene { meshes }
+fn load_data_image(
+    loader: &mut Loader<'_, '_>,
+    data: &[u8],
+    index: usize,
+    _mime: Option<&str>,
+) -> Arc<ImageDef> {
+    let image = image::load_from_memory(data)?;
+    let name = format!("{}[image={}]", loader.bundle.source, index);
+    crate::load_image(&mut loader.rloop, image, Some(name))
 }
 
 #[throws]
@@ -148,9 +207,9 @@ fn load_mesh<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     mesh: gltf::Mesh<'dat>,
 ) -> Mesh {
-    let primitives = mesh.primitives().map(|primitive| {
-        load_primitive(loader, primitive)
-    }).collect::<Result<Vec<_>>>()?;
+    let primitives = mesh.primitives()
+        .map(|primitive| load_primitive(loader, primitive))
+        .collect::<Result<Vec<_>>>()?;
     Mesh { primitives }
 }
 
@@ -184,10 +243,10 @@ fn load_primitive_mesh<'dat>(
     let mut attrs: PartialEnumMap<_, _> = Default::default();
     for (sem, accessor) in prim.attributes() {
         let attr = accessor_semantic(&sem)?;
-        let (format, slice) = loader.bundle.read_attr_accessor(&accessor)?;
+        let (format, slice) = loader.read_attr_accessor(&accessor)?;
         attrs.insert(attr, (format, slice));
     }
-    let index = tryopt!(loader.bundle.read_index_accessor(&prim.indices()?))
+    let index = tryopt!(loader.read_index_accessor(&prim.indices()?))
         .transpose()?;
 
     let mut builder = RenderMeshBuilder::from_loop(loader.rloop);
@@ -251,7 +310,7 @@ fn load_material<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     mesh: &Arc<RenderMesh>,
     material: gltf::Material<'dat>,
-) -> Arc<MaterialDef> {
+) -> MaterialDesc {
     // TODO: Actually implement shaders
     let vertex_shader = Arc::clone(&loader.rloop.shaders().static_vert);
     let vertex_shader: Arc<ShaderSpec> = Arc::new(vertex_shader.into());
@@ -261,15 +320,14 @@ fn load_material<'a, 'st, 'dat>(
         .input_layout_for_shader(vertex_shader.shader());
     let image_bindings = load_material_images(loader, &material)?;
 
-    let desc = MaterialDesc {
+    MaterialDesc {
         vertex_layout,
         stages: partial_map! {
             ShaderStage::Vertex => vertex_shader,
             ShaderStage::Fragment => frag_shader,
         },
         image_bindings,
-    };
-    loader.rloop.define_material(&desc)
+    }
 }
 
 #[throws]
@@ -312,58 +370,12 @@ fn load_texture<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     tex: gltf::texture::Texture<'dat>,
 ) -> ImageBindingDesc {
-    let image = Arc::clone(get_image(loader, tex.source())?);
+    let image = Arc::clone(&loader.images[tex.source().index() as usize]);
     ImageBindingDesc {
         subresources: image.all_subresources(),
         image,
         sampler_state: load_sampler(tex.sampler()),
     }
-}
-
-#[throws]
-fn get_image<'a, 'st, 'dat>(
-    loader: &'a mut Loader<'st, 'dat>,
-    image: gltf::Image<'dat>,
-) -> &'a Arc<ImageDef> {
-    use gltf::image::Source;
-
-    let index = image.index();
-    let images = unsafe { crate::extend_lt(&loader.images) };
-    let loaded = images.get(index)?;
-    tryopt! { return Ok(loaded.as_ref()?) };
-
-    let source = image.source();
-    // TODO: Use a generic URI resolver instead of treating everything
-    // as a file. Sometimes you want to load from (e.g.) a zip archive.
-    let image = match source {
-        Source::View { view, mime_type } => {
-            let data = loader.bundle.get_view(&view)?;
-            load_data_image(loader, &data, index, Some(mime_type))?
-        },
-        Source::Uri { uri, mime_type } =>
-            if let Some(data) = read_data_uri(uri)? {
-                load_data_image(loader, &data, index, mime_type)?
-            } else {
-                let src = &loader.bundle.resolve_uri(uri);
-                Arc::clone(loader.assets.get_or_load_image(loader.rloop, src)?)
-            },
-    };
-
-    loader.images[index] = Some(image);
-    loader.images[index].as_ref().unwrap()
-}
-
-// TODO: Use mime type when available
-#[throws]
-fn load_data_image(
-    loader: &mut Loader<'_, '_>,
-    data: &[u8],
-    index: usize,
-    _mime: Option<&str>,
-) -> Arc<ImageDef> {
-    let image = image::load_from_memory(data)?;
-    let name = format!("{}[image={}]", loader.bundle.source, index);
-    load_image(&mut loader.rloop, image, Some(name))
 }
 
 fn load_sampler(sampler: gltf::texture::Sampler<'_>) -> SamplerDesc {

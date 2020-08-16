@@ -28,6 +28,8 @@ mod error;
 
 mod asset;
 mod gltf;
+mod scene;
 
 pub use asset::*;
 pub use error::*;
+pub use scene::*;

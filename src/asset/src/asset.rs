@@ -3,41 +3,18 @@ use std::sync::Arc;
 use device::*;
 use fehler::throws;
 use fnv::FnvHashMap as HashMap;
-use gfx::{MaterialDef, RenderLoop, RenderMesh};
+use gfx::RenderLoop;
 use log::trace;
 use image::GenericImageView;
-use math::BBox;
 
 use crate::Error;
 use crate::gltf::load_gltf;
-
-#[derive(Debug)]
-pub struct Scene {
-    pub meshes: Vec<Mesh>,
-}
-
-#[derive(Debug)]
-pub struct Mesh {
-    pub primitives: Vec<Primitive>,
-}
-
-#[derive(Debug)]
-pub struct Primitive {
-    pub bbox: BBox<f32, 3>,
-    pub mesh: Arc<RenderMesh>,
-    pub material: Arc<MaterialDef>,
-}
-
-impl Scene {
-    pub fn primitives(&self) -> impl Iterator<Item = &Primitive> {
-        self.meshes.iter().flat_map(|mesh| mesh.primitives.iter())
-    }
-}
+use crate::scene::*;
 
 #[derive(Debug, Default)]
 pub struct AssetCache {
     images: HashMap<String, Arc<ImageDef>>,
-    scenes: HashMap<String, Scene>,
+    scenes: HashMap<String, SceneResources>,
 }
 
 impl AssetCache {
@@ -63,7 +40,7 @@ impl AssetCache {
 
     #[throws]
     pub fn get_or_load_scene(&mut self, rloop: &mut RenderLoop, path: &str) ->
-        &Scene
+        &SceneResources
     {
         try_return_elem!(&self.scenes, path);
         trace!("AssetCache: loading scene {}", path);
@@ -71,7 +48,7 @@ impl AssetCache {
         &*self.scenes.entry(path.into()).insert(scene).into_mut()
     }
 
-    pub fn get_scene(&self, path: &str) -> Option<&Scene> {
+    pub fn get_scene(&self, path: &str) -> Option<&SceneResources> {
         self.scenes.get(path)
     }
 }

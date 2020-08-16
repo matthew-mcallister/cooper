@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use anyhow as any;
-use asset::{AssetCache, Primitive, Scene};
+use asset::{AssetCache, Primitive, SceneResources};
 use gfx::{
     MaterialDef, MeshInstance, PerspectiveParams, RenderLoop, RenderWorld,
     SceneView,
@@ -28,7 +28,7 @@ const NAME: &str = "gltf example";
 
 fn render_world(
     world: &mut RenderWorld,
-    scene: &Scene,
+    scene: &SceneResources,
     materials: &Vec<Vec<MeshMaterials>>,
 ) {
     let mut view = SceneView::default();
@@ -37,7 +37,8 @@ fn render_world(
     let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
 
-    let bbox: BBox<f32, 3> = scene.primitives()
+    let bbox: BBox<f32, 3> = scene.meshes.iter()
+        .flat_map(|mesh| mesh.primitives.iter())
         .map(|prim| prim.bbox)
         .sup()
         .unwrap();
@@ -98,7 +99,7 @@ type MeshMaterials = [Arc<MaterialDef>; 6];
 
 fn primitive_materials(rl: &mut RenderLoop, prim: &Primitive) -> MeshMaterials
 {
-    let desc = prim.material.desc().clone();
+    let desc = &prim.material;
 
     macro_rules! define_material {
         ($rl:expr, $base:expr, $frag_stage:ident) => {
