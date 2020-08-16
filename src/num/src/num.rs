@@ -4,6 +4,7 @@ pub trait Zero {
     fn zero() -> Self;
 }
 
+#[inline(always)]
 pub fn zero<T: Zero>() -> T {
     T::zero()
 }
@@ -12,16 +13,22 @@ pub trait One {
     fn one() -> Self;
 }
 
+#[inline(always)]
 pub fn one<T: One>() -> T {
     T::one()
 }
 
 pub trait FromInt: Sized {
     fn from_u64(val: u64) -> Self;
+
     fn from_i64(val: i64) -> Self;
+
+    #[inline(always)]
     fn from_usize(val: usize) -> Self {
         Self::from_u64(val as _)
     }
+
+    #[inline(always)]
     fn from_isize(val: isize) -> Self {
         Self::from_i64(val as _)
     }
@@ -168,6 +175,9 @@ pub trait Num
     + One
     + FromInt
     + std::iter::Sum
+    + for<'a> std::iter::Sum<&'a Self>
+    + std::iter::Product
+    + for<'a> std::iter::Product<&'a Self>
     + std::fmt::Debug
     + std::fmt::Display
     + Default
@@ -187,3 +197,12 @@ pub trait Integer = Num + BitOps + Eq + Ord;
 pub trait PrimInt = Primitive + Integer;
 
 pub trait PrimSigned = Primitive + Signed;
+
+pub trait PrimOrd
+    = std::fmt::Debug
+    + std::fmt::Display
+    + Default
+    + PartialEq
+    + PartialOrd
+    + Copy
+    ;

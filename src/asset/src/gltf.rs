@@ -8,7 +8,7 @@ use fehler::{throw, throws};
 use gfx::*;
 use gltf::{accessor, mesh};
 use log::trace;
-use math::vector::vec;
+use math::{BBox, vec};
 use prelude::tryopt;
 
 use crate::{Error, Result, load_image};
@@ -167,9 +167,9 @@ fn load_primitive<'a, 'st, 'dat>(
     }
 }
 
-fn get_bbox(prim: &gltf::Primitive<'_>) -> BBox {
+fn get_bbox(prim: &gltf::Primitive<'_>) -> BBox<f32, 3> {
     let bbox = prim.bounding_box();
-    [vec(bbox.min), vec(bbox.max)]
+    BBox::new(vec(bbox.min), vec(bbox.max))
 }
 
 #[throws]

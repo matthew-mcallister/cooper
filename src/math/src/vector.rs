@@ -201,11 +201,11 @@ impl<F: PartialOrd, const N: usize> PartialOrd for Vector<F, N> {
     }
 }
 
-impl<F: Default + PartialOrd + Copy, const N: usize> Vector<F, N> {
+impl<F: PrimOrd, const N: usize> Vector<F, N> {
     /// Returns the infimum of two vectors, which is the minimum of the
     /// two taken component-wise.
     #[inline(always)]
-    fn inf(&self, other: &Self) -> Self {
+    pub fn inf(&self, other: &Self) -> Self {
         let mut inf = Self::default();
         for i in 0..N {
             inf[i] = if self[i] <= other[i] { self[i] } else { other[i] };
@@ -216,7 +216,7 @@ impl<F: Default + PartialOrd + Copy, const N: usize> Vector<F, N> {
     /// Returns the supremum of two vectors, which is the maximum of the
     /// two taken component-wise.
     #[inline(always)]
-    fn sup(&self, other: &Self) -> Self {
+    pub fn sup(&self, other: &Self) -> Self {
         let mut sup = Self::default();
         for i in 0..N {
             sup[i] = if self[i] >= other[i] { self[i] } else { other[i] };
@@ -225,13 +225,11 @@ impl<F: Default + PartialOrd + Copy, const N: usize> Vector<F, N> {
     }
 }
 
-impl<F: Default + PartialOrd + Copy, const N: usize> InfSup for Vector<F, N> {
+impl<F: PrimOrd, const N: usize> InfSup for Vector<F, N> {
     impl_inf_sup!();
 }
 
-impl<'a, F: Default + PartialOrd + Copy + 'a, const N: usize> InfSup<&'a Self>
-    for Vector<F, N>
-{
+impl<'a, F: PrimOrd + 'a, const N: usize> InfSup<&'a Self> for Vector<F, N> {
     fn infimum(mut iter: impl Iterator<Item = &'a Self>) -> Option<Self> {
         let init = *iter.next()?;
         Some(iter.fold(init, |a, b| a.inf(b)))
@@ -588,7 +586,9 @@ mod tests {
     #[test]
     fn inf_sup() {
         assert_eq!(vec2(1.0, 0.0).inf(&vec2(0.0, 1.0)), vec2(0.0, 0.0));
+        assert_eq!(vec2(0.0, 1.0).inf(&vec2(1.0, 0.0)), vec2(0.0, 0.0));
         assert_eq!(vec2(1.0, 0.0).sup(&vec2(0.0, 1.0)), vec2(1.0, 1.0));
+        assert_eq!(vec2(0.0, 1.0).sup(&vec2(1.0, 0.0)), vec2(1.0, 1.0));
 
         let vecs = &[
             vec2( 0.0, 0.0),

@@ -11,12 +11,13 @@
 use std::sync::Arc;
 
 use anyhow as any;
-use asset::{AssetCache, BBox, Primitive, Scene};
+use asset::{AssetCache, Primitive, Scene};
 use gfx::{
     MaterialDef, MeshInstance, PerspectiveParams, RenderLoop, RenderWorld,
     SceneView,
 };
 use device::{AppInfo, ShaderStage};
+use math::{BBox, MathIterExt};
 use math::vector::*;
 use math::matrix::*;
 use num::One;
@@ -36,10 +37,13 @@ fn render_world(
     let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
 
-    let bbox = scene_bbox(scene);
+    let bbox: BBox<f32, 3> = scene.primitives()
+        .map(|prim| prim.bbox)
+        .sup()
+        .unwrap();
 
     // Ensure whole scene is visible
-    let diam = (bbox[1] - bbox[0]).length();
+    let diam = (bbox.max - bbox.min).length();
     let radius = diam / 2.0;
     let dist = 1.1 * radius / fovy2.sin(); // Give it a little room
     let (z_near, z_far) = (dist - radius, dist + radius);
@@ -60,7 +64,7 @@ fn render_world(
         [-s,    0.0,  c  ],
     ]);
 
-    let mid = (bbox[0] + bbox[1]) / 2.0;
+    let mid = (bbox.min + bbox.max) / 2.0;
     view.rot = rot;
     view.pos = mid - rot * vec3(0.0, 0.0, dist);
     world.set_view(view);
@@ -72,36 +76,6 @@ fn render_world(
             render_mesh(world, prim, material);
         }
     }
-}
-
-fn scene_bbox(scene: &Scene) -> BBox {
-    let mut min = vec([f32::INFINITY; 3]);
-    let mut max = vec([-f32::INFINITY; 3]);
-    for prim in scene.primitives() {
-        min = vec_min(min, prim.bbox[0]);
-        max = vec_max(max, prim.bbox[1]);
-    }
-    [min, max]
-}
-
-fn vec_min<const N: usize>(u: Vector<f32, N>, v: Vector<f32, N>) ->
-    Vector<f32, N>
-{
-    let mut min: Vector<f32, N> = Default::default();
-    for i in 0..N {
-        min[i] = if u[i] < v[i] { u[i] } else { v[i] }
-    }
-    min
-}
-
-fn vec_max<const N: usize>(u: Vector<f32, N>, v: Vector<f32, N>) ->
-    Vector<f32, N>
-{
-    let mut min: Vector<f32, N> = Default::default();
-    for i in 0..N {
-        min[i] = if u[i] > v[i] { u[i] } else { v[i] }
-    }
-    min
 }
 
 fn render_mesh(

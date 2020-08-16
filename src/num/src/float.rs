@@ -105,6 +105,7 @@ float_ops! {
 
 pub trait FromFloat: FromInt {
     fn from_f64(val: f64) -> Self;
+
     #[inline(always)]
     fn from_f32(val: f32) -> Self {
         Self::from_f64(val as _)

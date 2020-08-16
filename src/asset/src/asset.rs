@@ -6,7 +6,7 @@ use fnv::FnvHashMap as HashMap;
 use gfx::{MaterialDef, RenderLoop, RenderMesh};
 use log::trace;
 use image::GenericImageView;
-use math::vector::*;
+use math::BBox;
 
 use crate::Error;
 use crate::gltf::load_gltf;
@@ -16,8 +16,6 @@ pub struct Scene {
     pub meshes: Vec<Mesh>,
 }
 
-pub type BBox = [Vector3<f32>; 2];
-
 #[derive(Debug)]
 pub struct Mesh {
     pub primitives: Vec<Primitive>,
@@ -25,7 +23,7 @@ pub struct Mesh {
 
 #[derive(Debug)]
 pub struct Primitive {
-    pub bbox: BBox,
+    pub bbox: BBox<f32, 3>,
     pub mesh: Arc<RenderMesh>,
     pub material: Arc<MaterialDef>,
 }

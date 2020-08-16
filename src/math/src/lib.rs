@@ -11,10 +11,12 @@
 #[macro_use]
 mod macros;
 
+pub mod bbox;
 pub mod matrix;
 mod traits;
 pub mod vector;
 
+pub use bbox::*;
 pub use matrix::*;
 pub use traits::*;
 pub use vector::*;
