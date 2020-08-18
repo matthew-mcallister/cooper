@@ -14,7 +14,7 @@ use crate::scene::*;
 #[derive(Debug, Default)]
 pub struct AssetCache {
     images: HashMap<String, Arc<ImageDef>>,
-    scenes: HashMap<String, SceneResources>,
+    scenes: HashMap<String, SceneCollection>,
 }
 
 impl AssetCache {
@@ -40,7 +40,7 @@ impl AssetCache {
 
     #[throws]
     pub fn get_or_load_scene(&mut self, rloop: &mut RenderLoop, path: &str) ->
-        &SceneResources
+        &SceneCollection
     {
         try_return_elem!(&self.scenes, path);
         trace!("AssetCache: loading scene {}", path);
@@ -48,7 +48,7 @@ impl AssetCache {
         &*self.scenes.entry(path.into()).insert(scene).into_mut()
     }
 
-    pub fn get_scene(&self, path: &str) -> Option<&SceneResources> {
+    pub fn get_scene(&self, path: &str) -> Option<&SceneCollection> {
         self.scenes.get(path)
     }
 }

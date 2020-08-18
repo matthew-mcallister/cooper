@@ -48,7 +48,7 @@ impl Bundle {
         let file = std::fs::File::open(&source)?;
         let gltf::Gltf { document, blob } =
             gltf::Gltf::from_reader_without_validation(file)?;
-        let base = Path::new(&source).parent().unwrap().into();
+        let base = Path::new(&source).parent()?.into();
         (Self { base, source, document }, blob)
     }
 
@@ -70,6 +70,7 @@ impl<'st, 'dat> Loader<'st, 'dat> {
         (&'dat Arc<Vec<u8>>, usize)
     {
         let view = accessor.view().ok_or("sparse accessor")?;
+        // TODO: remove all potential panics on slices
         (&self.buffers[view.buffer().index()], view.offset())
     }
 
@@ -109,10 +110,18 @@ crate fn load_gltf(
     rloop: &mut RenderLoop,
     assets: &mut AssetCache,
     path: impl Into<String>,
-) -> SceneResources {
+) -> SceneCollection {
     let (bundle, blob) = Bundle::import(path)?;
     let buffers = load_buffers(&bundle, blob)?;
-    load_resources(rloop, assets, &bundle, &buffers)?
+    let resources = load_resources(rloop, assets, &bundle, &buffers)?;
+    let nodes = load_nodes(bundle.document.nodes())?;
+    let scenes = bundle.document.scenes()
+        .map(load_scene)
+        .collect::<Result<Vec<_>>>()?;
+    tassert!(!scenes.is_empty(), "no scenes in document");
+    let default_scene_idx = bundle.document.default_scene()
+        .map_or(0, |scene| scene.index());
+    SceneCollection { resources, nodes, scenes, default_scene_idx }
 }
 
 #[throws]
@@ -148,7 +157,7 @@ fn load_buffers(bundle: &Bundle, blob: Option<Vec<u8>>) -> Vec<Buffer> {
     use gltf::buffer::Source;
     let blob = tryopt!(Arc::new(blob?));
     bundle.document.buffers().map(|buf| Ok(match buf.source() {
-        Source::Bin => Arc::clone(blob.as_ref().unwrap()),
+        Source::Bin => Arc::clone(blob.as_ref()?),
         Source::Uri(uri) => if let Some(data) = read_data_uri(uri)? {
             Arc::new(data)
         } else {
@@ -428,4 +437,38 @@ fn wrapping_mode(wrapping_mode: gltf::texture::WrappingMode) ->
         WrappingMode::MirroredRepeat => SamplerAddressMode::MirroredRepeat,
         WrappingMode::Repeat => SamplerAddressMode::Repeat,
     }
+}
+
+#[throws]
+fn load_nodes(node_list: gltf::iter::Nodes<'_>) -> Vec<Node> {
+    let mut nodes = node_list.clone()
+        .map(load_node)
+        .collect::<Result<Vec<_>>>()?;
+    assign_parents(node_list, &mut nodes[..])?;
+    nodes
+}
+
+#[throws]
+fn load_node(node: gltf::Node<'_>) -> Node {
+    let transform = node.transform().into();
+    let data = NodeData::from_node(&node);
+    Node { transform, data, ..Default::default() }
+}
+
+#[throws]
+fn assign_parents(src: gltf::iter::Nodes<'_>, dst: &mut [Node]) {
+    for node in src {
+        for child in node.children() {
+            dst.get_mut(child.index() as usize)?.parent =
+                Some(node.index() as u32);
+        }
+    }
+}
+
+#[throws]
+fn load_scene(scene: gltf::Scene<'_>) -> Scene {
+    let nodes = scene.nodes()
+        .map(|node| node.index() as u32)
+        .collect();
+    Scene { nodes }
 }

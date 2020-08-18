@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use anyhow as any;
-use asset::{AssetCache, Primitive, SceneResources};
+use asset::{AssetCache, NodeData, Primitive, SceneCollection};
 use gfx::{
     MaterialDef, MeshInstance, PerspectiveParams, RenderLoop, RenderWorld,
     SceneView,
@@ -20,7 +20,6 @@ use device::{AppInfo, ShaderStage};
 use math::{BBox, MathIterExt};
 use math::vector::*;
 use math::matrix::*;
-use num::One;
 
 use cooper_examples::with_event_loop;
 
@@ -28,7 +27,7 @@ const NAME: &str = "gltf example";
 
 fn render_world(
     world: &mut RenderWorld,
-    scene: &SceneResources,
+    collection: &SceneCollection,
     materials: &Vec<Vec<MeshMaterials>>,
 ) {
     let mut view = SceneView::default();
@@ -37,7 +36,11 @@ fn render_world(
     let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
 
-    let bbox: BBox<f32, 3> = scene.meshes.iter()
+    let xforms = collection.world_xforms();
+    let scene = collection.default_scene();
+
+    // TODO: compute transformed AABBs
+    let bbox: BBox<f32, 3> = collection.resources.meshes.iter()
         .flat_map(|mesh| mesh.primitives.iter())
         .map(|prim| prim.bbox)
         .sup()
@@ -70,11 +73,24 @@ fn render_world(
     view.pos = mid - rot * vec3(0.0, 0.0, dist);
     world.set_view(view);
 
-    assert_eq!(scene.meshes.len(), materials.len());
-    for (mesh, materials) in scene.meshes.iter().zip(materials.iter()) {
-        assert_eq!(mesh.primitives.len(), materials.len());
-        for (prim, material) in mesh.primitives.iter().zip(materials.iter()) {
-            render_mesh(world, prim, material);
+    let mat_idx = (world.frame_num() / 109) as usize;
+    for (node_idx, node) in scene.nodes.iter()
+        .map(|&node| &collection.nodes[node as usize])
+        .enumerate()
+    {
+        match node.data {
+            NodeData::Empty => {},
+            NodeData::Mesh(idx) => {
+                let idx = idx as usize;
+                let mesh = &collection.resources.meshes[idx];
+                for (prim, materials) in mesh.primitives.iter()
+                    .zip(materials[idx].iter())
+                {
+                    let material = &materials[mat_idx % materials.len()];
+                    let xform = &xforms[node_idx];
+                    render_mesh(world, prim, Arc::clone(material), xform);
+                }
+            }
         }
     }
 }
@@ -82,15 +98,15 @@ fn render_world(
 fn render_mesh(
     world: &mut RenderWorld,
     prim: &Primitive,
-    materials: &MeshMaterials,
+    material: Arc<MaterialDef>,
+    xform: &Matrix4<f32>,
 ) {
-    let idx = (world.frame_num() / 109) as usize;
-    let material = Arc::clone(&materials[idx % materials.len()]);
+    let rot = xform.submatrix(0, 0);
+    let pos = xform[3].xyz();
     world.add_object(MeshInstance {
-        /// Assumed to be orthogonal.
         mesh: Arc::clone(&prim.mesh),
-        pos: Default::default(),
-        rot: Matrix3::one(),
+        pos,
+        rot,
         material,
     });
 }
@@ -145,7 +161,7 @@ fn main_with_proxy(proxy: window::EventLoopProxy) -> any::Result<()> {
 
     let path = std::env::var("GLTF_PATH")?;
     let scene = assets.get_or_load_scene(&mut rloop, &path)?;
-    let materials: Vec<Vec<_>> = scene.meshes.iter()
+    let materials: Vec<Vec<_>> = scene.resources.meshes.iter()
         .map(|mesh| mesh.primitives.iter()
             .map(|prim| primitive_materials(&mut rloop, prim))
             .collect())
