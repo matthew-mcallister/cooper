@@ -120,6 +120,7 @@ unsafe fn create_pipeline(
     desc.vertex_layout = def.vertex_layout().clone();
     // A little clunky, but should be flexible enough
     desc.layout.set_layouts[1] = Arc::clone(def.set_layout());
+    desc.cull_mode = def.cull_mode();
     Arc::clone(state.pipelines.get_or_create_committed_gfx(&desc))
 }
 

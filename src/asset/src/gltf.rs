@@ -329,6 +329,11 @@ fn load_material<'a, 'st, 'dat>(
         .input_layout_for_shader(vertex_shader.shader());
     let image_bindings = load_material_images(loader, &material)?;
 
+    let cull_mode = match material.double_sided() {
+        true => CullMode::None,
+        false => CullMode::Back,
+    };
+
     MaterialDesc {
         vertex_layout,
         stages: partial_map! {
@@ -336,6 +341,7 @@ fn load_material<'a, 'st, 'dat>(
             ShaderStage::Fragment => frag_shader,
         },
         image_bindings,
+        cull_mode,
     }
 }
 

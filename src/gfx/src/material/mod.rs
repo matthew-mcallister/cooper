@@ -3,8 +3,8 @@ use std::sync::Arc;
 use base::PartialEnumMap;
 use derivative::Derivative;
 use device::{
-    DescriptorSetLayout, Image, ImageDef, ImageSubresources, SamplerDesc,
-    ShaderSpec, ShaderStage, ShaderStageMap, VertexInputLayout,
+    CullMode, DescriptorSetLayout, Image, ImageDef, ImageSubresources,
+    SamplerDesc, ShaderSpec, ShaderStage, ShaderStageMap, VertexInputLayout,
 };
 use enum_map::Enum;
 
@@ -45,7 +45,7 @@ pub struct MaterialDesc {
     pub vertex_layout: VertexInputLayout,
     pub stages: ShaderStageMap,
     pub image_bindings: MaterialImageBindings,
-    //pub cull_mode: CullMode,
+    pub cull_mode: CullMode,
 }
 
 // TODO: Allow descriptor set layout to be customized somewhat?
@@ -76,6 +76,10 @@ impl MaterialDef {
 
     fn stages(&self) -> &ShaderStageMap {
         &self.desc.stages
+    }
+
+    fn cull_mode(&self) -> CullMode {
+        self.desc.cull_mode
     }
 
     fn set_layout(&self) -> &Arc<DescriptorSetLayout> {
