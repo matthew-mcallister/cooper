@@ -5,7 +5,6 @@ use num::PrimFloat;
 use crate::{InfSup, InfSupResult, MathIterExt};
 use crate::vector::*;
 
-// TODO: May actually want a base + offset or center + radius repr
 #[derive(Clone, Constructor, Copy, Debug, Derivative, Eq, PartialEq)]
 #[derivative(Default(bound = "F: Copy + Default"))]
 pub struct BBox<F, const N: usize> {
@@ -27,21 +26,25 @@ impl<F: PrimFloat, const N: usize> BBox<F, N> {
         }
     }
 
+    #[inline]
     pub fn volume(&self) -> F {
         let diam = self.max - self.min;
         diam.iter().product()
     }
 
+    #[inline]
     pub fn contains(&self, point: &Vector<F, N>) -> bool {
         (self.min <= *point) & (*point <= self.max)
     }
 
+    #[inline]
     pub fn intersects(&self, other: &Self) -> bool {
-        let int = self.inf(other);
+        let inf = self.inf(other);
         // TODO: Maybe edges shouldn't count as intersecting?
-        !(int.min <= int.max)
+        inf.min <= inf.max
     }
 
+    #[inline]
     pub fn inf(&self, other: &Self) -> Self {
         Self {
             min: self.min.sup(&other.min),
@@ -49,6 +52,7 @@ impl<F: PrimFloat, const N: usize> BBox<F, N> {
         }
     }
 
+    #[inline]
     pub fn sup(&self, other: &Self) -> Self {
         Self {
             min: self.min.inf(&other.min),
@@ -57,8 +61,13 @@ impl<F: PrimFloat, const N: usize> BBox<F, N> {
     }
 }
 
-impl<F: PrimFloat, const N: usize> InfSup<Self> for BBox<F, N> {
-    impl_inf_sup!();
+
+impl<F: PrimFloat, const N: usize> InfSup for BBox<F, N> {
+    impl_inf_sup!(Self);
+}
+
+impl<'a, F: PrimFloat + 'a, const N: usize> InfSup<&'a Self> for BBox<F, N> {
+    impl_inf_sup!(&'a Self);
 }
 
 #[cfg(test)]
@@ -73,10 +82,6 @@ mod tests {
         assert!(!bbox.contains(&vec2(1.5, 0.0)));
         assert!(bbox.contains(&vec2(0.5, 0.5)));
         assert!(!bbox.contains(&vec2(-1.0, 0.5)));
-
-        assert!(!bbox.is_empty());
-        assert!(BBox::<f32, 2>::empty().is_empty());
-        assert!(!BBox::new(vec2(0.0, 0.0), vec2(0.0, 0.0)).is_empty());
     }
 
     #[test]
@@ -97,17 +102,18 @@ mod tests {
 
         let boxes = [
             BBox::new(vec2(0.0, 0.0), vec2(2.0, 1.0)),
-            BBox::new(vec2(-1.0, -1.0), vec2(0.0, 1.0)),
+            BBox::new(vec2(-1.0, -1.0), vec2(0.0, 1.2)),
             BBox::new(vec2(-0.5, 0.5), vec2(1.5, 1.0)),
             BBox::new(vec2(1.0, -0.2), vec2(1.2, 0.2)),
         ];
-        assert_eq!(boxes.iter().copied().sup());
+        assert_eq!(boxes.iter().copied().sup(),
+            Some(BBox::new(vec2(-1.0, -1.0), vec2(2.0, 1.2))));
     }
 
     #[test]
     fn construct() {
         let points = &[vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.5, 0.5)];
-        let bbox = BBox::from_points(points.iter().copied());
+        let bbox = BBox::from_points(points.iter().copied()).unwrap();
         assert_eq!(bbox, BBox::new(vec2(0.0, 0.0), vec2(1.0, 0.5)));
         for point in points.iter() {
             assert!(bbox.contains(point), "{:?}", point);

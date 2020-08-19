@@ -127,28 +127,28 @@ macro_rules! impl_scalar_op {
 }
 
 macro_rules! impl_inf_sup {
-    () => {
-        fn infimum(mut iter: impl Iterator<Item = Self>) -> Option<Self> {
-            let init = iter.next()?;
+    ($item:ty) => {
+        fn infimum(mut iter: impl Iterator<Item = $item>) -> Option<Self> {
+            let init = iter.next()?.clone();
             Some(iter.fold(init, |a, b| a.inf(&b)))
         }
 
-        fn supremum(mut iter: impl Iterator<Item = Self>) -> Option<Self> {
-            let init = iter.next()?;
+        fn supremum(mut iter: impl Iterator<Item = $item>) -> Option<Self> {
+            let init = iter.next()?.clone();
             Some(iter.fold(init, |a, b| a.sup(&b)))
         }
 
-        fn infimum_and_supremum(mut iter: impl Iterator<Item = Self>) ->
+        fn infimum_and_supremum(mut iter: impl Iterator<Item = $item>) ->
             InfSupResult<Self>
         {
             let first = match iter.next() {
-                Some(x) => x,
-                _ => return InfSupResult::Empty,
-            };
+                Some(first) => first,
+                None => return InfSupResult::Empty,
+            }.clone();
             let second = match iter.next() {
-                Some(x) => x,
-                _ => return InfSupResult::Singleton(first),
-            };
+                Some(second) => second,
+                None => return InfSupResult::Singleton(first),
+            }.clone();
             let init = (first.inf(&second), first.sup(&second));
             let (inf, sup) = iter.fold(init, |(inf, sup), x| {
                 (inf.inf(&x), sup.sup(&x))

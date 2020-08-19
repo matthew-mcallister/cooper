@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::cmp::Ordering;
+use std::mem::MaybeUninit;
 use std::ops::*;
 
 use base::impl_bin_ops;
@@ -10,8 +11,6 @@ use crate::{InfSup, InfSupResult};
 
 /// A general-purpose fixed-size vector for fast calculations at
 /// low dimensions.
-// TODO: Explicit/guaranteed SIMD
-// TODO: Aligned variants. But how to implement? A macro or wrappers?
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct Vector<F, const N: usize> {
@@ -135,25 +134,29 @@ impl<F, const N: usize> From<Vector<F, N>> for [F; N] {
 
 // TODO: impl [Try]From<&[F]>
 
-// TODO: This impl should require neither E: Default + Copy nor F: Copy
-impl<F: Copy, const N: usize> Vector<F, N> {
+impl<F, const N: usize> Vector<F, N> {
     #[inline(always)]
-    pub fn map<E: Default + Copy>(self, mut f: impl FnMut(F) -> E) ->
-        Vector<E, N>
-    {
-        let mut out = Vector::default();
-        for (dst, &src) in out.iter_mut().zip(self.iter()) {
-            *dst = f(src);
+    pub fn map<E>(self, mut f: impl FnMut(F) -> E) -> Vector<E, N> {
+        let old_elems = MaybeUninit::new(self.elems);
+        let mut new_elems = MaybeUninit::<[E; N]>::uninit();
+        for (dst, src) in crate::uninit_slice_mut(&mut new_elems).iter_mut()
+            .zip(crate::uninit_slice(&old_elems).iter())
+        {
+            dst.write(f(unsafe { src.read() }));
         }
-        out
+        Vector::new(unsafe { new_elems.assume_init() })
     }
 }
 
-// TODO: This impl should not require F: Copy
-impl<F: Default + Copy, const N: usize> Default for Vector<F, N> {
+impl<F: Default, const N: usize> Default for Vector<F, N> {
     #[inline(always)]
     fn default() -> Self {
-        [Default::default(); N].into()
+        let mut elems = MaybeUninit::<[F; N]>::uninit();
+        let slice = crate::uninit_slice_mut(&mut elems);
+        for dst in slice.iter_mut() {
+            dst.write(Default::default());
+        }
+        Self::new(unsafe { elems.assume_init() })
     }
 }
 
@@ -161,6 +164,11 @@ impl<F: PartialEq, const N: usize> PartialEq for Vector<F, N> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(&self.elems[..], &other.elems[..])
+    }
+
+    #[inline(always)]
+    fn ne(&self, other: &Self) -> bool {
+        PartialEq::ne(&self.elems[..], &other.elems[..])
     }
 }
 
@@ -226,25 +234,11 @@ impl<F: PrimOrd, const N: usize> Vector<F, N> {
 }
 
 impl<F: PrimOrd, const N: usize> InfSup for Vector<F, N> {
-    impl_inf_sup!();
+    impl_inf_sup!(Self);
 }
 
 impl<'a, F: PrimOrd + 'a, const N: usize> InfSup<&'a Self> for Vector<F, N> {
-    fn infimum(mut iter: impl Iterator<Item = &'a Self>) -> Option<Self> {
-        let init = *iter.next()?;
-        Some(iter.fold(init, |a, b| a.inf(b)))
-    }
-
-    fn supremum(mut iter: impl Iterator<Item = &'a Self>) -> Option<Self> {
-        let init = *iter.next()?;
-        Some(iter.fold(init, |a, b| a.sup(b)))
-    }
-
-    fn infimum_and_supremum(iter: impl Iterator<Item = &'a Self>) ->
-        InfSupResult<Self>
-    {
-        Self::infimum_and_supremum(iter.copied())
-    }
+    impl_inf_sup!(&'a Self);
 }
 
 // TODO: More ops, e.g. Hash
