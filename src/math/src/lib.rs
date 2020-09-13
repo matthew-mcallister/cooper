@@ -2,6 +2,7 @@
     array_value_iter,
     bool_to_option,
     const_generics,
+    crate_visibility_modifier,
     iterator_fold_self,
     maybe_uninit_extra,
     maybe_uninit_uninit_array,
@@ -9,29 +10,49 @@
 )]
 #![allow(incomplete_features)]
 
-use std::mem::MaybeUninit;
-
 #[macro_use]
 mod macros;
 
-pub mod bbox;
-pub mod matrix;
-mod traits;
+//pub mod bbox;
+//pub mod matrix;
 pub mod vector;
 
-pub use bbox::*;
-pub use matrix::*;
-pub use traits::*;
+//pub use bbox::*;
+//pub use matrix::*;
 pub use vector::*;
 
-fn uninit_slice<T, const N: usize>(array: &MaybeUninit<[T; N]>) ->
-    &[MaybeUninit<T>; N]
-{
-    unsafe { &*(array as *const MaybeUninit<_> as *const [MaybeUninit<T>; N]) }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InfSupResult<T> {
+    Empty,
+    Singleton(T),
+    InfSup(T, T),
 }
 
-fn uninit_slice_mut<T, const N: usize>(array: &mut MaybeUninit<[T; N]>)
-    -> &mut [MaybeUninit<T>; N]
-{
-    unsafe { &mut *(array as *mut MaybeUninit<_> as *mut [MaybeUninit<T>; N]) }
+pub trait InfSup<A = Self>: Sized {
+    fn inf<I>(iter: I) -> Option<Self>
+        where I: Iterator<Item = A>;
+    fn sup<I>(iter: I) -> Option<Self>
+        where I: Iterator<Item = A>;
+    fn inf_sup<I>(iter: I) -> InfSupResult<Self>
+        where I: Iterator<Item = A>;
+}
+
+pub trait MathItertools: Iterator {
+    fn inf<T: InfSup<Self::Item>>(self) -> Option<T>;
+    fn sup<T: InfSup<Self::Item>>(self) -> Option<T>;
+    fn inf_sup<T: InfSup<Self::Item>>(self) -> InfSupResult<T>;
+}
+
+impl<I: Iterator> MathItertools for I {
+    fn inf<T: InfSup<Self::Item>>(self) -> Option<T> {
+        <T as InfSup<Self::Item>>::inf(self)
+    }
+
+    fn sup<T: InfSup<Self::Item>>(self) -> Option<T> {
+        <T as InfSup<Self::Item>>::sup(self)
+    }
+
+    fn inf_sup<T: InfSup<Self::Item>>(self) -> InfSupResult<T> {
+        <T as InfSup<Self::Item>>::inf_sup(self)
+    }
 }
