@@ -14,11 +14,11 @@
 mod macros;
 
 //pub mod bbox;
-//pub mod matrix;
+pub mod matrix;
 pub mod vector;
 
 //pub use bbox::*;
-//pub use matrix::*;
+pub use matrix::*;
 pub use vector::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

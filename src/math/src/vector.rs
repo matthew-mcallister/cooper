@@ -1,33 +1,119 @@
+use std::fmt::Debug;
 use std::ops::*;
 
 use derivative::Derivative;
 use num::{One, Zero};
 use packed_simd::{f32x2, f32x4, shuffle};
 
-pub unsafe trait Scalar<const N: usize> {
-    type Vector: Copy + Default;
-    fn splat(self) -> Self::Vector;
+pub unsafe trait Scalar<const N: usize>: Copy + Default + Debug + One + Zero {
+    type Vector: SimdVector<N, Scalar = Self>;
+}
+
+pub unsafe trait SimdVector<const N: usize>: Copy + Debug + Default {
+    type Scalar: Scalar<N, Vector = Self>;
+    fn splat(scalar: Self::Scalar) -> Self;
+    fn load(src: &[Self::Scalar; N]) -> Self;
+    fn store(self, dst: &mut [Self::Scalar; N]);
+    fn eq(self, other: Self) -> bool;
+    fn ne(self, other: Self) -> bool;
+    fn sum(self) -> Self::Scalar;
 }
 
 pub type VectorInner<F, const N: usize> = <F as Scalar<N>>::Vector;
 
-macro_rules! impl_scalar {
-    ($(($scalar:tt, $n:tt, $vec:tt))*) => {
-        $(
-            unsafe impl Scalar<$n> for $scalar {
-                type Vector = $vec;
+const fn mask(n: usize) -> u8 {
+    if n < 32 { !(!0u8 << n) } else { 0 }
+}
 
-                #[inline(always)]
-                fn splat(self) -> Self::Vector {
-                    $vec::splat(self)
+macro_rules! impl_scalar_pot {
+    ($scalar:tt, $n:tt, $vec:tt) => {
+        unsafe impl Scalar<$n> for $scalar {
+            type Vector = $vec;
+        }
+
+        unsafe impl SimdVector<$n> for $vec {
+            type Scalar = $scalar;
+
+            #[inline(always)]
+            fn splat(scalar: $scalar) -> Self {
+                Self::splat(scalar)
+            }
+
+            #[inline(always)]
+            fn load(src: &[$scalar; $n]) -> Self {
+                unsafe {
+                    $vec::from_slice_unaligned_unchecked(&src[..])
                 }
             }
-        )*
+
+            #[inline(always)]
+            fn store(self, dst: &mut [$scalar; $n]) {
+                unsafe {
+                    self.write_to_slice_unaligned_unchecked(&mut dst[..])
+                }
+            }
+
+            #[inline(always)]
+            fn eq(self, other: Self) -> bool {
+                const MASK: u8 = mask($n);
+                ($vec::eq(self, other).bitmask() & MASK) == MASK
+            }
+
+            #[inline(always)]
+            fn ne(self, other: Self) -> bool {
+                const MASK: u8 = mask($n);
+                ($vec::ne(self, other).bitmask() & MASK) == MASK
+            }
+
+            #[inline(always)]
+            fn sum(self) -> $scalar {
+                $vec::sum(self)
+            }
+        }
     }
 }
 
-impl_scalar! {
-    (f32, 2, f32x2) (f32, 3, f32x4) (f32, 4, f32x4)
+impl_scalar_pot!(f32, 2, f32x2);
+impl_scalar_pot!(f32, 4, f32x4);
+
+unsafe impl Scalar<3> for f32 {
+    type Vector = f32x4;
+}
+
+unsafe impl SimdVector<3> for f32x4 {
+    type Scalar = f32;
+
+    #[inline(always)]
+    fn splat(scalar: Self::Scalar) -> Self {
+        Self::splat(scalar)
+    }
+
+    #[inline(always)]
+    fn load(&[x, y, z]: &[f32; 3]) -> Self {
+        Self::new(x, y, z, z)
+    }
+
+    #[inline(always)]
+    fn store(self, array: &mut [f32; 3]) {
+        unsafe { *array = *(&self as *const  _ as *const [f32; 3]); }
+    }
+
+    #[inline(always)]
+    fn eq(self, other: Self) -> bool {
+        const MASK: u8 = mask(3);
+        (f32x4::eq(self, other).bitmask() & MASK) == MASK
+    }
+
+    #[inline(always)]
+    fn ne(self, other: Self) -> bool {
+        const MASK: u8 = mask(3);
+        (f32x4::ne(self, other).bitmask() & MASK) == MASK
+    }
+
+    #[inline(always)]
+    fn sum(self) -> f32 {
+        self.replace(3, 0.0).sum()
+    }
 }
 
 /// A small, SIMD-backed mathematical vector.
@@ -40,7 +126,7 @@ impl_scalar! {
 #[derivative(
     Clone(bound = ""),
     Copy(bound = ""),
-    Debug(bound = "<F as Scalar<N>>::Vector: std::fmt::Debug"),
+    Debug(bound = ""),
     Default(bound = ""),
 )]
 pub struct Vector<F: Scalar<N>, const N: usize>(<F as Scalar<N>>::Vector);
@@ -96,25 +182,55 @@ impl_accessors!(f32, 2 { 0 1 });
 impl_accessors!(f32, 3 { 0 1 2 });
 impl_accessors!(f32, 4 { 0 1 2 3 });
 
-const fn mask(n: usize) -> u8 {
-    if n < 32 { !(!0u8 << n) } else { 0 }
-}
-
 impl<F: Scalar<N>, const N: usize> Vector<F, N> {
     #[inline(always)]
     pub fn splat(scalar: F) -> Self {
-        Self(scalar.splat())
+        Self(F::Vector::splat(scalar))
+    }
+
+    #[inline(always)]
+    pub fn load(src: &[F; N]) -> Self {
+        Self(F::Vector::load(src))
+    }
+
+    #[inline(always)]
+    pub fn store(self, dst: &mut [F; N]) {
+        self.0.store(dst)
+    }
+
+    #[inline(always)]
+    pub fn sum(self) -> F {
+        self.0.sum()
+    }
+
+    #[inline(always)]
+    pub fn dot(self, other: Self) -> F
+        where Self: Mul<Output = Self>
+    {
+        (self * other).sum()
     }
 }
 
-impl<F: Scalar<N> + Zero, const N: usize> Zero for Vector<F, N> {
+impl<F: Scalar<N>, const N: usize> PartialEq for Vector<F, N> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(other.0)
+    }
+
+    #[inline(always)]
+    fn ne(&self, other: &Self) -> bool {
+        self.0.ne(other.0)
+    }
+}
+
+impl<F: Scalar<N>, const N: usize> Zero for Vector<F, N> {
     #[inline(always)]
     fn zero() -> Self {
         Self::splat(Zero::zero())
     }
 }
 
-impl<F: Scalar<N> + One, const N: usize> One for Vector<F, N> {
+impl<F: Scalar<N>, const N: usize> One for Vector<F, N> {
     #[inline(always)]
     fn one() -> Self {
         Self::splat(One::one())
@@ -222,51 +338,58 @@ macro_rules! impl_scalar_op_reverse {
     }
 }
 
-// Impls that are the same for all versions
+impl<F: Scalar<N>, const N: usize> From<[F; N]> for Vector<F, N> {
+    #[inline(always)]
+    fn from(array: [F; N]) -> Self {
+        let mut vec = Self::default();
+        unsafe { *(&mut vec as *mut _ as *mut [F; N]) = array; }
+        vec
+    }
+}
+
+impl<F: Scalar<N>, const N: usize> From<Vector<F, N>> for [F; N] {
+    #[inline(always)]
+    fn from(vec: Vector<F, N>) -> Self {
+        unsafe { *(&vec as *const _ as *const [F; N]) }
+    }
+}
+
+impl<F: Scalar<N>, const N: usize> AsRef<[F; N]> for Vector<F, N> {
+    #[inline(always)]
+    fn as_ref(&self) -> &[F; N] {
+        unsafe { &*(self as *const Self as *const [F; N]) }
+    }
+}
+
+impl<F: Scalar<N>, const N: usize> AsMut<[F; N]> for Vector<F, N> {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [F; N] {
+        unsafe { &mut *(self as *mut Self as *mut [F; N]) }
+    }
+}
+
+impl<I, F: Scalar<N>, const N: usize> Index<I> for Vector<F, N>
+    where [F]: Index<I>,
+{
+    type Output = <[F] as Index<I>>::Output;
+
+    #[inline(always)]
+    fn index(&self, idx: I) -> &Self::Output {
+        self.as_ref().index(idx)
+    }
+}
+
+impl<I, F: Scalar<N>, const N: usize> IndexMut<I> for Vector<F, N>
+    where [F]: IndexMut<I>,
+{
+    #[inline(always)]
+    fn index_mut(&mut self, idx: I) -> &mut Self::Output {
+        self.as_mut().index_mut(idx)
+    }
+}
+
 macro_rules! impl_common {
     ($f:tt, $n:tt, $inner:ty; $($x:ident)*) => {
-        impl From<[$f; $n]> for Vector<$f, $n> {
-            #[inline(always)]
-            fn from([$($x),*]: [$f; $n]) -> Self {
-                Self::new($($x),*)
-            }
-        }
-
-        impl From<Vector<$f, $n>> for [$f; $n] {
-            #[inline(always)]
-            fn from(vec: Vector<$f, $n>) -> Self {
-                [$(vec.$x()),*]
-            }
-        }
-
-        impl AsRef<[$f; $n]> for Vector<$f, $n> {
-            #[inline(always)]
-            fn as_ref(&self) -> &[$f; $n] {
-                unsafe { &*(self as *const Self as *const [$f; $n]) }
-            }
-        }
-
-        impl AsMut<[$f; $n]> for Vector<$f, $n> {
-            #[inline(always)]
-            fn as_mut(&mut self) -> &mut [$f; $n] {
-                unsafe { &mut *(self as *mut Self as *mut [$f; $n]) }
-            }
-        }
-
-        impl PartialEq for Vector<$f, $n> {
-            #[inline(always)]
-            fn eq(&self, other: &Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.eq(other.0).bitmask() & MASK) == MASK
-            }
-
-            #[inline(always)]
-            fn ne(&self, other: &Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.ne(other.0).bitmask() & MASK) == MASK
-            }
-        }
-
         impl Vector<$f, $n> {
             #[inline(always)]
             pub fn le(self, other: Self) -> bool {
@@ -305,39 +428,10 @@ macro_rules! impl_common {
             pub fn sup(self, other: Self) -> Self {
                 Self(self.0.max(other.0))
             }
-
-            #[inline(always)]
-            pub fn dot(self, other: Self) -> $f {
-                (self * other).sum()
-            }
-
-            #[inline(always)]
-            pub fn length_sq(self) -> $f {
-                self.dot(self)
-            }
-
-            #[inline(always)]
-            pub fn length(self) -> $f {
-                self.length_sq().sqrt()
-            }
-
-            #[inline(always)]
-            pub fn normalized(mut self) -> Self {
-                self /= self.length();
-                self
-            }
-
-            #[inline(always)]
-            pub fn normalize(&mut self) -> $f {
-                let length = self.length();
-                *self /= length;
-                length
-            }
         }
 
         impl_inf_sup!(Vector<$f, $n>);
         impl_scalar_op_reverse!($f, $n, Mul, MulAssign, mul, mul_assign);
-        impl_scalar_op_reverse!($f, $n, Div, DivAssign, div, div_assign);
     }
 }
 
@@ -352,25 +446,6 @@ macro_rules! impl_po2 {
             pub fn new($($x: $f),*) -> Self {
                 Self($inner::new($($x),*))
             }
-
-            #[inline(always)]
-            pub fn load(src: &[$f; $n]) -> Self {
-                unsafe {
-                    Self($inner::from_slice_unaligned_unchecked(&src[..]))
-                }
-            }
-
-            #[inline(always)]
-            pub fn store(self, dst: &mut [$f; $n]) {
-                unsafe {
-                    self.0.write_to_slice_unaligned_unchecked(&mut dst[..])
-                }
-            }
-
-            #[inline(always)]
-            pub fn sum(self) -> $f {
-                self.0.sum()
-            }
         }
     }
 }
@@ -378,26 +453,40 @@ macro_rules! impl_po2 {
 impl_po2!(f32, 2, f32x2; x y);
 impl_po2!(f32, 4, f32x4; x y z w);
 
+impl<F, const N: usize> Vector<F, N>
+where
+    F: Scalar<N> + num::Float,
+    Self: Mul<Self, Output = Self> + DivAssign<F>,
+{
+    #[inline(always)]
+    pub fn length_sq(self) -> F {
+        self.dot(self)
+    }
+
+    #[inline(always)]
+    pub fn length(self) -> F {
+        self.length_sq().sqrt()
+    }
+
+    #[inline(always)]
+    pub fn normalized(mut self) -> Self {
+        self /= self.length();
+        self
+    }
+
+    #[inline(always)]
+    pub fn normalize(&mut self) -> F {
+        let length = self.length();
+        *self /= length;
+        length
+    }
+}
+
 impl Vector3<f32> {
     #[inline(always)]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         // N.B. This probably doesn't generate the best code every time.
         Self(f32x4::new(x, y, z, z))
-    }
-
-    #[inline(always)]
-    pub fn load(&[x, y, z]: &[f32; 3]) -> Self {
-        Self::new(x, y, z)
-    }
-
-    #[inline(always)]
-    pub fn store(self, array: &mut [f32; 3]) {
-        *array = *self.as_ref();
-    }
-
-    #[inline(always)]
-    pub fn sum(self) -> f32 {
-        self.xyz0().sum()
     }
 
     #[inline(always)]
@@ -454,6 +543,30 @@ mod tests {
         assert_eq!(v.z(), 0.0);
         assert_eq!(v, [1.0, 0.0, 0.0].into());
         assert_eq!(<[f32; 3]>::from(v), [1.0, 0.0, 0.0]);
+        assert_eq!(Vector3::from([1.0f32, 1.0, 1.0]), vec3(1.0f32, 1.0, 1.0));
+    }
+
+    #[test]
+    fn index() {
+        let v = vec3(0.0, 1.0, 2.0);
+        assert_eq!(v[0], 0.0);
+        assert_eq!(v[1], 1.0);
+        assert_eq!(v[2], 2.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_out_of_bounds() {
+        let v = vec3(0.0, 1.0, 2.0);
+        v[3];
+    }
+
+    #[test]
+    fn from_into() {
+        let a = [1.0, 2.0, 3.0f32];
+        let v: Vector3<f32> = a.into();
+        assert_eq!(v, vec3(1.0, 2.0, 3.0));
+        assert_eq!(<[f32; 3]>::from(v), a);
     }
 
     #[test]

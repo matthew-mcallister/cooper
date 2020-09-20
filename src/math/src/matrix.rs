@@ -2,32 +2,50 @@
 
 use std::ops::*;
 
-use base::impl_bin_ops;
+use derivative::Derivative;
 use num::*;
 
 use crate::vector::*;
 
-/// A column-major, dense, M x N matrix meant for doing fast
-/// transformations and solving small systems of equations.
+pub trait BasicVector<F, const N: usize> = where
+    F: Scalar<N>,
+    Self: Sized
+        + Neg<Output = Self>
+        + Add<Self, Output = Self>
+        + AddAssign<Self>
+        + Sub<Self, Output = Self>
+        + SubAssign<Self>
+        + Mul<Self, Output = Self>
+        + MulAssign<Self>
+        + Mul<F, Output = Self>
+        + MulAssign<F>
+        + Div<Self, Output = Self>
+        + DivAssign<Self>
+        + Div<F, Output = Self>
+        + DivAssign<F>
+        ;
+
+/// A SIMD-backed, column-major, dense M x N matrix meant for doing fast
+/// transformations on vectors.
 ///
-/// Indexing a matrix returns the column vector in that position. As a
-/// consequence, indexing a particular element requires the reverse of
-/// the usual notation. For example, `m[2][1]` is the element at column
-/// 2, row 1 (numbered from zero).
-#[derive(Clone, Copy)]
+/// Indexing a matrix returns the column vector in that position, which
+/// is typical in numeric code but the reverse of the mathematical
+/// convention, in which the row comes first.
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Copy(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = "Vector<F, M>: PartialEq")
+)]
 #[repr(transparent)]
-pub struct Matrix<F, const M: usize, const N: usize> {
+pub struct Matrix<F: Scalar<M>, const M: usize, const N: usize> {
     columns: [Vector<F, M>; N],
 }
 
 pub type Matrix2<F> = Matrix<F, 2, 2>;
 pub type Matrix3<F> = Matrix<F, 3, 3>;
 pub type Matrix4<F> = Matrix<F, 4, 4>;
-pub type Matrix5<F> = Matrix<F, 5, 5>;
-pub type Matrix6<F> = Matrix<F, 6, 6>;
-pub type Matrix7<F> = Matrix<F, 7, 7>;
-pub type Matrix8<F> = Matrix<F, 8, 8>;
-pub type Matrix9<F> = Matrix<F, 9, 9>;
 
 pub type Matrix2x3<F> = Matrix<F, 2, 3>;
 pub type Matrix2x4<F> = Matrix<F, 2, 4>;
@@ -36,10 +54,10 @@ pub type Matrix3x4<F> = Matrix<F, 3, 4>;
 pub type Matrix4x2<F> = Matrix<F, 4, 2>;
 pub type Matrix4x3<F> = Matrix<F, 4, 3>;
 
-impl<F, const M: usize, const N: usize> Matrix<F, M, N> {
+impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
     #[inline(always)]
     pub fn new(columns: [Vector<F, M>; N]) -> Self {
-        columns.into()
+        Self { columns }
     }
 
     #[inline(always)]
@@ -50,17 +68,6 @@ impl<F, const M: usize, const N: usize> Matrix<F, M, N> {
     #[inline(always)]
     pub fn columns_mut(&mut self) -> &mut [Vector<F, M>; N] {
         &mut self.columns
-    }
-
-    // TODO: Ought to be [F; M * N]
-    #[inline(always)]
-    pub fn elements(&self) -> &[F] {
-        unsafe { std::slice::from_raw_parts(self as *const _ as _, M * N) }
-    }
-
-    #[inline(always)]
-    pub fn elements_mut(&mut self) -> &mut [F] {
-        unsafe { std::slice::from_raw_parts_mut(self as *mut _ as _, M * N) }
     }
 
     #[inline(always)]
@@ -74,12 +81,26 @@ impl<F, const M: usize, const N: usize> Matrix<F, M, N> {
     {
         self.columns.iter_mut()
     }
-}
 
-impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
     #[inline(always)]
-    pub fn from_rows(rows: [Vector<F, N>; M]) -> Self {
-        let mut mat = Matrix::default();
+    pub fn load(array: &[[F; M]; N]) -> Self {
+        let mut mat = Self::default();
+        for i in 0..N {
+            mat[i] = Vector::load(&array[i]);
+        }
+        mat
+    }
+
+    #[inline(always)]
+    pub fn store(self, array: &mut [[F; M]; N]) {
+        for i in 0..N {
+            self[i].store(&mut array[i]);
+        }
+    }
+
+    #[inline(always)]
+    pub fn load_rows(rows: [[F; N]; M]) -> Self {
+        let mut mat = Self::default();
         for i in 0..M {
             for j in 0..N {
                 mat[j][i] = rows[i][j];
@@ -87,15 +108,10 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
         }
         mat
     }
+
     #[inline(always)]
-    pub fn transpose(&self) -> Matrix<F, N, M> {
-        let mut trans: Matrix<F, N, M> = Default::default();
-        for i in 0..N {
-            for j in 0..M {
-                trans[j][i] = self[i][j];
-            }
-        }
-        trans
+    pub fn to_array(self) -> [[F; M]; N] {
+        self.into()
     }
 
     /// Returns the K × L submatrix starting at a given row and column.
@@ -103,10 +119,12 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
     // compiler can't support that yet (it ICEs).
     #[inline(always)]
     pub fn submatrix<const K: usize, const L: usize>(
-        &self,
+        self,
         row: usize,
         col: usize,
-    ) -> Matrix<F, K, L> {
+    ) -> Matrix<F, K, L>
+        where F: Scalar<K>
+    {
         let mut sub: Matrix<F, K, L> = Default::default();
         for i in 0..L {
             for j in 0..K {
@@ -117,7 +135,21 @@ impl<F: Copy + Default, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 }
 
-impl<F: Zero + Copy, const N: usize> Matrix<F, N, N> {
+impl<F: Scalar<M> + Scalar<N>, const M: usize, const N: usize> Matrix<F, M, N>
+{
+    #[inline(always)]
+    pub fn transpose(self) -> Matrix<F, N, M> {
+        let mut trans: Matrix<F, N, M> = Default::default();
+        for i in 0..N {
+            for j in 0..M {
+                trans[j][i] = self[i][j];
+            }
+        }
+        trans
+    }
+}
+
+impl<F: Scalar<N>, const N: usize> Matrix<F, N, N> {
     #[inline(always)]
     pub fn diagonal(diag: [F; N]) -> Self {
         let mut mat: Matrix<F, N, N> = Zero::zero();
@@ -126,9 +158,7 @@ impl<F: Zero + Copy, const N: usize> Matrix<F, N, N> {
         }
         mat
     }
-}
 
-impl<F: Zero + One + Copy, const N: usize> Matrix<F, N, N> {
     #[inline(always)]
     pub fn identity() -> Self {
         let mut ident: Matrix<F, N, N> = Zero::zero();
@@ -139,18 +169,101 @@ impl<F: Zero + One + Copy, const N: usize> Matrix<F, N, N> {
     }
 }
 
-impl<F: std::fmt::Debug, const M: usize, const N: usize> std::fmt::Debug
+impl<F: Scalar<M>, const M: usize, const N: usize> Default
     for Matrix<F, M, N>
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.columns[..].fmt(f)
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new([Vector::default(); N])
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> Zero
+    for Matrix<F, M, N>
+{
+    #[inline(always)]
+    fn zero() -> Self {
+        Self::new([Vector::zero(); N])
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> AsRef<[Vector<F, M>; N]>
+    for Matrix<F, M, N>
+{
+    #[inline(always)]
+    fn as_ref(&self) -> &[Vector<F, M>; N] {
+        &self.columns
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> AsMut<[Vector<F, M>; N]>
+    for Matrix<F, M, N>
+{
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [Vector<F, M>; N] {
+        &mut self.columns
+    }
+}
+
+impl<I, F: Scalar<M>, const M: usize, const N: usize> Index<I>
+    for Matrix<F, M, N>
+    where [Vector<F, M>]: Index<I>
+{
+    type Output = <[Vector<F, M>] as Index<I>>::Output;
+    fn index(&self, idx: I) -> &Self::Output {
+        self.columns.index(idx)
+    }
+}
+
+impl<I, F: Scalar<M>, const M: usize, const N: usize> IndexMut<I>
+    for Matrix<F, M, N>
+    where [Vector<F, M>]: IndexMut<I>
+{
+    fn index_mut(&mut self, idx: I) -> &mut Self::Output {
+        self.columns.index_mut(idx)
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> From<[[F; M]; N]>
+    for Matrix<F, M, N>
+{
+    fn from(array: [[F; M]; N]) -> Self {
+        Self::load(&array)
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> From<Matrix<F, M, N>>
+    for [[F; M]; N]
+{
+    fn from(mat: Matrix<F, M, N>) -> Self {
+        let mut array = [[Default::default(); M]; N];
+        mat.store(&mut array);
+        array
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> From<[Vector<F, M>; N]>
+    for Matrix<F, M, N>
+{
+    fn from(columns: [Vector<F, M>; N]) -> Self {
+        Self { columns }
+    }
+}
+
+impl<F: Scalar<M>, const M: usize, const N: usize> From<Matrix<F, M, N>>
+    for [Vector<F, M>; N]
+{
+    fn from(mat: Matrix<F, M, N>) -> Self {
+        mat.columns
     }
 }
 
 macro_rules! impl_matn {
     ($N:expr, $matn:ident, $($arg:ident),*) => {
         #[inline(always)]
-        pub fn $matn<F>($($arg: Vector<F, $N>,)*) -> Matrix<F, $N, $N> {
+        pub fn $matn<F: Scalar<$N>>($($arg: Vector<F, $N>),*) ->
+            Matrix<F, $N, $N>
+        {
             [$($arg,)*].into()
         }
     }
@@ -165,221 +278,163 @@ impl_matn!(7, mat7, a, b, c, d, e, f, g);
 impl_matn!(8, mat8, a, b, c, d, e, f, g, h);
 impl_matn!(9, mat9, a, b, c, d, e, f, g, h, i);
 
-impl<F: Copy + Default, const M: usize, const N: usize> Default
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn default() -> Self {
-        Self::new([Default::default(); N])
-    }
-}
-
-impl<F, const M: usize, const N: usize> AsRef<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn as_ref(&self) -> &[Vector<F, M>; N] {
-        &self.columns
-    }
-}
-
-impl<F, const M: usize, const N: usize> AsMut<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn as_mut(&mut self) -> &mut [Vector<F, M>; N] {
-        &mut self.columns
-    }
-}
-
-impl<F, const M: usize, const N: usize> From<[[F; M]; N]> for Matrix<F, M, N> {
-    #[inline(always)]
-    fn from(cols: [[F; M]; N]) -> Self {
-        // Yes, this sucks.
-        let columns = unsafe { std::ptr::read(&cols as *const _ as _) };
-        std::mem::forget(cols);
-        Self { columns }
-    }
-}
-
-impl<F, const M: usize, const N: usize> From<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn from(columns: [Vector<F, M>; N]) -> Self {
-        Self { columns }
-    }
-}
-
-impl<F: PartialEq, const M: usize, const N: usize> PartialEq
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        self.iter().zip(other.iter()).all(|(a, b)| PartialEq::eq(a, b))
-    }
-}
-
-impl<F: Zero + Copy, const M: usize, const N: usize> Zero for Matrix<F, M, N> {
-    #[inline(always)]
-    fn zero() -> Self {
-        Self::new([Zero::zero(); N])
-    }
-}
-
-impl<F: Zero + One + Copy, const N: usize> One for Matrix<F, N, N> {
-    #[inline(always)]
-    fn one() -> Self {
-        Self::identity()
-    }
-}
-
-// TODO: impl From<[F; M * N]> and FromIterator
-
-derive_index!(
-    (F, const M: usize, const N: usize),
-    Matrix<F, M, N>, columns, [Vector<F, M>],
-);
-
-impl_un_op!(
-    {F: PrimSigned, const M: usize, const N: usize},
-    (Matrix<F, M, N>), Neg, neg
-);
-impl_un_op!(
-    {F: PrimInt, const M: usize, const N: usize},
-    (Matrix<F, M, N>), Not, not
-);
-
-impl_bin_op!(
-    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>),
-    Add, AddAssign, add, add_assign
-);
-impl_bin_op!(
-    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>),
-    Sub, SubAssign, sub, sub_assign
-);
-
-impl_scalar_op!(
-    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
-    Mul, MulAssign, mul, mul_assign
-);
-impl_scalar_op!(
-    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
-    Div, DivAssign, div, div_assign
-);
-impl_scalar_op!(
-    {F: Primitive, const M: usize, const N: usize}, (Matrix<F, M, N>), (F),
-    Rem, RemAssign, rem, rem_assign
-);
-
-// Matrix--vector mul
-macro_rules! impl_matvec_mul {
-    ({$($lt:tt)*}, ($Lhs:ty), ($Rhs:ty)) => {
-        impl<$($lt)* F: Primitive, const M: usize, const N: usize> Mul<$Rhs>
-            for $Lhs
+macro_rules! impl_un_op {
+    ($Op:ident, $op:ident) => {
+        impl<F, const M: usize, const N: usize> $Op for Matrix<F, M, N>
+        where
+            F: Scalar<M>,
+            Vector<F, M>: $Op<Output = Vector<F, M>>,
         {
-            type Output = Vector<F, M>;
+            type Output = Matrix<F, M, N>;
             #[inline(always)]
-            fn mul(self, other: $Rhs) -> Self::Output {
-                self.iter().zip(other.iter()).map(|(v, x)| v * x).sum()
+            fn $op(mut self) -> Matrix<F, M, N> {
+                for i in 0..N {
+                    self[i] = $Op::$op(self[i]);
+                }
+                self
             }
         }
     }
 }
 
-impl_matvec_mul!({}, (Matrix<F, M, N>), (Vector<F, N>));
-impl_matvec_mul!({'rhs,}, (Matrix<F, M, N>), (&'rhs Vector<F, N>));
-impl_matvec_mul!({'lhs,}, (&'lhs Matrix<F, M, N>), (Vector<F, N>));
-impl_matvec_mul!({'lhs, 'rhs,}, (&'lhs Matrix<F, M, N>), (&'rhs Vector<F, N>));
+impl_un_op!(Neg, neg);
 
-impl<F: Primitive, const M: usize, const N: usize> Matrix<F, M, N> {
+macro_rules! impl_bin_op {
+    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        impl<F, const M: usize, const N: usize> $OpAssign for Matrix<F, M, N>
+        where
+            F: Scalar<M>,
+            Vector<F, M>: $OpAssign,
+        {
+            #[inline(always)]
+            fn $op_assign(&mut self, other: Matrix<F, M, N>) {
+                for i in 0..N {
+                    $OpAssign::$op_assign(&mut self[i], other[i]);
+                }
+            }
+        }
+
+        impl<F, const M: usize, const N: usize> $Op for Matrix<F, M, N>
+        where
+            F: Scalar<M>,
+            Self: $OpAssign,
+        {
+            type Output = Matrix<F, M, N>;
+            #[inline(always)]
+            fn $op(mut self, other: Matrix<F, M, N>) -> Matrix<F, M, N> {
+                $OpAssign::$op_assign(&mut self, other);
+                self
+            }
+        }
+    }
+}
+
+impl_bin_op!(Add, AddAssign, add, add_assign);
+impl_bin_op!(Sub, SubAssign, sub, sub_assign);
+
+macro_rules! impl_scalar_op {
+    ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
+        impl<F, const M: usize, const N: usize> $OpAssign<F>
+            for Matrix<F, M, N>
+        where
+            F: Scalar<M>,
+            Vector<F, M>: $OpAssign<F>,
+        {
+            #[inline(always)]
+            fn $op_assign(&mut self, scalar: F) {
+                for i in 0..N {
+                    $OpAssign::$op_assign(&mut self[i], scalar);
+                }
+            }
+        }
+
+        impl<F, const M: usize, const N: usize> $Op<F> for Matrix<F, M, N>
+        where
+            F: Scalar<M>,
+            Self: $OpAssign<F>,
+        {
+            type Output = Matrix<F, M, N>;
+            #[inline(always)]
+            fn $op(mut self, scalar: F) -> Matrix<F, M, N> {
+                $OpAssign::$op_assign(&mut self, scalar);
+                self
+            }
+        }
+    }
+}
+
+impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
+impl_scalar_op!(Div, DivAssign, div, div_assign);
+
+macro_rules! impl_scalar_op_reverse {
+    ($f:tt, $m:tt, $n:tt, $Op:ident, $op:ident) => {
+        impl $Op<Matrix<$f, $m, $n>> for $f {
+            type Output = Matrix<$f, $m, $n>;
+            #[inline(always)]
+            fn $op(self, mat: Matrix<$f, $m, $n>) -> Matrix<$f, $m, $n> {
+                $Op::$op(mat, self)
+            }
+        }
+    }
+}
+
+impl_scalar_op_reverse!(f32, 2, 2, Mul, mul);
+impl_scalar_op_reverse!(f32, 3, 3, Mul, mul);
+impl_scalar_op_reverse!(f32, 4, 4, Mul, mul);
+
+impl<F, const M: usize, const N: usize> Mul<Vector<F, N>>
+    for Matrix<F, M, N>
+where
+    Vector<F, M>: BasicVector<F, M>,
+    Vector<F, N>: BasicVector<F, N>,
+{
+    type Output = Vector<F, M>;
     #[inline(always)]
-    pub fn transpose_mul_vec(&self, vector: &Vector<F, M>) -> Vector<F, N> {
-        let mut prod: Vector<F, N> = Default::default();
-        // TODO: This implementation might be slower than simply
-        // constructing the tranpose and multiplying
+    fn mul(self, vec: Vector<F, N>) -> Self::Output {
+        let mut prod = Vector::zero();
         for i in 0..N {
-            prod[i] = self[i].dot(vector);
+            prod += self[i] * vec[i];
         }
         prod
     }
 }
 
-// Matrix--matrix mul
+impl<F, const M: usize, const N: usize, const K: usize> Mul<Matrix<F, N, K>>
+    for Matrix<F, M, N>
+where
+    Vector<F, N>: BasicVector<F, N>,
+    Vector<F, M>: BasicVector<F, M>,
+{
+    type Output = Matrix<F, M, K>;
+    #[inline(always)]
+    fn mul(self, other: Matrix<F, N, K>) -> Self::Output {
+        let mut prod = Matrix::<F, M, K>::default();
+        for i in 0..K {
+            prod[i] = self * other[i];
+        }
+        prod
+    }
+}
 
-impl<F: Primitive, const N: usize> MulAssign<Matrix<F, N, N>>
-    for Matrix<F, N, N>
+impl<F, const N: usize> MulAssign<Matrix<F, N, N>> for Matrix<F, N, N>
+    where Vector<F, N>: BasicVector<F, N>
 {
     #[inline(always)]
-    fn mul_assign(&mut self, rhs: Matrix<F, N, N>) {
-        let lhs = *self;
-        for (i, x) in rhs.iter().enumerate() {
-            self[i] = lhs * x;
-        }
+    fn mul_assign(&mut self, other: Matrix<F, N, N>) {
+        *self = *self * other;
     }
 }
 
-impl<'rhs, F: Primitive, const N: usize> MulAssign<&'rhs Matrix<F, N, N>>
-    for Matrix<F, N, N>
-{
-    #[inline(always)]
-    fn mul_assign(&mut self, rhs: &'rhs Matrix<F, N, N>) {
-        let lhs = *self;
-        for (i, x) in rhs.iter().enumerate() {
-            self[i] = lhs * x;
-        }
-    }
-}
-
-macro_rules! impl_matmat_mul {
-    ({$($lt:tt)*}, ($Output:ty), ($Lhs:ty), ($Rhs:ty)) => {
-        impl<
-            $($lt)*
-            F: Primitive,
-            const M: usize,
-            const N: usize,
-            const K: usize,
-        > Mul<$Rhs> for $Lhs {
-            type Output = $Output;
-            #[inline(always)]
-            fn mul(self, other: $Rhs) -> Self::Output {
-                let mut out = Self::Output::zero();
-                for (i, x) in other.iter().enumerate() {
-                    out[i] = self * x;
-                }
-                out
-            }
-        }
-    }
-}
-
-impl_matmat_mul!(
-    {}, (Matrix<F, M, K>),
-    (Matrix<F, M, N>), (Matrix<F, N, K>)
-);
-impl_matmat_mul!(
-    {'rhs,}, (Matrix<F, M, K>),
-    (Matrix<F, M, N>), (&'rhs Matrix<F, N, K>)
-);
-impl_matmat_mul!(
-    {'lhs,}, (Matrix<F, M, K>),
-    (&'lhs Matrix<F, M, N>), (Matrix<F, N, K>)
-);
-impl_matmat_mul!(
-    {'lhs, 'rhs,}, (Matrix<F, M, K>),
-    (&'lhs Matrix<F, M, N>), (&'rhs Matrix<F, N, K>)
-);
-
-impl<F: Zero + One + Copy> Matrix3<F> {
+impl Matrix3<f32> {
     /// Turns a 3-dimensional matrix into an affine transformation on
     /// the homogeneous coordinate space.
     #[inline(always)]
-    pub fn translate(&self, trans: Vector3<F>) -> Matrix4<F> {
+    pub fn translate(&self, trans: Vector3<f32>) -> Matrix4<f32> {
         [self[0].xyz0(), self[1].xyz0(), self[2].xyz0(), trans.xyz1()].into()
     }
 
     #[inline(always)]
-    pub fn xyz1(&self) -> Matrix4<F> {
+    pub fn xyz1(&self) -> Matrix4<f32> {
         [
             self[0].xyz0(), self[1].xyz0(), self[2].xyz0(),
             vec4(Zero::zero(), Zero::zero(), Zero::zero(), One::one()),
@@ -387,24 +442,21 @@ impl<F: Zero + One + Copy> Matrix3<F> {
     }
 }
 
-impl<F: Copy + Default> Matrix4<F> {
+impl Matrix4<f32> {
     #[inline(always)]
-    pub fn xyz(&self) -> Matrix3<F> {
+    pub fn xyz(&self) -> Matrix3<f32> {
         self.submatrix(0, 0)
     }
-}
 
-impl<F: Copy> Matrix4<F> {
     /// The first three elements of the last column.
     #[inline(always)]
-    pub fn translation(&self) -> Vector3<F> {
+    pub fn translation(&self) -> Vector3<f32> {
         self[3].xyz()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vector::*;
     use super::*;
 
     #[test]
@@ -418,7 +470,7 @@ mod tests {
         assert_eq!(m[0][1], c[0][1]);
         assert_eq!(m[1][1], c[1][1]);
         assert_eq!(&m[..], [u, v]);
-        assert_eq!(m.elements(), [0.707, 0.707, -0.707, 0.707]);
+        assert_eq!(m.columns(), &[vec2(0.707, 0.707), vec2(-0.707, 0.707)]);
     }
 
     #[test]
@@ -432,17 +484,26 @@ mod tests {
         assert_eq!(a, a);
         assert_ne!(a, b);
         assert_eq!(
-            (-a).elements(),
-            &[-1.0,  0.0
-            ,  0.0, -1.0]);
+            (-a).to_array(),
+            [
+                [-1.0,  0.0],
+                [ 0.0, -1.0],
+            ],
+        );
         assert_eq!(
-            (a + a).elements(),
-            &[2.0, 0.0
-            , 0.0, 2.0]);
+            (a + a).to_array(),
+            [
+                [2.0, 0.0],
+                [0.0, 2.0],
+            ],
+        );
         assert_eq!(
-            (a - b).elements(),
-            &[ 1.0, -1.0
-            , -1.0,  1.0]);
+            (a - b).to_array(),
+            [
+                [ 1.0, -1.0],
+                [-1.0,  1.0],
+            ],
+        );
         assert_eq!(a - a, Zero::zero());
     }
 
@@ -452,20 +513,19 @@ mod tests {
             [1.0, 0.0],
             [0.0, 1.0]].into();
         assert_eq!(a * 1.0, a);
+        assert_eq!(1.0 * a, a);
         assert_eq!(a * 0.0, Zero::zero());
+        assert_eq!(0.0 * a, Zero::zero());
         assert_eq!(a * 2.0, a + a);
+        assert_eq!(2.0 * a, a + a);
         assert_eq!(a * -1.0, -a);
+        assert_eq!(-1.0 * a, -a);
 
         assert_eq!(a / 1.0, a);
         assert_eq!((a / 0.0)[0][0], f32::INFINITY);
         assert!((a / 0.0)[0][1].is_nan());
         assert_eq!(a / 2.0, a - a * 0.5);
         assert_eq!(a / -1.0, -a);
-
-        assert_eq!(a % 1.0, Zero::zero());
-        assert!((a % 0.0).elements().iter().all(|x| x.is_nan()));
-        assert_eq!(a % 2.0, a);
-        assert_eq!(a % -1.0, Zero::zero());
     }
 
     #[test]
@@ -474,11 +534,11 @@ mod tests {
             [1.0, 0.0],
             [0.0, 1.0]].into();
         assert_eq!(a * Vector::zero(), Vector::zero());
-        assert_eq!(a * &vec2(1.0, 2.0), vec2(1.0, 2.0));
+        assert_eq!(a * vec2(1.0, 2.0), vec2(1.0, 2.0));
         let a: Matrix2<f32> = [
             [ 0.0, 1.0],
             [-1.0, 0.0]].into();
-        assert_eq!(&a * &vec2(1.0, 2.0), vec2(-2.0, 1.0));
+        assert_eq!(a * vec2(1.0, 2.0), vec2(-2.0, 1.0));
     }
 
     #[test]
@@ -490,7 +550,6 @@ mod tests {
             [ 0.0, 1.0],
             [-1.0, 0.0]].into();
         assert_eq!(a * b, b);
-        assert_eq!(&a * b, b);
         let mut b_1 = b;
         b_1 *= a;
         assert_eq!(b_1, b);
@@ -503,25 +562,6 @@ mod tests {
     }
 
     #[test]
-    fn mat0() {
-        let a: Matrix<f32, 0, 0> = Default::default();
-        let b: Matrix<f32, 0, 0> = Matrix::new([]);
-        assert_eq!(a, b);
-        assert_eq!(a + b, a - b);
-    }
-
-    #[test]
-    fn mat1() {
-        let a: Matrix<f32, 1, 1> = Default::default();
-        let b: Matrix<f32, 1, 1> = [[1.0]].into();
-        assert_eq!(a[0][0], 0.0);
-        assert_eq!(b[0], vec([1.0]));
-        assert_eq!(a + b, b);
-        assert_eq!(a - b, -b);
-        assert_eq!(a * b, a);
-    }
-
-    #[test]
     fn methods() {
         let a: Matrix2<f32> = Matrix::identity();
         assert_eq!(a, Matrix::diagonal([1.0, 1.0]));
@@ -530,12 +570,13 @@ mod tests {
             [0.0, 1.0, 2.0],
             [3.0, 4.0, 5.0]].into();
         assert_eq!(
-            b.transpose().elements(),
-            [ 0.0, 3.0
-            , 1.0, 4.0
-            , 2.0, 5.0]);
-        assert_eq!(a.transpose_mul_vec(&vec2(1.0, 2.0)), vec2(1.0, 2.0));
-        assert_eq!(b.transpose_mul_vec(&vec3(0.0, 1.0, 2.0)), vec2(5.0, 14.0));
+            b.transpose(),
+            [
+                [0.0, 3.0],
+                [1.0, 4.0],
+                [2.0, 5.0],
+            ].into(),
+        );
     }
 
     #[test]
@@ -546,10 +587,13 @@ mod tests {
             [1.0, 0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0, 1.0]].into();
         assert_eq!(
-            a.xyz().elements(),
-            [ 0.0, 1.0, 0.0
-            , 0.0, 0.0, 1.0
-            , 1.0, 0.0, 0.0]);
+            a.xyz(),
+            [
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0],
+            ].into(),
+        );
         assert_eq!(a.xyz().xyz1(), a);
         assert_eq!(a.xyz().translate(Zero::zero()), a);
         assert_eq!(a.translation(), Zero::zero());
@@ -559,14 +603,13 @@ mod tests {
         assert_eq!(a.translation(), t);
         assert_eq!(a.xyz().translate(t), a);
 
-        let b: Matrix<f32, 0, 0> = a.submatrix(42, 77);
-        assert_eq!(b, Matrix::new([]));
-        let b: Matrix<f32, 1, 1> = a.submatrix(1, 0);
-        assert_eq!(b, [[1.0]].into());
         let b: Matrix3x2<f32> = a.submatrix(1, 2);
         assert_eq!(
-            b.elements(),
-            [ 0.0, 0.0, 0.0
-            , 3.0, 0.0, 1.0]);
+            b,
+            [
+                [0.0, 0.0, 0.0],
+                [3.0, 0.0, 1.0],
+            ].into(),
+        );
     }
 }
