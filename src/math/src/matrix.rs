@@ -7,30 +7,13 @@ use num::*;
 
 use crate::vector::*;
 
-pub trait BasicVector<F, const N: usize> = where
-    F: Scalar<N>,
-    Self: Sized
-        + Neg<Output = Self>
-        + Add<Self, Output = Self>
-        + AddAssign<Self>
-        + Sub<Self, Output = Self>
-        + SubAssign<Self>
-        + Mul<Self, Output = Self>
-        + MulAssign<Self>
-        + Mul<F, Output = Self>
-        + MulAssign<F>
-        + Div<Self, Output = Self>
-        + DivAssign<Self>
-        + Div<F, Output = Self>
-        + DivAssign<F>
-        ;
-
 /// A SIMD-backed, column-major, dense M x N matrix meant for doing fast
 /// transformations on vectors.
 ///
 /// Indexing a matrix returns the column vector in that position, which
 /// is typical in numeric code but the reverse of the mathematical
 /// convention, in which the row comes first.
+// TODO?: Specialize various dimensions to have specific aligments.
 #[derive(Derivative)]
 #[derivative(
     Clone(bound = ""),
@@ -384,9 +367,7 @@ impl_scalar_op_reverse!(f32, 4, 4, Mul, mul);
 
 impl<F, const M: usize, const N: usize> Mul<Vector<F, N>>
     for Matrix<F, M, N>
-where
-    Vector<F, M>: BasicVector<F, M>,
-    Vector<F, N>: BasicVector<F, N>,
+    where F: GeneralScalar<M> + GeneralScalar<N>
 {
     type Output = Vector<F, M>;
     #[inline(always)]
@@ -401,9 +382,7 @@ where
 
 impl<F, const M: usize, const N: usize, const K: usize> Mul<Matrix<F, N, K>>
     for Matrix<F, M, N>
-where
-    Vector<F, N>: BasicVector<F, N>,
-    Vector<F, M>: BasicVector<F, M>,
+    where F: GeneralScalar<M> + GeneralScalar<N>
 {
     type Output = Matrix<F, M, K>;
     #[inline(always)]
@@ -416,8 +395,8 @@ where
     }
 }
 
-impl<F, const N: usize> MulAssign<Matrix<F, N, N>> for Matrix<F, N, N>
-    where Vector<F, N>: BasicVector<F, N>
+impl<F: GeneralScalar<N>, const N: usize> MulAssign<Matrix<F, N, N>>
+    for Matrix<F, N, N>
 {
     #[inline(always)]
     fn mul_assign(&mut self, other: Matrix<F, N, N>) {
@@ -425,16 +404,16 @@ impl<F, const N: usize> MulAssign<Matrix<F, N, N>> for Matrix<F, N, N>
     }
 }
 
-impl Matrix3<f32> {
+impl<F: BasicScalar> Matrix3<F> {
     /// Turns a 3-dimensional matrix into an affine transformation on
     /// the homogeneous coordinate space.
     #[inline(always)]
-    pub fn translate(&self, trans: Vector3<f32>) -> Matrix4<f32> {
+    pub fn translate(&self, trans: Vector3<F>) -> Matrix4<F> {
         [self[0].xyz0(), self[1].xyz0(), self[2].xyz0(), trans.xyz1()].into()
     }
 
     #[inline(always)]
-    pub fn xyz1(&self) -> Matrix4<f32> {
+    pub fn xyz1(&self) -> Matrix4<F> {
         [
             self[0].xyz0(), self[1].xyz0(), self[2].xyz0(),
             vec4(Zero::zero(), Zero::zero(), Zero::zero(), One::one()),
@@ -442,15 +421,15 @@ impl Matrix3<f32> {
     }
 }
 
-impl Matrix4<f32> {
+impl<F: BasicFloat> Matrix4<F> {
     #[inline(always)]
-    pub fn xyz(&self) -> Matrix3<f32> {
+    pub fn xyz(&self) -> Matrix3<F> {
         self.submatrix(0, 0)
     }
 
     /// The first three elements of the last column.
     #[inline(always)]
-    pub fn translation(&self) -> Vector3<f32> {
+    pub fn translation(&self) -> Vector3<F> {
         self[3].xyz()
     }
 }

@@ -15,10 +15,12 @@ mod macros;
 
 //pub mod bbox;
 pub mod matrix;
+pub mod quaternion;
 pub mod vector;
 
 //pub use bbox::*;
 pub use matrix::*;
+pub use quaternion::*;
 pub use vector::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -6,10 +6,10 @@ use num::{One, Zero};
 use packed_simd::{f32x2, f32x4, shuffle};
 
 pub unsafe trait Scalar<const N: usize>: Copy + Default + Debug + One + Zero {
-    type Vector: SimdVector<N, Scalar = Self>;
+    type Vector: RawVector<N, Scalar = Self>;
 }
 
-pub unsafe trait SimdVector<const N: usize>: Copy + Debug + Default {
+pub unsafe trait RawVector<const N: usize>: Copy + Debug + Default {
     type Scalar: Scalar<N, Vector = Self>;
     fn splat(scalar: Self::Scalar) -> Self;
     fn load(src: &[Self::Scalar; N]) -> Self;
@@ -19,19 +19,63 @@ pub unsafe trait SimdVector<const N: usize>: Copy + Debug + Default {
     fn sum(self) -> Self::Scalar;
 }
 
-pub type VectorInner<F, const N: usize> = <F as Scalar<N>>::Vector;
+pub trait VectorOps<F>
+    = Sized
+    + Neg<Output = Self>
+    + Add<Self, Output = Self>
+    + AddAssign<Self>
+    + Sub<Self, Output = Self>
+    + SubAssign<Self>
+    + Mul<Self, Output = Self>
+    + MulAssign<Self>
+    + Mul<F, Output = Self>
+    + MulAssign<F>
+    + Div<Self, Output = Self>
+    + DivAssign<Self>
+    + Div<F, Output = Self>
+    + DivAssign<F>
+    ;
+
+// TODO: x(), y(), z(), etc
+pub trait Swizzle3<const N: usize>: Scalar<3> + Scalar<4> + Scalar<N> {
+    fn xyz(v: Vector<Self, N>) -> Vector3<Self>;
+    fn yzx(v: Vector<Self, N>) -> Vector3<Self>;
+    fn zxy(v: Vector<Self, N>) -> Vector3<Self>;
+    fn xyz_(v: Vector<Self, N>) -> Vector4<Self>;
+    fn xyz0(v: Vector<Self, N>) -> Vector4<Self>;
+    fn xyz1(v: Vector<Self, N>) -> Vector4<Self>;
+}
+
+pub trait GeneralScalar<const N: usize> = where
+    Self: Scalar<N>,
+    Vector<Self, N>: VectorOps<Self>,
+    ;
+
+pub trait GeneralFloat<const N: usize> = GeneralScalar<N> + num::Float;
+
+pub trait BasicScalar
+    = GeneralScalar<2>
+    + GeneralScalar<3>
+    + GeneralScalar<4>
+    + Swizzle3<3>
+    + Swizzle3<4>
+    ;
+
+pub trait BasicFloat = BasicScalar + num::Float;
+
+type VectorInner<F, const N: usize> = <F as Scalar<N>>::Vector;
 
 const fn mask(n: usize) -> u8 {
     if n < 32 { !(!0u8 << n) } else { 0 }
 }
 
 macro_rules! impl_scalar_pot {
-    ($scalar:tt, $n:tt, $vec:tt) => {
+    ($scalar:tt, $n:tt, $vec:tt; $($x:ident)*) => {
         unsafe impl Scalar<$n> for $scalar {
             type Vector = $vec;
         }
 
-        unsafe impl SimdVector<$n> for $vec {
+        unsafe impl RawVector<$n> for $vec {
             type Scalar = $scalar;
 
             #[inline(always)]
@@ -73,14 +117,14 @@ macro_rules! impl_scalar_pot {
     }
 }
 
-impl_scalar_pot!(f32, 2, f32x2);
-impl_scalar_pot!(f32, 4, f32x4);
+impl_scalar_pot!(f32, 2, f32x2; x y);
+impl_scalar_pot!(f32, 4, f32x4; x y z w);
 
 unsafe impl Scalar<3> for f32 {
     type Vector = f32x4;
 }
 
-unsafe impl SimdVector<3> for f32x4 {
+unsafe impl RawVector<3> for f32x4 {
     type Scalar = f32;
 
     #[inline(always)]
@@ -112,7 +156,9 @@ unsafe impl SimdVector<3> for f32x4 {
 
     #[inline(always)]
     fn sum(self) -> f32 {
-        self.replace(3, 0.0).sum()
+        self.extract(0)
+            + self.extract(1)
+            + self.extract(2)
     }
 }
 
@@ -163,10 +209,12 @@ macro_rules! impl_accessor {
     ($f:tt 2) => { impl_accessor!(@impl $f 2; z b p); };
     ($f:tt 3) => { impl_accessor!(@impl $f 3; w a q); };
     (@impl $f:tt $pos:expr; $($acc:ident)*) => {
-        #[inline(always)]
-        $(pub fn $acc(self) -> $f {
-            unsafe { self.0.extract_unchecked($pos) }
-        })*
+        $(
+            #[inline(always)]
+            pub fn $acc(self) -> $f {
+                unsafe { self.0.extract_unchecked($pos) }
+            }
+        )*
     };
 }
 
@@ -273,11 +321,11 @@ macro_rules! impl_vec_op {
         impl<F, const N: usize> $OpAssign<Vector<F, N>> for Vector<F, N>
         where
             F: Scalar<N>,
-            VectorInner<F, N>: $Op<Output = VectorInner<F, N>>,
+            VectorInner<F, N>: $OpAssign,
         {
             #[inline(always)]
             fn $op_assign(&mut self, other: Vector<F, N>) {
-                *self = Vector($Op::$op(self.0, other.0));
+                $OpAssign::$op_assign(&mut self.0, other.0);
             }
         }
     }
@@ -332,7 +380,7 @@ macro_rules! impl_scalar_op_reverse {
             type Output = Vector<$f, $n>;
             #[inline(always)]
             fn $op(self, vector: Vector<$f, $n>) -> Vector<$f, $n> {
-                $Op::$op(Vector::<$f, $n>::splat(self), vector)
+                $Op::$op(vector, self)
             }
         }
     }
@@ -385,6 +433,134 @@ impl<I, F: Scalar<N>, const N: usize> IndexMut<I> for Vector<F, N>
     #[inline(always)]
     fn index_mut(&mut self, idx: I) -> &mut Self::Output {
         self.as_mut().index_mut(idx)
+    }
+}
+
+impl<F: Swizzle3<N>, const N: usize> Vector<F, N> {
+    #[inline(always)]
+    pub fn xyz(self) -> Vector3<F> {
+        F::xyz(self)
+    }
+
+    #[inline(always)]
+    pub fn yzx(self) -> Vector3<F> {
+        F::yzx(self)
+    }
+
+    #[inline(always)]
+    pub fn zxy(self) -> Vector3<F> {
+        F::zxy(self)
+    }
+
+    #[inline(always)]
+    pub fn xyz_(self) -> Vector4<F> {
+        F::xyz_(self)
+    }
+
+    #[inline(always)]
+    pub fn xyz0(self) -> Vector4<F> {
+        F::xyz0(self)
+    }
+
+    #[inline(always)]
+    pub fn xyz1(self) -> Vector4<F> {
+        F::xyz1(self)
+    }
+}
+
+impl Swizzle3<3> for f32 {
+    #[inline(always)]
+    fn xyz(v: Vector3<Self>) -> Vector3<Self> {
+        v
+    }
+
+    #[inline(always)]
+    fn yzx(v: Vector3<Self>) -> Vector3<Self> {
+        Vector(shuffle!(v.0, v.0, [1, 2, 0, 3]))
+    }
+
+    #[inline(always)]
+    fn zxy(v: Vector3<Self>) -> Vector3<Self> {
+        Vector(shuffle!(v.0, v.0, [2, 0, 1, 3]))
+    }
+
+    #[inline(always)]
+    fn xyz_(v: Vector3<Self>) -> Vector4<Self> {
+        Vector(v.0)
+    }
+
+    #[inline(always)]
+    fn xyz0(v: Vector3<Self>) -> Vector4<Self> {
+        Vector(v.0.replace(3, 0.0))
+    }
+
+    #[inline(always)]
+    fn xyz1(v: Vector3<Self>) -> Vector4<Self> {
+        Vector(v.0.replace(3, 1.0))
+    }
+}
+
+impl Swizzle3<4> for f32 {
+    #[inline(always)]
+    fn xyz(v: Vector4<Self>) -> Vector3<Self> {
+        Vector(v.0)
+    }
+
+    #[inline(always)]
+    fn yzx(v: Vector4<Self>) -> Vector3<Self> {
+        v.xyz().yzx()
+    }
+
+    #[inline(always)]
+    fn zxy(v: Vector4<Self>) -> Vector3<Self> {
+        v.xyz().zxy()
+    }
+
+    #[inline(always)]
+    fn xyz_(v: Vector4<Self>) -> Vector4<Self> {
+        v
+    }
+
+    #[inline(always)]
+    fn xyz0(v: Vector4<Self>) -> Vector4<Self> {
+        Vector(v.0.replace(3, 0.0))
+    }
+
+    #[inline(always)]
+    fn xyz1(v: Vector4<Self>) -> Vector4<Self> {
+        Vector(v.0.replace(3, 1.0))
+    }
+}
+
+impl<F: GeneralFloat<N>, const N: usize> Vector<F, N> {
+    #[inline(always)]
+    pub fn length_sq(self) -> F {
+        self.dot(self)
+    }
+
+    #[inline(always)]
+    pub fn length(self) -> F {
+        self.length_sq().sqrt()
+    }
+
+    #[inline(always)]
+    pub fn normalized(mut self) -> Self {
+        self /= self.length();
+        self
+    }
+
+    #[inline(always)]
+    pub fn normalize(&mut self) -> F {
+        let length = self.length();
+        *self /= length;
+        length
+    }
+}
+
+impl<F: BasicScalar> Vector3<F> {
+    #[inline(always)]
+    pub fn cross(self, other: Self) -> Self {
+        (self * other.yzx() - self.yzx() * other).yzx()
     }
 }
 
@@ -453,72 +629,11 @@ macro_rules! impl_po2 {
 impl_po2!(f32, 2, f32x2; x y);
 impl_po2!(f32, 4, f32x4; x y z w);
 
-impl<F, const N: usize> Vector<F, N>
-where
-    F: Scalar<N> + num::Float,
-    Self: Mul<Self, Output = Self> + DivAssign<F>,
-{
-    #[inline(always)]
-    pub fn length_sq(self) -> F {
-        self.dot(self)
-    }
-
-    #[inline(always)]
-    pub fn length(self) -> F {
-        self.length_sq().sqrt()
-    }
-
-    #[inline(always)]
-    pub fn normalized(mut self) -> Self {
-        self /= self.length();
-        self
-    }
-
-    #[inline(always)]
-    pub fn normalize(&mut self) -> F {
-        let length = self.length();
-        *self /= length;
-        length
-    }
-}
-
 impl Vector3<f32> {
     #[inline(always)]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         // N.B. This probably doesn't generate the best code every time.
         Self(f32x4::new(x, y, z, z))
-    }
-
-    #[inline(always)]
-    pub fn cross(self, other: Self) -> Self {
-        (self * other.yzx() - self.yzx() * other).yzx()
-    }
-
-    #[inline(always)]
-    pub fn yzx(self) -> Self {
-        Vector(shuffle!(self.0, self.0, [1, 2, 0, 3]))
-    }
-
-    #[inline(always)]
-    pub fn zxy(self) -> Self {
-        Vector(shuffle!(self.0, self.0, [2, 0, 1, 3]))
-    }
-
-    #[inline(always)]
-    pub fn xyz0(self) -> Vector4<f32> {
-        Vector(self.0.replace(3, 0.0))
-    }
-
-    #[inline(always)]
-    pub fn xyz1(self) -> Vector4<f32> {
-        Vector(self.0.replace(3, 1.0))
-    }
-}
-
-impl Vector4<f32> {
-    #[inline(always)]
-    pub fn xyz(self) -> Vector3<f32> {
-        Vector(self.0)
     }
 }
 
@@ -540,7 +655,7 @@ mod tests {
     fn accessors() {
         let v = Vector3::new(1.0, 0.0, 0.0);
         assert_eq!(v.x(), 1.0);
-        assert_eq!(v.z(), 0.0);
+        assert_eq!(v.b(), 0.0);
         assert_eq!(v, [1.0, 0.0, 0.0].into());
         assert_eq!(<[f32; 3]>::from(v), [1.0, 0.0, 0.0]);
         assert_eq!(Vector3::from([1.0f32, 1.0, 1.0]), vec3(1.0f32, 1.0, 1.0));
@@ -589,6 +704,11 @@ mod tests {
         assert_eq!(v * 0.0, Zero::zero());
         assert_eq!(v * 2.0, v + v);
         assert_eq!(v * -1.0, -v);
+
+        assert_eq!(-1.0 * v, v * -1.0);
+        assert_eq!(0.0 * v, v * 0.0);
+        assert_eq!(1.0 * v, v * 1.0);
+        assert_eq!(2.0 * v, v * 2.0);
 
         assert_eq!(v / 1.0, v);
         assert_eq!((v / 0.0).x(), f32::INFINITY);
