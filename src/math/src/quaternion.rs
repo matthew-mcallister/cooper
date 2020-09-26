@@ -20,58 +20,58 @@ use crate::vector::*;
     Default(bound = ""),
     PartialEq(bound = ""),
 )]
-pub struct Quaternion<F: BasicFloat = f32>(Vector4<F>);
+pub struct Quaternion(Vector4);
 
-impl<F: BasicFloat> Quaternion<F> {
+impl Quaternion {
     #[inline(always)]
-    pub fn new(x: F, y: F, z: F, w: F) -> Self {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self([x, y, z, w].into())
     }
 
     #[inline(always)]
-    pub fn splat(scalar: F) -> Self {
+    pub fn splat(scalar: f32) -> Self {
         Self(Vector::splat(scalar))
     }
 
     #[inline(always)]
-    pub fn load(src: &[F; 4]) -> Self {
+    pub fn load(src: &[f32; 4]) -> Self {
         Self(Vector::load(src))
     }
 
     #[inline(always)]
-    pub fn store(self, dst: &mut [F; 4]) {
+    pub fn store(self, dst: &mut [f32; 4]) {
         self.0.store(dst)
     }
 
     #[inline(always)]
     pub fn i() -> Self {
-        Self::new(One::one(), Zero::zero(), Zero::zero(), Zero::zero())
+        Self::new(1.0, 0.0, 0.0, 0.0)
     }
 
     #[inline(always)]
     pub fn j() -> Self {
-        Self::new(Zero::zero(), One::one(), Zero::zero(), Zero::zero())
+        Self::new(0.0, 1.0, 0.0, 0.0)
     }
 
     #[inline(always)]
     pub fn k() -> Self {
-        Self::new(Zero::zero(), Zero::zero(), One::one(), Zero::zero())
+        Self::new(0.0, 0.0, 1.0, 0.0)
     }
 }
 
-impl<F: BasicFloat> From<Vector3<F>> for Quaternion<F> {
-    fn from(v: Vector3<F>) -> Self {
+impl From<Vector3> for Quaternion {
+    fn from(v: Vector3) -> Self {
         Self(v.xyz_())
     }
 }
 
-impl<F: BasicFloat> From<Quaternion<F>> for Vector3<F> {
-    fn from(q: Quaternion<F>) -> Self {
+impl From<Quaternion> for Vector3 {
+    fn from(q: Quaternion) -> Self {
         q.0.xyz()
     }
 }
 
-impl Quaternion<f32> {
+impl Quaternion {
     #[inline(always)]
     pub fn x(&self) -> f32 {
         self.0.x()
@@ -93,33 +93,33 @@ impl Quaternion<f32> {
     }
 }
 
-impl<F: BasicFloat> Zero for Quaternion<F> {
+impl Zero for Quaternion {
     #[inline(always)]
     fn zero() -> Self {
-        Self(Zero::zero())
+        Self::splat(0.0)
     }
 }
 
-impl<F: BasicFloat> One for Quaternion<F> {
+impl One for Quaternion {
     #[inline(always)]
     fn one() -> Self {
-        Self::new(Zero::zero(), Zero::zero(), Zero::zero(), One::one())
+        Self::new(0.0, 0.0, 0.0, 1.0)
     }
 }
 
 macro_rules! impl_scalar_op {
     ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F: BasicFloat> $Op<F> for Quaternion<F> {
-            type Output = Quaternion<F>;
+        impl $Op<f32> for Quaternion {
+            type Output = Quaternion;
             #[inline(always)]
-            fn $op(self, scalar: F) -> Quaternion<F> {
+            fn $op(self, scalar: f32) -> Quaternion {
                 Quaternion($Op::$op(self.0, scalar))
             }
         }
 
-        impl<F: BasicFloat> $OpAssign<F> for Quaternion<F> {
+        impl $OpAssign<f32> for Quaternion {
             #[inline(always)]
-            fn $op_assign(&mut self, scalar: F) {
+            fn $op_assign(&mut self, scalar: f32) {
                 $OpAssign::$op_assign(&mut self.0, scalar);
             }
         }
@@ -129,22 +129,15 @@ macro_rules! impl_scalar_op {
 impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
 impl_scalar_op!(Div, DivAssign, div, div_assign);
 
-macro_rules! impl_scalar_op_reverse {
-    ($f:tt, $Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) =>
-    {
-        impl $Op<Quaternion<$f>> for $f {
-            type Output = Quaternion<$f>;
-            #[inline(always)]
-            fn $op(self, quat: Quaternion<$f>) -> Quaternion<$f> {
-                $Op::$op(quat, self)
-            }
-        }
+impl Mul<Quaternion> for f32 {
+    type Output = Quaternion;
+    #[inline(always)]
+    fn mul(self, quat: Quaternion) -> Quaternion {
+        Mul::mul(quat, self)
     }
 }
 
-impl_scalar_op_reverse!(f32, Mul, MulAssign, mul, mul_assign);
-
-impl<F: BasicFloat> Quaternion<F> {
+impl Quaternion {
     #[inline(always)]
     pub fn conjugate(mut self) -> Self {
         self = -self;
@@ -153,17 +146,17 @@ impl<F: BasicFloat> Quaternion<F> {
     }
 
     #[inline(always)]
-    pub fn norm_sq(self) -> F {
+    pub fn norm_sq(self) -> f32 {
         self.0.length_sq()
     }
 
     #[inline(always)]
-    pub fn norm(self) -> F {
+    pub fn norm(self) -> f32 {
         self.norm_sq().sqrt()
     }
 
     #[inline(always)]
-    pub fn normalize(&mut self) -> F {
+    pub fn normalize(&mut self) -> f32 {
         let norm = self.norm();
         *self /= norm;
         norm
@@ -181,7 +174,7 @@ impl<F: BasicFloat> Quaternion<F> {
 
     /// Constructs a rotation matrix from a *unit* quaternion.
     #[inline]
-    pub fn to_matrix(self) -> Matrix3<F> {
+    pub fn to_matrix(self) -> Matrix3 {
         let q = self.0;
         let ql = q.yzx();
         let qr = q.zxy();
@@ -195,7 +188,7 @@ impl<F: BasicFloat> Quaternion<F> {
 
         let u = u + u;
         let v = v + v;
-        let w = Vector3::splat(One::one()) - (q2 + q2);
+        let w = Vector3::splat(1.0) - (q2 + q2);
 
         mat3(
             vec3(w[0], u[2], v[1]),
@@ -205,15 +198,15 @@ impl<F: BasicFloat> Quaternion<F> {
     }
 
     #[inline(always)]
-    pub fn to_mat4(self) -> Matrix4<F> {
+    pub fn to_mat4(self) -> Matrix4 {
         self.to_matrix().xyz1()
     }
 }
 
-impl<F: BasicFloat> Mul<Quaternion<F>> for Quaternion<F> {
-    type Output = Quaternion<F>;
+impl Mul<Quaternion> for Quaternion {
+    type Output = Quaternion;
     #[inline]
-    fn mul(self, other: Quaternion<F>) -> Quaternion<F> {
+    fn mul(self, other: Quaternion) -> Quaternion {
         // TODO: Consider rounding error
         let c = self.0.xyz().cross(other.0.xyz()).into();
         let mut v = other * self[3] + self * other[3] + c;
@@ -222,17 +215,17 @@ impl<F: BasicFloat> Mul<Quaternion<F>> for Quaternion<F> {
     }
 }
 
-impl<F: BasicFloat> MulAssign<Quaternion<F>> for Quaternion<F> {
+impl MulAssign<Quaternion> for Quaternion {
     #[inline(always)]
-    fn mul_assign(&mut self, other: Quaternion<F>) {
+    fn mul_assign(&mut self, other: Quaternion) {
         *self = *self * other
     }
 }
 
-impl<F: BasicFloat> Div<Quaternion<F>> for Quaternion<F> {
-    type Output = Quaternion<F>;
+impl Div<Quaternion> for Quaternion {
+    type Output = Quaternion;
     #[inline]
-    fn div(self, other: Quaternion<F>) -> Quaternion<F> {
+    fn div(self, other: Quaternion) -> Quaternion {
         let c = self.0.xyz().cross(other.0.xyz()).into();
         let mut v = self * other[3] - other * self[3] - c;
         v[3] = self.0.dot(other.0);
@@ -240,9 +233,9 @@ impl<F: BasicFloat> Div<Quaternion<F>> for Quaternion<F> {
     }
 }
 
-impl<F: BasicFloat> DivAssign<Quaternion<F>> for Quaternion<F> {
+impl DivAssign<Quaternion> for Quaternion {
     #[inline(always)]
-    fn div_assign(&mut self, other: Quaternion<F>) {
+    fn div_assign(&mut self, other: Quaternion) {
         *self = *self / other
     }
 }
@@ -331,7 +324,7 @@ mod tests {
         assert_eq!((e + i).conjugate(), e - i);
 
         assert_eq!((i + j).norm_sq(), 2.0);
-        assert_eq!((i + j).norm(), 2.0.sqrt());
+        assert_eq!((i + j).norm(), 2.0f32.sqrt());
 
         assert_eq!(e.inverse(), e);
         assert_eq!(i.inverse(), -i);
@@ -368,10 +361,8 @@ mod tests {
 
     #[test]
     fn to_matrix() {
-        let e = Quaternion::<f32>::one();
-        let i = Quaternion::<f32>::i();
-        let j = Quaternion::<f32>::j();
-        let k = Quaternion::<f32>::k();
+        let e = Quaternion::one();
+        let i = Quaternion::i();
 
         assert_eq!(e.to_matrix(), Matrix::identity());
         assert_eq!(

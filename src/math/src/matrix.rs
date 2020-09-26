@@ -2,6 +2,7 @@
 
 use std::ops::*;
 
+use derive_more::{AsRef, AsMut, From, Into};
 use derivative::Derivative;
 use num::*;
 
@@ -13,60 +14,63 @@ use crate::vector::*;
 /// Indexing a matrix returns the column vector in that position, which
 /// is typical in numeric code but the reverse of the mathematical
 /// convention, in which the row comes first.
-// TODO?: Specialize various dimensions to have specific aligments.
-#[derive(Derivative)]
+#[derive(AsRef, AsMut, Derivative, From, Into)]
 #[derivative(
     Clone(bound = ""),
     Copy(bound = ""),
     Debug(bound = ""),
-    PartialEq(bound = "Vector<F, M>: PartialEq")
+    PartialEq(bound = "f32: SimdArray<M>")
 )]
 #[repr(transparent)]
-pub struct Matrix<F: Scalar<M>, const M: usize, const N: usize> {
-    columns: [Vector<F, M>; N],
+pub struct Matrix<const M: usize, const N: usize>
+    where f32: SimdArray<M>
+{
+    columns: [Vector<M>; N],
 }
 
-pub type Matrix2<F> = Matrix<F, 2, 2>;
-pub type Matrix3<F> = Matrix<F, 3, 3>;
-pub type Matrix4<F> = Matrix<F, 4, 4>;
+pub type Matrix2 = Matrix<2, 2>;
+pub type Matrix3 = Matrix<3, 3>;
+pub type Matrix4 = Matrix<4, 4>;
 
-pub type Matrix2x3<F> = Matrix<F, 2, 3>;
-pub type Matrix2x4<F> = Matrix<F, 2, 4>;
-pub type Matrix3x2<F> = Matrix<F, 3, 2>;
-pub type Matrix3x4<F> = Matrix<F, 3, 4>;
-pub type Matrix4x2<F> = Matrix<F, 4, 2>;
-pub type Matrix4x3<F> = Matrix<F, 4, 3>;
+pub type Matrix2x3 = Matrix<2, 3>;
+pub type Matrix2x4 = Matrix<2, 4>;
+pub type Matrix3x2 = Matrix<3, 2>;
+pub type Matrix3x4 = Matrix<3, 4>;
+pub type Matrix4x2 = Matrix<4, 2>;
+pub type Matrix4x3 = Matrix<4, 3>;
 
-impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
+impl<const M: usize, const N: usize> Matrix<M, N>
+    where f32: SimdArray<M>
+{
     #[inline(always)]
-    pub fn new(columns: [Vector<F, M>; N]) -> Self {
+    pub fn new(columns: [Vector<M>; N]) -> Self {
         Self { columns }
     }
 
     #[inline(always)]
-    pub fn columns(&self) -> &[Vector<F, M>; N] {
+    pub fn columns(&self) -> &[Vector<M>; N] {
         &self.columns
     }
 
     #[inline(always)]
-    pub fn columns_mut(&mut self) -> &mut [Vector<F, M>; N] {
+    pub fn columns_mut(&mut self) -> &mut [Vector<M>; N] {
         &mut self.columns
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Vector<F, M>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Vector<M>> {
         self.columns.iter()
     }
 
     #[inline(always)]
     pub fn iter_mut(&mut self) ->
-        impl ExactSizeIterator<Item = &mut Vector<F, M>>
+        impl ExactSizeIterator<Item = &mut Vector<M>>
     {
         self.columns.iter_mut()
     }
 
     #[inline(always)]
-    pub fn load(array: &[[F; M]; N]) -> Self {
+    pub fn load(array: &[[f32; M]; N]) -> Self {
         let mut mat = Self::default();
         for i in 0..N {
             mat[i] = Vector::load(&array[i]);
@@ -75,14 +79,14 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 
     #[inline(always)]
-    pub fn store(self, array: &mut [[F; M]; N]) {
+    pub fn store(self, array: &mut [[f32; M]; N]) {
         for i in 0..N {
             self[i].store(&mut array[i]);
         }
     }
 
     #[inline(always)]
-    pub fn load_rows(rows: [[F; N]; M]) -> Self {
+    pub fn load_rows(rows: [[f32; N]; M]) -> Self {
         let mut mat = Self::default();
         for i in 0..M {
             for j in 0..N {
@@ -93,7 +97,7 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 
     #[inline(always)]
-    pub fn to_array(self) -> [[F; M]; N] {
+    pub fn to_array(self) -> [[f32; M]; N] {
         self.into()
     }
 
@@ -105,10 +109,10 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
         self,
         row: usize,
         col: usize,
-    ) -> Matrix<F, K, L>
-        where F: Scalar<K>
+    ) -> Matrix<K, L>
+        where f32: SimdArray<K>
     {
-        let mut sub: Matrix<F, K, L> = Default::default();
+        let mut sub: Matrix<K, L> = Default::default();
         for i in 0..L {
             for j in 0..K {
                 sub[i][j] = self[col + i][row + j];
@@ -118,11 +122,12 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Matrix<F, M, N> {
     }
 }
 
-impl<F: Scalar<M> + Scalar<N>, const M: usize, const N: usize> Matrix<F, M, N>
+impl<const M: usize, const N: usize> Matrix<M, N>
+    where f32: SimdArray<M> + SimdArray<N>
 {
     #[inline(always)]
-    pub fn transpose(self) -> Matrix<F, N, M> {
-        let mut trans: Matrix<F, N, M> = Default::default();
+    pub fn transpose(self) -> Matrix<N, M> {
+        let mut trans: Matrix<N, M> = Default::default();
         for i in 0..N {
             for j in 0..M {
                 trans[j][i] = self[i][j];
@@ -132,10 +137,12 @@ impl<F: Scalar<M> + Scalar<N>, const M: usize, const N: usize> Matrix<F, M, N>
     }
 }
 
-impl<F: Scalar<N>, const N: usize> Matrix<F, N, N> {
+impl<const N: usize> Matrix<N, N>
+    where f32: SimdArray<N>
+{
     #[inline(always)]
-    pub fn diagonal(diag: [F; N]) -> Self {
-        let mut mat: Matrix<F, N, N> = Zero::zero();
+    pub fn diagonal(diag: [f32; N]) -> Self {
+        let mut mat: Matrix<N, N> = Zero::zero();
         for i in 0..N {
             mat[i][i] = diag[i];
         }
@@ -144,7 +151,7 @@ impl<F: Scalar<N>, const N: usize> Matrix<F, N, N> {
 
     #[inline(always)]
     pub fn identity() -> Self {
-        let mut ident: Matrix<F, N, N> = Zero::zero();
+        let mut ident: Matrix<N, N> = Zero::zero();
         for i in 0..N {
             ident[i][i] = One::one();
         }
@@ -152,8 +159,8 @@ impl<F: Scalar<N>, const N: usize> Matrix<F, N, N> {
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> Default
-    for Matrix<F, M, N>
+impl<const M: usize, const N: usize> Default for Matrix<M, N>
+    where f32: SimdArray<M>
 {
     #[inline(always)]
     fn default() -> Self {
@@ -161,8 +168,8 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Default
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> Zero
-    for Matrix<F, M, N>
+impl<const M: usize, const N: usize> Zero for Matrix<M, N>
+    where f32: SimdArray<M>,
 {
     #[inline(always)]
     fn zero() -> Self {
@@ -170,83 +177,49 @@ impl<F: Scalar<M>, const M: usize, const N: usize> Zero
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> AsRef<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
+impl<I, const M: usize, const N: usize> Index<I> for Matrix<M, N>
+where
+    f32: SimdArray<M>,
+    [Vector<M>]: Index<I>,
 {
-    #[inline(always)]
-    fn as_ref(&self) -> &[Vector<F, M>; N] {
-        &self.columns
-    }
-}
-
-impl<F: Scalar<M>, const M: usize, const N: usize> AsMut<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
-{
-    #[inline(always)]
-    fn as_mut(&mut self) -> &mut [Vector<F, M>; N] {
-        &mut self.columns
-    }
-}
-
-impl<I, F: Scalar<M>, const M: usize, const N: usize> Index<I>
-    for Matrix<F, M, N>
-    where [Vector<F, M>]: Index<I>
-{
-    type Output = <[Vector<F, M>] as Index<I>>::Output;
+    type Output = <[Vector<M>] as Index<I>>::Output;
     fn index(&self, idx: I) -> &Self::Output {
         self.columns.index(idx)
     }
 }
 
-impl<I, F: Scalar<M>, const M: usize, const N: usize> IndexMut<I>
-    for Matrix<F, M, N>
-    where [Vector<F, M>]: IndexMut<I>
+impl<I, const M: usize, const N: usize> IndexMut<I> for Matrix<M, N>
+where
+    f32: SimdArray<M>,
+    [Vector<M>]: IndexMut<I>,
 {
     fn index_mut(&mut self, idx: I) -> &mut Self::Output {
         self.columns.index_mut(idx)
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> From<[[F; M]; N]>
-    for Matrix<F, M, N>
+impl<const M: usize, const N: usize> From<[[f32; M]; N]> for Matrix<M, N>
+    where f32: SimdArray<M>,
 {
-    fn from(array: [[F; M]; N]) -> Self {
+    fn from(array: [[f32; M]; N]) -> Self {
         Self::load(&array)
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> From<Matrix<F, M, N>>
-    for [[F; M]; N]
+impl<const M: usize, const N: usize> From<Matrix<M, N>> for [[f32; M]; N]
+    where f32: SimdArray<M>
 {
-    fn from(mat: Matrix<F, M, N>) -> Self {
+    fn from(mat: Matrix<M, N>) -> Self {
         let mut array = [[Default::default(); M]; N];
         mat.store(&mut array);
         array
     }
 }
 
-impl<F: Scalar<M>, const M: usize, const N: usize> From<[Vector<F, M>; N]>
-    for Matrix<F, M, N>
-{
-    fn from(columns: [Vector<F, M>; N]) -> Self {
-        Self { columns }
-    }
-}
-
-impl<F: Scalar<M>, const M: usize, const N: usize> From<Matrix<F, M, N>>
-    for [Vector<F, M>; N]
-{
-    fn from(mat: Matrix<F, M, N>) -> Self {
-        mat.columns
-    }
-}
-
 macro_rules! impl_matn {
     ($N:expr, $matn:ident, $($arg:ident),*) => {
         #[inline(always)]
-        pub fn $matn<F: Scalar<$N>>($($arg: Vector<F, $N>),*) ->
-            Matrix<F, $N, $N>
-        {
+        pub fn $matn($($arg: Vector<$N>),*) -> Matrix<$N, $N> {
             [$($arg,)*].into()
         }
     }
@@ -255,22 +228,15 @@ macro_rules! impl_matn {
 impl_matn!(2, mat2, a, b);
 impl_matn!(3, mat3, a, b, c);
 impl_matn!(4, mat4, a, b, c, d);
-impl_matn!(5, mat5, a, b, c, d, e);
-impl_matn!(6, mat6, a, b, c, d, e, f);
-impl_matn!(7, mat7, a, b, c, d, e, f, g);
-impl_matn!(8, mat8, a, b, c, d, e, f, g, h);
-impl_matn!(9, mat9, a, b, c, d, e, f, g, h, i);
 
 macro_rules! impl_un_op {
     ($Op:ident, $op:ident) => {
-        impl<F, const M: usize, const N: usize> $Op for Matrix<F, M, N>
-        where
-            F: Scalar<M>,
-            Vector<F, M>: $Op<Output = Vector<F, M>>,
+        impl<const M: usize, const N: usize> $Op for Matrix<M, N>
+            where f32: SimdArray<M>
         {
-            type Output = Matrix<F, M, N>;
+            type Output = Matrix<M, N>;
             #[inline(always)]
-            fn $op(mut self) -> Matrix<F, M, N> {
+            fn $op(mut self) -> Matrix<M, N> {
                 for i in 0..N {
                     self[i] = $Op::$op(self[i]);
                 }
@@ -284,27 +250,23 @@ impl_un_op!(Neg, neg);
 
 macro_rules! impl_bin_op {
     ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F, const M: usize, const N: usize> $OpAssign for Matrix<F, M, N>
-        where
-            F: Scalar<M>,
-            Vector<F, M>: $OpAssign,
+        impl<const M: usize, const N: usize> $OpAssign for Matrix<M, N>
+            where f32: SimdArray<M>
         {
             #[inline(always)]
-            fn $op_assign(&mut self, other: Matrix<F, M, N>) {
+            fn $op_assign(&mut self, other: Matrix<M, N>) {
                 for i in 0..N {
                     $OpAssign::$op_assign(&mut self[i], other[i]);
                 }
             }
         }
 
-        impl<F, const M: usize, const N: usize> $Op for Matrix<F, M, N>
-        where
-            F: Scalar<M>,
-            Self: $OpAssign,
+        impl<const M: usize, const N: usize> $Op for Matrix<M, N>
+            where f32: SimdArray<M>,
         {
-            type Output = Matrix<F, M, N>;
+            type Output = Matrix<M, N>;
             #[inline(always)]
-            fn $op(mut self, other: Matrix<F, M, N>) -> Matrix<F, M, N> {
+            fn $op(mut self, other: Matrix<M, N>) -> Matrix<M, N> {
                 $OpAssign::$op_assign(&mut self, other);
                 self
             }
@@ -317,28 +279,23 @@ impl_bin_op!(Sub, SubAssign, sub, sub_assign);
 
 macro_rules! impl_scalar_op {
     ($Op:ident, $OpAssign:ident, $op:ident, $op_assign:ident) => {
-        impl<F, const M: usize, const N: usize> $OpAssign<F>
-            for Matrix<F, M, N>
-        where
-            F: Scalar<M>,
-            Vector<F, M>: $OpAssign<F>,
+        impl<const M: usize, const N: usize> $OpAssign<f32> for Matrix<M, N>
+            where f32: SimdArray<M>
         {
             #[inline(always)]
-            fn $op_assign(&mut self, scalar: F) {
+            fn $op_assign(&mut self, scalar: f32) {
                 for i in 0..N {
                     $OpAssign::$op_assign(&mut self[i], scalar);
                 }
             }
         }
 
-        impl<F, const M: usize, const N: usize> $Op<F> for Matrix<F, M, N>
-        where
-            F: Scalar<M>,
-            Self: $OpAssign<F>,
+        impl<const M: usize, const N: usize> $Op<f32> for Matrix<M, N>
+            where f32: SimdArray<M>
         {
-            type Output = Matrix<F, M, N>;
+            type Output = Matrix<M, N>;
             #[inline(always)]
-            fn $op(mut self, scalar: F) -> Matrix<F, M, N> {
+            fn $op(mut self, scalar: f32) -> Matrix<M, N> {
                 $OpAssign::$op_assign(&mut self, scalar);
                 self
             }
@@ -349,29 +306,22 @@ macro_rules! impl_scalar_op {
 impl_scalar_op!(Mul, MulAssign, mul, mul_assign);
 impl_scalar_op!(Div, DivAssign, div, div_assign);
 
-macro_rules! impl_scalar_op_reverse {
-    ($f:tt, $m:tt, $n:tt, $Op:ident, $op:ident) => {
-        impl $Op<Matrix<$f, $m, $n>> for $f {
-            type Output = Matrix<$f, $m, $n>;
-            #[inline(always)]
-            fn $op(self, mat: Matrix<$f, $m, $n>) -> Matrix<$f, $m, $n> {
-                $Op::$op(mat, self)
-            }
-        }
+impl<const M: usize, const N: usize> Mul<Matrix<M, N>> for f32
+    where f32: SimdArray<M> + SimdArray<N>
+{
+    type Output = Matrix<M, N>;
+    #[inline(always)]
+    fn mul(self, mat: Matrix<M, N>) -> Matrix<M, N> {
+        Mul::mul(mat, self)
     }
 }
 
-impl_scalar_op_reverse!(f32, 2, 2, Mul, mul);
-impl_scalar_op_reverse!(f32, 3, 3, Mul, mul);
-impl_scalar_op_reverse!(f32, 4, 4, Mul, mul);
-
-impl<F, const M: usize, const N: usize> Mul<Vector<F, N>>
-    for Matrix<F, M, N>
-    where F: GeneralScalar<M> + GeneralScalar<N>
+impl<const M: usize, const N: usize> Mul<Vector<N>> for Matrix<M, N>
+    where f32: SimdArray<M> + SimdArray<N>,
 {
-    type Output = Vector<F, M>;
+    type Output = Vector<M>;
     #[inline(always)]
-    fn mul(self, vec: Vector<F, N>) -> Self::Output {
+    fn mul(self, vec: Vector<N>) -> Self::Output {
         let mut prod = Vector::zero();
         for i in 0..N {
             prod += self[i] * vec[i];
@@ -380,14 +330,14 @@ impl<F, const M: usize, const N: usize> Mul<Vector<F, N>>
     }
 }
 
-impl<F, const M: usize, const N: usize, const K: usize> Mul<Matrix<F, N, K>>
-    for Matrix<F, M, N>
-    where F: GeneralScalar<M> + GeneralScalar<N>
+impl<const M: usize, const N: usize, const K: usize> Mul<Matrix<N, K>>
+    for Matrix<M, N>
+    where f32: SimdArray<M> + SimdArray<N>
 {
-    type Output = Matrix<F, M, K>;
+    type Output = Matrix<M, K>;
     #[inline(always)]
-    fn mul(self, other: Matrix<F, N, K>) -> Self::Output {
-        let mut prod = Matrix::<F, M, K>::default();
+    fn mul(self, other: Matrix<N, K>) -> Self::Output {
+        let mut prod = Matrix::default();
         for i in 0..K {
             prod[i] = self * other[i];
         }
@@ -395,25 +345,25 @@ impl<F, const M: usize, const N: usize, const K: usize> Mul<Matrix<F, N, K>>
     }
 }
 
-impl<F: GeneralScalar<N>, const N: usize> MulAssign<Matrix<F, N, N>>
-    for Matrix<F, N, N>
+impl<const N: usize> MulAssign<Matrix<N, N>> for Matrix<N, N>
+    where f32: SimdArray<N>
 {
     #[inline(always)]
-    fn mul_assign(&mut self, other: Matrix<F, N, N>) {
+    fn mul_assign(&mut self, other: Matrix<N, N>) {
         *self = *self * other;
     }
 }
 
-impl<F: BasicScalar> Matrix3<F> {
+impl Matrix3 {
     /// Turns a 3-dimensional matrix into an affine transformation on
     /// the homogeneous coordinate space.
     #[inline(always)]
-    pub fn translate(&self, trans: Vector3<F>) -> Matrix4<F> {
+    pub fn translate(&self, trans: Vector3) -> Matrix4 {
         [self[0].xyz0(), self[1].xyz0(), self[2].xyz0(), trans.xyz1()].into()
     }
 
     #[inline(always)]
-    pub fn xyz1(&self) -> Matrix4<F> {
+    pub fn xyz1(&self) -> Matrix4 {
         [
             self[0].xyz0(), self[1].xyz0(), self[2].xyz0(),
             vec4(Zero::zero(), Zero::zero(), Zero::zero(), One::one()),
@@ -421,15 +371,15 @@ impl<F: BasicScalar> Matrix3<F> {
     }
 }
 
-impl<F: BasicFloat> Matrix4<F> {
+impl Matrix4 {
     #[inline(always)]
-    pub fn xyz(&self) -> Matrix3<F> {
+    pub fn xyz(&self) -> Matrix3 {
         self.submatrix(0, 0)
     }
 
     /// The first three elements of the last column.
     #[inline(always)]
-    pub fn translation(&self) -> Vector3<F> {
+    pub fn translation(&self) -> Vector3 {
         self[3].xyz()
     }
 }
@@ -442,7 +392,7 @@ mod tests {
     fn accessors() {
         let c = [[0.707, 0.707], [-0.707, 0.707]];
         let (u, v) = (c[0].into(), c[1].into());
-        let m: Matrix2<f32> = mat2(u, v);
+        let m: Matrix2 = mat2(u, v);
         assert_eq!(m[0], u);
         assert_eq!(m[1], v);
         assert_eq!(m, c.into());
@@ -450,14 +400,15 @@ mod tests {
         assert_eq!(m[1][1], c[1][1]);
         assert_eq!(&m[..], [u, v]);
         assert_eq!(m.columns(), &[vec2(0.707, 0.707), vec2(-0.707, 0.707)]);
+        assert_eq!(m.as_ref(), &[vec2(0.707, 0.707), vec2(-0.707, 0.707)]);
     }
 
     #[test]
     fn matrix_ops() {
-        let a: Matrix2<f32> = [
+        let a: Matrix2 = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
-        let b: Matrix2<f32> = [
+        let b: Matrix2 = [
             [0.0, 1.0],
             [1.0, 0.0]].into();
         assert_eq!(a, a);
@@ -488,7 +439,7 @@ mod tests {
 
     #[test]
     fn scalar_ops() {
-        let a: Matrix2<f32> = [
+        let a: Matrix2 = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
         assert_eq!(a * 1.0, a);
@@ -509,12 +460,12 @@ mod tests {
 
     #[test]
     fn mat_vec_mul() {
-        let a: Matrix2<f32> = [
+        let a: Matrix2 = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
         assert_eq!(a * Vector::zero(), Vector::zero());
         assert_eq!(a * vec2(1.0, 2.0), vec2(1.0, 2.0));
-        let a: Matrix2<f32> = [
+        let a: Matrix2 = [
             [ 0.0, 1.0],
             [-1.0, 0.0]].into();
         assert_eq!(a * vec2(1.0, 2.0), vec2(-2.0, 1.0));
@@ -522,10 +473,10 @@ mod tests {
 
     #[test]
     fn mat_mat_mul() {
-        let a: Matrix2<f32> = [
+        let a: Matrix2 = [
             [1.0, 0.0],
             [0.0, 1.0]].into();
-        let b: Matrix2<f32> = [
+        let b: Matrix2 = [
             [ 0.0, 1.0],
             [-1.0, 0.0]].into();
         assert_eq!(a * b, b);
@@ -533,7 +484,7 @@ mod tests {
         b_1 *= a;
         assert_eq!(b_1, b);
 
-        let c: Matrix2x3<f32> = [
+        let c: Matrix2x3 = [
             [0.0, 1.0],
             [2.0, 3.0],
             [4.0, 5.0]].into();
@@ -542,10 +493,10 @@ mod tests {
 
     #[test]
     fn methods() {
-        let a: Matrix2<f32> = Matrix::identity();
+        let a: Matrix2 = Matrix::identity();
         assert_eq!(a, Matrix::diagonal([1.0, 1.0]));
         assert_eq!(a, a.transpose());
-        let b: Matrix3x2<f32> = [
+        let b: Matrix3x2 = [
             [0.0, 1.0, 2.0],
             [3.0, 4.0, 5.0]].into();
         assert_eq!(
@@ -560,7 +511,7 @@ mod tests {
 
     #[test]
     fn swizzle() {
-        let mut a: Matrix4<f32> = [
+        let mut a: Matrix4 = [
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 0.0, 1.0, 0.0],
             [1.0, 0.0, 0.0, 0.0],
@@ -582,7 +533,7 @@ mod tests {
         assert_eq!(a.translation(), t);
         assert_eq!(a.xyz().translate(t), a);
 
-        let b: Matrix3x2<f32> = a.submatrix(1, 2);
+        let b: Matrix3x2 = a.submatrix(1, 2);
         assert_eq!(
             b,
             [
