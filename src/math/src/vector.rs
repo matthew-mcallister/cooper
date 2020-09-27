@@ -41,6 +41,13 @@ pub trait SimdOps<const N: usize>:
     fn load(src: &[f32; N]) -> Self;
     fn store(self, dst: &mut [f32; N]);
     fn sum(self) -> f32;
+    fn product(self) -> f32;
+    fn le(self, other: Self) -> bool;
+    fn lt(self, other: Self) -> bool;
+    fn ge(self, other: Self) -> bool;
+    fn gt(self, other: Self) -> bool;
+    fn inf(self, other: Self) -> Self;
+    fn sup(self, other: Self) -> Self;
 
     #[inline(always)]
     fn dot(self, other: Self) -> f32 {
@@ -56,7 +63,6 @@ pub trait SimdOps<const N: usize>:
     fn length(self) -> f32 {
         self.length_sq().sqrt()
     }
-
     #[inline(always)]
     fn normalized(mut self) -> Self {
         self /= self.length();
@@ -134,6 +140,44 @@ const fn mask(n: usize) -> u8 {
     if n < 32 { !(!0u8 << n) } else { 0 }
 }
 
+macro_rules! impl_common {
+    ($n:tt) => {
+        #[inline(always)]
+        fn le(self, other: Self) -> bool {
+            const MASK: u8 = mask($n);
+            (self.0.le(other.0).bitmask() & MASK) == MASK
+        }
+
+        #[inline(always)]
+        fn lt(self, other: Self) -> bool {
+            const MASK: u8 = mask($n);
+            (self.0.lt(other.0).bitmask() & MASK) == MASK
+        }
+
+        #[inline(always)]
+        fn ge(self, other: Self) -> bool {
+            const MASK: u8 = mask($n);
+            (self.0.ge(other.0).bitmask() & MASK) == MASK
+        }
+
+        #[inline(always)]
+        fn gt(self, other: Self) -> bool {
+            const MASK: u8 = mask($n);
+            (self.0.gt(other.0).bitmask() & MASK) == MASK
+        }
+
+        #[inline(always)]
+        fn inf(self, other: Self) -> Self {
+            Self(self.0.min(other.0))
+        }
+
+        #[inline(always)]
+        fn sup(self, other: Self) -> Self {
+            Self(self.0.max(other.0))
+        }
+    }
+}
+
 macro_rules! impl_scalar_pot {
     ($scalar:tt, $n:tt, $vec:tt; $($x:ident)*) => {
         impl Simd<$n> for $scalar {
@@ -178,6 +222,13 @@ macro_rules! impl_scalar_pot {
             fn sum(self) -> $scalar {
                 $vec::sum(self.0)
             }
+
+            #[inline(always)]
+            fn product(self) -> $scalar {
+                $vec::product(self.0)
+            }
+
+            impl_common!($n);
         }
     }
 }
@@ -225,6 +276,15 @@ impl SimdOps<3> for Vector3 {
             + self.0.extract(1)
             + self.0.extract(2)
     }
+
+    #[inline(always)]
+    fn product(self) -> f32 {
+        self.0.extract(0)
+            * self.0.extract(1)
+            * self.0.extract(2)
+    }
+
+    impl_common!(3);
 }
 
 #[inline(always)]
@@ -275,6 +335,45 @@ impl<const N: usize> Vector<N>
     }
 
     #[inline(always)]
+    pub fn product(self) -> f32 {
+        SimdOps::product(self)
+    }
+
+    #[inline(always)]
+    pub fn le(self, other: Self) -> bool {
+        SimdOps::le(self, other)
+    }
+
+    #[inline(always)]
+    pub fn lt(self, other: Self) -> bool {
+        SimdOps::lt(self, other)
+    }
+
+    #[inline(always)]
+    pub fn ge(self, other: Self) -> bool {
+        SimdOps::ge(self, other)
+    }
+
+    #[inline(always)]
+    pub fn gt(self, other: Self) -> bool {
+        SimdOps::gt(self, other)
+    }
+
+    /// Returns the infimum of two vectors, which is the minimum
+    /// of the two taken component-wise.
+    #[inline(always)]
+    fn inf(self, other: Self) -> Self {
+        SimdOps::inf(self, other)
+    }
+
+    /// Returns the supremum of two vectors, which is the
+    /// maximum of the two taken component-wise.
+    #[inline(always)]
+    fn sup(self, other: Self) -> Self {
+        SimdOps::sup(self, other)
+    }
+
+    #[inline(always)]
     pub fn dot(self, other: Self) -> f32 {
         SimdOps::dot(self, other)
     }
@@ -298,6 +397,12 @@ impl<const N: usize> Vector<N>
     pub fn normalize(&mut self) -> f32 {
         SimdOps::normalize(self)
     }
+}
+
+impl<const N: usize> crate::InfSup for Vector<N>
+    where f32: SimdArray<N>
+{
+    impl_inf_sup!();
 }
 
 impl<const N: usize> Zero for Vector<N>
@@ -621,63 +726,6 @@ delegate_swizzles!(Swizzle4 {
     q -> f32;
 });
 
-impl Vector3 {
-    #[inline(always)]
-    pub fn cross(self, other: Self) -> Self {
-        (self * other.yzx() - self.yzx() * other).yzx()
-    }
-}
-
-macro_rules! impl_common {
-    ($n:tt, $inner:ty; $($x:ident)*) => {
-        impl Vector<$n> {
-            #[inline(always)]
-            pub fn le(self, other: Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.le(other.0).bitmask() & MASK) == MASK
-            }
-
-            #[inline(always)]
-            pub fn lt(self, other: Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.lt(other.0).bitmask() & MASK) == MASK
-            }
-
-            #[inline(always)]
-            pub fn ge(self, other: Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.ge(other.0).bitmask() & MASK) == MASK
-            }
-
-            #[inline(always)]
-            pub fn gt(self, other: Self) -> bool {
-                const MASK: u8 = mask($n);
-                (self.0.gt(other.0).bitmask() & MASK) == MASK
-            }
-
-            /// Returns the infimum of two vectors, which is the minimum
-            /// of the two taken component-wise.
-            #[inline(always)]
-            pub fn inf(self, other: Self) -> Self {
-                Self(self.0.min(other.0))
-            }
-
-            /// Returns the supremum of two vectors, which is the
-            /// maximum of the two taken component-wise.
-            #[inline(always)]
-            pub fn sup(self, other: Self) -> Self {
-                Self(self.0.max(other.0))
-            }
-        }
-
-        impl_inf_sup!(Vector<$n>);
-    }
-}
-
-impl_common!(2, f32x2; x y);
-impl_common!(3, f32x4; x y z);
-impl_common!(4, f32x4; x y z w);
-
 macro_rules! impl_po2 {
     ($n:tt, $inner:tt; $($x:ident)*) => {
         impl Vector<$n> {
@@ -697,6 +745,11 @@ impl Vector3 {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         // N.B. This probably doesn't generate the best code every time.
         Self(f32x4::new(x, y, z, z))
+    }
+
+    #[inline(always)]
+    pub fn cross(self, other: Self) -> Self {
+        (self * other.yzx() - self.yzx() * other).yzx()
     }
 }
 
@@ -813,6 +866,11 @@ mod tests {
 
     #[test]
     fn methods() {
+        assert_eq!(vec2(1.0, 2.0).sum(), 3.0);
+        assert_eq!(vec2(1.0, 2.0).product(), 2.0);
+        assert_eq!(vec3(1.0, 2.0, 3.0).sum(), 6.0);
+        assert_eq!(vec3(1.0, 2.0, 3.0).product(), 6.0);
+
         assert_eq!(vec2(1.0, 0.0).length_sq(), 1.0);
         assert_eq!(vec2(3.0, 4.0).length(), 5.0);
         assert_eq!(vec2(2.0, 0.0).normalized(), vec2(1.0, 0.0));
@@ -845,6 +903,19 @@ mod tests {
         assert!(vec2(0.0, 1.0).le(vec2(1.0, 2.0)));
         assert!(!vec2(0.0, 1.0).gt(vec2(1.0, 2.0)));
         assert!(!vec2(0.0, 1.0).ge(vec2(1.0, 2.0)));
+    }
+
+    #[test]
+    fn sum() {
+        let vecs: &[Vector2] = &[];
+        assert_eq!(vecs.iter().copied().sum::<Vector2>(), Zero::zero());
+        let vecs = &[
+            vec2(0.0, 1.0),
+            vec2(1.0, 2.0),
+            vec2(2.0, 3.0),
+            vec2(3.0, 4.0),
+        ];
+        assert_eq!(vecs.iter().copied().sum::<Vector2>(), vec2(6.0, 10.0));
     }
 
     #[test]
