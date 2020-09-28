@@ -302,7 +302,9 @@ impl BufferAlloc {
     fn leak(self) {
         let this = MaybeUninit::new(self);
         // Decrement the reference count
-        unsafe { std::ptr::read(&this.get_ref().buffer as *const Arc<_>); }
+        unsafe {
+            std::ptr::read(&this.assume_init_ref().buffer as *const Arc<_>);
+        }
     }
 }
 

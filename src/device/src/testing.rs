@@ -36,7 +36,8 @@ impl TestContext {
             title: WINDOW_NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
             hints: window::CreationHints {
-                hidden: !show_window,
+                //hidden: !show_window,
+                hidden: false,
                 ..Default::default()
             },
         };

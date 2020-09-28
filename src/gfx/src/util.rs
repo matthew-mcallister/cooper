@@ -41,7 +41,7 @@ macro_rules! include_u32 {
 }
 
 #[inline(always)]
-crate fn pack_xform(xform: Matrix4<f32>) -> Matrix4x3<f32> {
+crate fn pack_xform(xform: Matrix4) -> Matrix4x3 {
     xform.transpose().submatrix(0, 0)
 }
 

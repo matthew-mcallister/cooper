@@ -315,7 +315,7 @@ pub trait MemoryRegion {
     fn as_bytes_mut(&mut self) -> Option<&mut [u8]> {
         unsafe {
             let slice = self.as_mut_slice(self.size() as _)?;
-            Some(MaybeUninit::slice_get_mut(slice))
+            Some(MaybeUninit::slice_assume_init_mut(slice))
         }
     }
 }

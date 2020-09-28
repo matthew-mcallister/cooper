@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use gfx::{MaterialDesc, RenderMesh};
 use gltf::scene::Transform as GltfTransform;
-use math::{BBox, Matrix4, Vector3, Vector4, mat4, vec3};
+use math::{BBox3, Matrix4, Vector3, Vector4, mat4, vec3};
 
 #[derive(Debug)]
 pub struct SceneCollection {
@@ -25,7 +25,7 @@ pub struct Mesh {
 
 #[derive(Debug)]
 pub struct Primitive {
-    pub bbox: BBox<f32, 3>,
+    pub bbox: BBox3,
     pub mesh: Arc<RenderMesh>,
     pub material: MaterialDesc,
 }
@@ -46,12 +46,11 @@ pub struct Node {
 #[derivative(Default)]
 pub enum Transform {
     #[derivative(Default)]
-    Matrix(Matrix4<f32>),
+    Matrix(Matrix4),
     Decomposed {
-        translation: Vector3<f32>,
-        // TODO: Quaternions
-        rotation: Vector4<f32>,
-        scale: Vector3<f32>,
+        translation: Vector3,
+        rotation: Quaternion,
+        scale: Vector3,
     },
 }
 
@@ -77,32 +76,12 @@ impl From<GltfTransform> for Transform {
     }
 }
 
-fn xform_matrix(p: Vector3<f32>, q: Vector4<f32>, s: Vector3<f32>) ->
-    Matrix4<f32>
-{
-    let (v, w) = (q.xyz(), q[3]);
-    let v2 = v * v * 2.0;
-    let vij = vec3(v[1] * v[2], v[2] * v[0], v[0] * v[1]) * 2.0;
-    let vw = v * w * 2.0;
-    let r = [
-        vec3(1.0 - v2[1] - v2[2], vij[2] + vw[2], vij[1] - vw[1]),
-        vec3(vij[2] - vw[2], 1.0 - v2[2] - v2[0], vij[0] + vw[0]),
-        vec3(vij[1] + vw[1], vij[0] - vw[0], 1.0 - v2[0] - v2[1]),
-    ];
-    mat4(
-        r[0].xyz0() * s[0],
-        r[1].xyz0() * s[1],
-        r[2].xyz0() * s[2],
-        p.xyz1(),
-    )
-}
-
-impl From<Transform> for Matrix4<f32> {
+impl From<Transform> for Matrix4 {
     fn from(transform: Transform) -> Self {
         match transform {
-            Transform::Matrix(matrix) => matrix.into(),
+            Transform::Matrix(matrix) => matrix,
             Transform::Decomposed { translation, rotation, scale } =>
-                xform_matrix(translation, rotation, scale),
+                rotation.scale(scale).translate(translation),
         }
     }
 }
@@ -124,7 +103,7 @@ impl SceneCollection {
 
     /// Calculates the base world transforms of each node in the
     /// collection according to the node hierarchy.
-    pub fn world_xforms(&self) -> Vec<Matrix4<f32>> {
+    pub fn world_xforms(&self) -> Vec<Matrix4> {
         // TODO: Real implementation
         self.nodes.iter().map(|node| node.transform.into()).collect()
     }

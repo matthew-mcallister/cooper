@@ -1,5 +1,5 @@
 use derive_more::*;
-use math::{Vector2, Vector3};
+use math::{Ivector3, Uvector2, Uvector3};
 
 macro_rules! impl_conversion {
     ($from:ty => $via:ty => $into:ty) => {
@@ -28,16 +28,40 @@ pub struct Extent3D {
     pub depth: u32,
 }
 
-impl_conversion!(Vector2<u32> => (u32, u32) => Extent2D);
+impl_conversion!(Uvector2 => [u32; 2] => Extent2D);
 impl_conversion!(vk::Extent2D => (u32, u32) => Extent2D);
-impl_conversion!(Extent2D => (u32, u32) => Vector2<u32>);
+impl_conversion!(Extent2D => [u32; 2] => Uvector2);
 impl_conversion!(Extent2D => (u32, u32) => vk::Extent2D);
 
-impl_conversion!(Vector3<u32> => (u32, u32, u32) => Extent3D);
+impl_conversion!(Uvector3 => [u32; 3] => Extent3D);
 impl_conversion!(vk::Extent3D => (u32, u32, u32) => Extent3D);
 impl_conversion!((u32, u32) => Extent2D => Extent3D);
-impl_conversion!(Extent3D => (u32, u32, u32) => Vector3<u32>);
+impl_conversion!(Extent3D => [u32; 3] => Uvector3);
 impl_conversion!(Extent3D => (u32, u32, u32) => vk::Extent3D);
+
+impl From<[u32; 2]> for Extent2D {
+    fn from([width, height]: [u32; 2]) -> Self {
+        Self { width, height }
+    }
+}
+
+impl From<Extent2D> for [u32; 2] {
+    fn from(Extent2D { width, height }: Extent2D) -> Self {
+        [width, height]
+    }
+}
+
+impl From<[u32; 3]> for Extent3D {
+    fn from([width, height, depth]: [u32; 3]) -> Self {
+        Self { width, height, depth }
+    }
+}
+
+impl From<Extent3D> for [u32; 3] {
+    fn from(Extent3D { width, height, depth }: Extent3D) -> Self {
+        [width, height, depth]
+    }
+}
 
 impl From<Extent2D> for Extent3D {
     #[inline]
@@ -62,7 +86,7 @@ impl AsRef<[u32; 3]> for Extent3D {
 
 impl Extent2D {
     #[inline]
-    pub fn to_vec(self) -> Vector2<u32> {
+    pub fn to_vec(self) -> Uvector2 {
         self.into()
     }
 
@@ -74,7 +98,7 @@ impl Extent2D {
 
 impl Extent3D {
     #[inline]
-    pub fn to_vec(self) -> Vector3<u32> {
+    pub fn to_vec(self) -> Uvector3 {
         self.into()
     }
 
@@ -94,7 +118,7 @@ impl Extent3D {
     }
 
     #[inline]
-    pub fn contains_extent(&self, offset: Vector3<i32>, extent: Self) -> bool
+    pub fn contains_extent(&self, offset: Ivector3, extent: Self) -> bool
     {
         fn check_range_overflow(offs: i32, len: u32, max: u32) -> bool {
             (offs >= 0)
@@ -127,21 +151,21 @@ impl Extent3D {
 #[cfg(test)]
 mod tests {
     use crate::testing;
-    use math::vec3;
+    use math::ivec3;
     use super::*;
 
     unsafe fn contains(_: testing::TestVars) {
         let ex = Extent3D::new;
         let scrn = ex(1920, 1080, 1);
-        assert!(scrn.contains_extent(vec3(0, 0, 0), scrn));
-        assert!(scrn.contains_extent(vec3(1920, 1080, 1), ex(0, 0, 0)));
-        assert!(scrn.contains_extent(vec3(1, 2, 0), ex(3, 4, 1)));
-        assert!(!scrn.contains_extent(vec3(0, 0, 0), ex(1920, 1080, 2)));
-        assert!(!scrn.contains_extent(vec3(-1, -1, -1), ex(1, 1, 1)));
-        assert!(!scrn.contains_extent(vec3(1920, 1080, 1), ex(1, 1, 1)));
+        assert!(scrn.contains_extent(ivec3(0, 0, 0), scrn));
+        assert!(scrn.contains_extent(ivec3(1920, 1080, 1), ex(0, 0, 0)));
+        assert!(scrn.contains_extent(ivec3(1, 2, 0), ex(3, 4, 1)));
+        assert!(!scrn.contains_extent(ivec3(0, 0, 0), ex(1920, 1080, 2)));
+        assert!(!scrn.contains_extent(ivec3(-1, -1, -1), ex(1, 1, 1)));
+        assert!(!scrn.contains_extent(ivec3(1920, 1080, 1), ex(1, 1, 1)));
         // Even though one of the dimensions is 0, the subregion cannot
         // overrun the extent dimensions.
-        assert!(!scrn.contains_extent(vec3(1920, 1080, 1), ex(0, 0, 1)));
+        assert!(!scrn.contains_extent(ivec3(1920, 1080, 1), ex(0, 0, 1)));
     }
 
     unsafe fn mip_levels(_: testing::TestVars) {

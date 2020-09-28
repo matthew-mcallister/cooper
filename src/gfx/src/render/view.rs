@@ -16,9 +16,9 @@ crate struct SceneViewState {
 pub struct SceneView {
     pub perspective: PerspectiveParams,
     /// Rotation of view camera.
-    pub rot: Matrix3<f32>,
+    pub rot: Matrix3,
     /// Position of view camera.
-    pub pos: Vector3<f32>,
+    pub pos: Vector3,
     /// For debugging
     pub force_cull_mode: Option<CullMode>,
 }
@@ -36,8 +36,8 @@ pub struct PerspectiveParams {
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(16))]
 crate struct PerspectiveUniforms {
-    crate proj: Matrix4<f32>,
-    //crate proj_inv: Matrix4<f32>,
+    crate proj: Matrix4,
+    //crate proj_inv: Matrix4,
     crate tan_fovx2: f32,
     crate tan_fovy2: f32,
     crate z_near: f32,
@@ -52,9 +52,9 @@ crate struct PerspectiveUniforms {
 crate struct SceneViewUniforms {
     crate perspective: PerspectiveUniforms,
     /// Transforms from world space to view space.
-    crate view: Matrix4<f32>,
+    crate view: Matrix4,
     /// Transforms from view space to world space.
-    crate view_inv: Matrix4<f32>,
+    crate view_inv: Matrix4,
     // TODO:
     //crate view_proj: [[f32; 4]; 4],
     //crate view_proj_inv: [[f32; 4]; 4],
@@ -105,7 +105,7 @@ impl From<PerspectiveParams> for PerspectiveUniforms {
 }
 
 /// Calculates a perspective matrix.
-crate fn perspective(params: PerspectiveParams) -> Matrix4<f32> {
+crate fn perspective(params: PerspectiveParams) -> Matrix4 {
     let (z_n, z_f) = (params.z_near, params.z_far);
     let (d_n, d_f) = (params.min_depth, params.max_depth);
     let (s_x, s_y) = (params.tan_fovx2, params.tan_fovy2);

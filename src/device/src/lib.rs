@@ -13,7 +13,7 @@
     hash_raw_entry,
     maybe_uninit_extra,
     maybe_uninit_ref,
-    maybe_uninit_slice_assume_init,
+    maybe_uninit_slice,
     nonnull_slice_from_raw_parts,
     or_patterns,
     trait_alias,

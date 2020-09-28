@@ -82,6 +82,25 @@ macro_rules! impl_common {
                 }
                 self
             }
+
+            #[inline(always)]
+            pub fn iter(&self) -> impl Iterator<Item = &$scalar> {
+                self.as_ref().iter()
+            }
+
+            #[inline(always)]
+            pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut $scalar> {
+                self.as_mut().iter_mut()
+            }
+
+            #[inline(always)]
+            pub fn map(mut self, mut f: impl FnMut($scalar) -> $scalar) -> Self
+            {
+                for i in 0..N {
+                    self[i] = f(self[i]);
+                }
+                self
+            }
         }
 
         impl<const N: usize> Default for $vector<N> {
@@ -376,6 +395,7 @@ mod tests {
         assert_eq!(uvec2(1, 2).product(), 2);
         assert_eq!(uvec3(1, 2, 3).sum(), 6);
         assert_eq!(uvec3(1, 2, 3).product(), 6);
+        assert_eq!(ivec2(1, 2).map(Neg::neg), ivec2(-1, -2));
     }
 
     #[test]

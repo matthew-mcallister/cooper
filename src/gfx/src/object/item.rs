@@ -82,7 +82,7 @@ impl<'ctx> LowerCtx<'ctx> {
         // no dangling pointers like this one at the end of a frame
         let instance_data = unsafe {
             let slice = &mut *BufferBox::leak(instance_buf).as_ptr();
-            MaybeUninit::slice_get_mut(slice)
+            MaybeUninit::slice_assume_init_mut(slice)
         };
 
         Self { state, uniforms, resources, materials, instance_data }

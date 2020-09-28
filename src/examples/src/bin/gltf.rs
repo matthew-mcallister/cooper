@@ -17,7 +17,7 @@ use gfx::{
     SceneView,
 };
 use device::{AppInfo, ShaderStage};
-use math::{BBox, MathIterExt};
+use math::{BBox3, MathItertools};
 use math::vector::*;
 use math::matrix::*;
 
@@ -40,7 +40,7 @@ fn render_world(
     let scene = collection.default_scene();
 
     // TODO: compute transformed AABBs
-    let bbox: BBox<f32, 3> = collection.resources.meshes.iter()
+    let bbox: BBox3 = collection.resources.meshes.iter()
         .flat_map(|mesh| mesh.primitives.iter())
         .map(|prim| prim.bbox)
         .sup()
@@ -99,10 +99,11 @@ fn render_mesh(
     world: &mut RenderWorld,
     prim: &Primitive,
     material: Arc<MaterialDef>,
-    xform: &Matrix4<f32>,
+    xform: &Matrix4,
 ) {
     let rot = xform.submatrix(0, 0);
     let pos = xform[3].xyz();
+    // TODO: Uhhh is this API supposed to support non-uniform scaling?
     world.add_object(MeshInstance {
         mesh: Arc::clone(&prim.mesh),
         pos,

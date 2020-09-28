@@ -11,11 +11,11 @@ use crate::util::pack_xform;
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(16))]
 crate struct PerInstanceData {
-    crate xform: Matrix4x3<f32>,
+    crate xform: Matrix4x3,
 }
 
 impl PerInstanceData {
-    crate fn set_xform(&mut self, xform: Matrix4<f32>) {
+    crate fn set_xform(&mut self, xform: Matrix4) {
         self.xform = pack_xform(xform);
     }
 }

@@ -17,14 +17,14 @@ pub struct MeshInstance {
     pub mesh: Arc<RenderMesh>,
     pub material: Arc<MaterialDef>,
     /// Assumed to be orthogonal.
-    pub rot: Matrix3<f32>,
-    pub pos: Vector3<f32>,
+    pub rot: Matrix3,
+    pub pos: Vector3,
     //TODO:
     //pub scale: f32,
 }
 
 impl MeshInstance {
-    pub fn xform(&self) -> Matrix4<f32> {
+    pub fn xform(&self) -> Matrix4 {
         self.rot.translate(self.pos)
     }
 }

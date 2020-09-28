@@ -879,7 +879,7 @@ fn validate_buffer_image_copy(
     layout: vk::ImageLayout,
     regions: &[vk::BufferImageCopy],
 ) {
-    use math::vector::Vector3;
+    use math::Ivector3;
 
     assert!([
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -887,7 +887,8 @@ fn validate_buffer_image_copy(
         vk::ImageLayout::SHARED_PRESENT_KHR,
     ].contains(&layout));
     for region in regions.iter() {
-        let off = Vector3::from(<(i32, i32, i32)>::from(region.image_offset));
+        let (x, y, z) = region.image_offset.into();
+        let off = Ivector3::new(x, y, z);
         let ext = Extent3D::from(region.image_extent);
         assert!(dst.extent().contains_extent(off, ext));
 

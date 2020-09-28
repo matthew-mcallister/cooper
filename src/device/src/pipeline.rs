@@ -581,6 +581,7 @@ mod tests {
         trivial.init_pipe_desc(&mut desc);
         let _pipe0 = cache.get_or_create_gfx(&desc).into_owned();
 
+        // FIXME: This causes a segfault WTF?
         desc.depth_test = true;
         let pipe1 = cache.get_or_create_gfx(&desc).into_owned();
 
