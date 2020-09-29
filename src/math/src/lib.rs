@@ -10,17 +10,21 @@
 )]
 #![allow(incomplete_features)]
 
+use std::ops::*;
+
 #[macro_use]
 mod macros;
 
 pub mod bbox;
 pub mod matrix;
 pub mod quaternion;
+pub mod uvector;
 pub mod vector;
 
 pub use bbox::*;
 pub use matrix::*;
 pub use quaternion::*;
+pub use uvector::*;
 pub use vector::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,3 +62,20 @@ impl<I: Iterator> MathItertools for I {
         <T as InfSup<Self::Item>>::inf_sup(self)
     }
 }
+
+pub trait VectorOps<F>
+    = Sized
+    + Neg<Output = Self>
+    + Add<Self, Output = Self>
+    + AddAssign<Self>
+    + Sub<Self, Output = Self>
+    + SubAssign<Self>
+    + Mul<Self, Output = Self>
+    + MulAssign<Self>
+    + Mul<F, Output = Self>
+    + MulAssign<F>
+    + Div<Self, Output = Self>
+    + DivAssign<Self>
+    + Div<F, Output = Self>
+    + DivAssign<F>
+    ;

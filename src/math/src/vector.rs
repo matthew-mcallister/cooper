@@ -5,6 +5,8 @@ use derivative::Derivative;
 use num::{One, Zero};
 use packed_simd::{f32x2, f32x4, shuffle};
 
+use crate::VectorOps;
+
 pub trait Simd<const N: usize>: Sized {
     type Vector: Copy + Debug + Default + VectorOps<Self>;
 }
@@ -63,6 +65,7 @@ pub trait SimdOps<const N: usize>:
     fn length(self) -> f32 {
         self.length_sq().sqrt()
     }
+
     #[inline(always)]
     fn normalized(mut self) -> Self {
         self /= self.length();
@@ -80,23 +83,6 @@ pub trait SimdOps<const N: usize>:
 pub trait SimdArray<const N: usize> = where
     f32: Simd<N>,
     Vector<N>: SimdOps<N>,
-    ;
-
-pub trait VectorOps<F>
-    = Sized
-    + Neg<Output = Self>
-    + Add<Self, Output = Self>
-    + AddAssign<Self>
-    + Sub<Self, Output = Self>
-    + SubAssign<Self>
-    + Mul<Self, Output = Self>
-    + MulAssign<Self>
-    + Mul<F, Output = Self>
-    + MulAssign<F>
-    + Div<Self, Output = Self>
-    + DivAssign<Self>
-    + Div<F, Output = Self>
-    + DivAssign<F>
     ;
 
 pub trait Swizzle2: Sized {
