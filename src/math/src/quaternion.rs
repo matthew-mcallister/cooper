@@ -59,6 +59,18 @@ impl Quaternion {
     }
 }
 
+impl From<[f32; 4]> for Quaternion {
+    fn from(array: [f32; 4]) -> Self {
+        Self(array.into())
+    }
+}
+
+impl From<Quaternion> for [f32; 4] {
+    fn from(quat: Quaternion) -> Self {
+        quat.0.into()
+    }
+}
+
 impl From<Vector3> for Quaternion {
     fn from(v: Vector3) -> Self {
         Self(v.xyz_())

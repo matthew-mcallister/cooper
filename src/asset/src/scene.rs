@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use gfx::{MaterialDesc, RenderMesh};
 use gltf::scene::Transform as GltfTransform;
-use math::{BBox3, Matrix4, Vector3, Vector4, mat4, vec3};
+use math::{BBox3, Matrix4, Quaternion, Vector3};
 
 #[derive(Debug)]
 pub struct SceneCollection {
@@ -81,7 +81,7 @@ impl From<Transform> for Matrix4 {
         match transform {
             Transform::Matrix(matrix) => matrix,
             Transform::Decomposed { translation, rotation, scale } =>
-                rotation.scale(scale).translate(translation),
+                rotation.to_matrix().scale(scale).translate(translation),
         }
     }
 }

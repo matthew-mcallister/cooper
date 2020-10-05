@@ -17,9 +17,7 @@ use gfx::{
     SceneView,
 };
 use device::{AppInfo, ShaderStage};
-use math::{BBox3, MathItertools};
-use math::vector::*;
-use math::matrix::*;
+use math::{BBox3, MathItertools, Matrix3, Matrix4, vec3};
 
 use cooper_examples::with_event_loop;
 
