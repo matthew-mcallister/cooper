@@ -192,16 +192,12 @@ macro_rules! impl_scalar_pot {
 
             #[inline(always)]
             fn load(src: &[$scalar; $n]) -> Self {
-                Self(unsafe {
-                    $vec::from_slice_unaligned_unchecked(&src[..])
-                })
+                Self($vec::from_slice_unaligned(&src[..]))
             }
 
             #[inline(always)]
             fn store(self, dst: &mut [$scalar; $n]) {
-                unsafe {
-                    self.0.write_to_slice_unaligned_unchecked(&mut dst[..])
-                }
+                self.0.write_to_slice_unaligned(&mut dst[..])
             }
 
             #[inline(always)]
@@ -509,9 +505,7 @@ macro_rules! impl_array_ops {
         {
             #[inline(always)]
             fn from(array: [f32; $n]) -> Self {
-                let mut vec = Self::default();
-                unsafe { *(&mut vec as *mut _ as *mut [f32; $n]) = array; }
-                vec
+                Self::load(&array)
             }
         }
 
@@ -520,7 +514,9 @@ macro_rules! impl_array_ops {
         {
             #[inline(always)]
             fn from(vec: Vector<$n>) -> Self {
-                unsafe { *(&vec as *const _ as *const [f32; $n]) }
+                let mut array: Self = [0.0; $n];
+                vec.store(&mut array);
+                array
             }
         }
 

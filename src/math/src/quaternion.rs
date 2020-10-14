@@ -1,6 +1,5 @@
 use std::ops::*;
 
-use derivative::Derivative;
 use derive_more::{
     Add, AddAssign, From, Index, IndexMut, Into, Neg, Sub, SubAssign,
 };
@@ -10,15 +9,8 @@ use crate::matrix::*;
 use crate::vector::*;
 
 #[derive(
-    Add, AddAssign, Derivative, From, Index, IndexMut, Into, Neg, Sub,
-    SubAssign,
-)]
-#[derivative(
-    Clone(bound = ""),
-    Copy(bound = ""),
-    Debug(bound = ""),
-    Default(bound = ""),
-    PartialEq(bound = ""),
+    Add, AddAssign, Clone, Copy, Debug, Default, From, Index, IndexMut, Into,
+    Neg, PartialEq, Sub, SubAssign,
 )]
 pub struct Quaternion(Vector4);
 
@@ -294,6 +286,16 @@ mod tests {
     }
 
     #[test]
+    fn eq() {
+        let i = Quaternion::i();
+        let j = Quaternion::j();
+        assert_eq!(Quaternion::one(), Quaternion::one());
+        assert_eq!(i, i);
+        assert_eq!(i + j, i + j);
+        assert_eq!(i + j, Quaternion::new(1.0, 1.0, 0.0, 0.0));
+    }
+
+    #[test]
     fn vec_ops() {
         let v = Quaternion::new(1.0f32, 0.0, 0.0, 0.0);
         let u = Quaternion::new(0.0f32, 1.0, 0.0, 0.0);
@@ -355,11 +357,15 @@ mod tests {
         assert_eq!(e / e, e);
         assert_eq!(i / e, i);
         assert_eq!(i / i, e);
-        assert_eq!(i / j, i * j.inverse());
         assert_eq!(i / j, -k);
+        assert_eq!(i / j, i * j.inverse());
         assert_eq!(e / (i + j), (i + j).inverse());
         assert_eq!((i + j) / (i + j), e);
         assert_eq!((i - j) / (i + j), -k);
+
+        let a = Quaternion::new(1.0, 2.0, 3.0, 4.0);
+        let b = Quaternion::new(-1.0, 1.0, -1.0, 1.0);
+        assert_eq!(a / b, a * b.inverse());
 
         let mut x = e;
         x *= x;

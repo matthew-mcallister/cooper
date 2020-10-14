@@ -1,0 +1,5 @@
+[build]
+# TODO: An LLVM bug (fixed in 12) is causing the compiler to stall when
+# optimizing code with SSE4.1 active
+#rustflags = ["-Ctarget-feature=+sse,+sse2,+sse3,+sse4.1,+sse4.2,+sse-unaligned-mem"]
+rustflags = ["-Ctarget-feature=+sse,+sse2,+sse3,+sse-unaligned-mem"]
