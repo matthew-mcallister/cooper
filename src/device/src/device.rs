@@ -53,7 +53,7 @@ impl std::fmt::Debug for Device {
 
 impl Device {
     pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
-        Result<(Arc<Self>, Vec<Vec<Arc<Queue>>>), AnyError>
+        DeviceResult<(Arc<Self>, Vec<Vec<Arc<Queue>>>)>
     {
         let it = &instance.table;
         let app_info = Arc::clone(&instance.app_info);
@@ -167,8 +167,8 @@ impl Device {
         }
     }
 
-    pub unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>)
-        -> Result<Swapchain, AnyError>
+    pub unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>) ->
+        DeviceResult<Swapchain>
     {
         let mut swapchain = Swapchain::new(surface, self)?;
         set_name!(swapchain);

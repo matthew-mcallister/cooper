@@ -27,6 +27,7 @@ smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
 spv = { path = "../spirv", package = "cooper-spirv" }
 unit = { path = "../unit", package = "cooper-unit" }
 window = { path = "../window", package = "cooper-window" }
+anyhow = "1.0.33"
 
 [dependencies.vk]
 git = "https://gitlab.com/matthew-mcallister/vk-ffi"

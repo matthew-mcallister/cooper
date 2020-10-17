@@ -51,9 +51,9 @@ impl Drop for Instance {
 
 impl Instance {
     pub unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) ->
-        Result<Self, AnyError>
+        DeviceResult<Self>
     {
-        if !vk.supported() { Err("vulkan not available")?; }
+        if !vk.supported() { Err(err_msg!("vulkan not available"))?; }
 
         let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
@@ -156,7 +156,7 @@ impl Instance {
     }
 
     pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
-        Result<(Arc<Device>, Vec<Vec<Arc<Queue>>>), AnyError>
+        DeviceResult<(Arc<Device>, Vec<Vec<Arc<Queue>>>)>
     {
         Ok(Device::new(Arc::clone(self), pdev)?)
     }
@@ -164,7 +164,7 @@ impl Instance {
     pub unsafe fn create_surface(
         self: &Arc<Self>,
         window: &Arc<window::Window>,
-    ) -> Result<Arc<Surface>, AnyError> {
+    ) -> DeviceResult<Arc<Surface>> {
         Ok(Arc::new(Surface::new(Arc::clone(self), Arc::clone(window))?))
     }
 

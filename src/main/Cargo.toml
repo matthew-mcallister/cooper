@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
 derivative = "1"
-derive_more = "0.14"
+derive_more = "0.99.11"
 fnv = "1"
 gfx = { path = "../graphics-vulkan", package = "cooper-graphics-vulkan" }
 lodepng = "2.4"

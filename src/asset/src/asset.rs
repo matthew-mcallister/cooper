@@ -26,12 +26,14 @@ impl AssetCache {
     pub fn get_or_load_image(&mut self, rloop: &mut RenderLoop, path: &str) ->
         &Arc<ImageDef>
     {
-        try_return_elem!(&self.images, path);
-        trace!("AssetCache: loading image {}", path);
-        let image = image::open(path)?;
-        let name = path.to_owned();
-        let image = load_image(rloop, image, Some(name.clone()));
-        &*self.images.entry(name).insert(Arc::clone(&image)).into_mut()
+        if !self.images.contains_key(path) {
+            trace!("AssetCache: loading image {}", path);
+            let image = image::open(path)?;
+            let name = path.to_owned();
+            let image = load_image(rloop, image, Some(name.clone()));
+            self.images.insert(name, Arc::clone(&image));
+        }
+        &self.images[path]
     }
 
     pub fn get_image(&self, path: &str) -> Option<&Arc<ImageDef>> {
@@ -42,10 +44,12 @@ impl AssetCache {
     pub fn get_or_load_scene(&mut self, rloop: &mut RenderLoop, path: &str) ->
         &SceneCollection
     {
-        try_return_elem!(&self.scenes, path);
-        trace!("AssetCache: loading scene {}", path);
-        let scene = load_gltf(rloop, self, path)?;
-        &*self.scenes.entry(path.into()).insert(scene).into_mut()
+        if !self.images.contains_key(path) {
+            trace!("AssetCache: loading scene {}", path);
+            let scene = load_gltf(rloop, self, path)?;
+            self.scenes.insert(path.into(), scene);
+        }
+        &self.scenes[path]
     }
 
     pub fn get_scene(&self, path: &str) -> Option<&SceneCollection> {

@@ -29,7 +29,7 @@ fn app_info() -> AppInfo {
 }
 
 impl TestContext {
-    fn create_window(&self) -> Result<Arc<window::Window>, AnyError> {
+    fn create_window(&self) -> DeviceResult<Arc<window::Window>> {
         let show_window = std::env::var("TESTING_SHOW_WINDOW")
             .map_or(false, |val| val == "1");
         let info = window::CreateInfo {
@@ -43,7 +43,7 @@ impl TestContext {
         Ok(Arc::new(self.proxy.create_window(info)?))
     }
 
-    unsafe fn create_swapchain(&self) -> Result<TestVars, AnyError> {
+    unsafe fn create_swapchain(&self) -> DeviceResult<TestVars> {
         let window = self.create_window()?;
         let app_info = app_info();
         let vk_platform = window.vk_platform().clone();

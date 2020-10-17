@@ -1,9 +1,9 @@
 use std::os::raw::c_int;
 use std::sync::Arc;
 
+use anyhow::Result as AnyResult;
 use derive_more::From;
 use device::*;
-use prelude::*;
 
 use crate::*;
 
@@ -41,7 +41,7 @@ fn app_info() -> AppInfo {
 }
 
 impl TestContext {
-    fn create_window(&self) -> Result<Arc<window::Window>, AnyError> {
+    fn create_window(&self) -> AnyResult<Arc<window::Window>> {
         let show_window = std::env::var("TESTING_SHOW_WINDOW")
             .map_or(false, |val| val == "1");
         let info = window::CreateInfo {
@@ -55,7 +55,7 @@ impl TestContext {
         Ok(Arc::new(self.proxy.create_window(info)?))
     }
 
-    unsafe fn create_swapchain(&self) -> Result<TestVars, AnyError> {
+    unsafe fn create_swapchain(&self) -> AnyResult<TestVars> {
         let window = self.create_window()?;
         let app_info = app_info();
         let vk_platform = window.vk_platform().clone();
@@ -71,7 +71,7 @@ impl TestContext {
         })
     }
 
-    unsafe fn create_render_loop(&self) -> Result<Box<RenderLoop>, AnyError> {
+    unsafe fn create_render_loop(&self) -> AnyResult<Box<RenderLoop>> {
         Ok(Box::new(RenderLoop::new(app_info(), self.create_window()?)?))
     }
 }

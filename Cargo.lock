@@ -26,9 +26,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.32"
+version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b602bfe940d21c130f3895acd65221e8a61270debe89d628b9cb4e3ccb8569b"
+checksum = "a1fd36ffbb1fb7c834eac128ea8d0e310c5aeb635548f9d58861e1308d46e71c"
 
 [[package]]
 name = "array-macro"
@@ -155,6 +155,7 @@ dependencies = [
 name = "cooper-device"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitflags",
  "byteorder",
  "cooper-base",
@@ -275,7 +276,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "derivative",
- "derive_more 0.15.0",
+ "derive_more 0.99.11",
  "enum-map",
  "regex",
 ]
@@ -288,7 +289,7 @@ dependencies = [
  "cooper-prelude",
  "cooper-unit",
  "crossbeam-channel",
- "derive_more 0.14.1",
+ "derive_more 0.99.11",
  "glfw-ffi",
  "vulkan-headers",
 ]
@@ -368,18 +369,6 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
  "syn 1.0.42",
-]
-
-[[package]]
-name = "derive_more"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d944ac6003ed268757ef1ee686753b57efc5fcf0ebe7b64c9fc81e7e32ff839"
-dependencies = [
- "proc-macro2 0.4.30",
- "quote 0.6.13",
- "rustc_version",
- "syn 0.15.44",
 ]
 
 [[package]]

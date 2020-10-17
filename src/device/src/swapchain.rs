@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use derivative::Derivative;
 use log::{debug, trace};
-use prelude::*;
 
 use crate::*;
 
@@ -54,8 +53,8 @@ impl Drop for Surface {
 
 impl Surface {
     #[inline]
-    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>)
-        -> Result<Self, AnyError>
+    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
+        DeviceResult<Self>
     {
         let inner = window.create_surface(instance.table.instance)?;
         Ok(Surface {
@@ -79,7 +78,7 @@ impl Drop for Swapchain {
 
 impl Swapchain {
     pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
-        Result<Self, AnyError>
+        DeviceResult<Self>
     {
         let mut result = Swapchain {
             surface,
@@ -141,7 +140,7 @@ impl Swapchain {
         self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
     }
 
-    pub unsafe fn recreate(&mut self) -> Result<(), AnyError> {
+    pub unsafe fn recreate(&mut self) -> DeviceResult<()> {
         let dt = &*self.device.table;
         let it = &*self.device.instance.table;
         let pdev = self.device.pdev;
@@ -169,7 +168,7 @@ impl Swapchain {
         if !formats.iter().any(|fmt| fmt.format == format &&
             fmt.color_space == color_space)
         {
-            Err("surface format not supported")?;
+            Err(err_msg!("surface format not supported"))?;
         }
 
         // FIXME: On Wayland, the surface extent is defined by the
@@ -185,13 +184,13 @@ impl Swapchain {
 
         let composite_alpha = vk::CompositeAlphaFlagsKHR::OPAQUE_BIT_KHR;
         if !caps.supported_composite_alpha.intersects(composite_alpha)
-            { Err("swapchain composite alpha mode not available")?; }
+            { Err(err_msg!("swapchain composite alpha mode not available"))?; }
 
         let image_usage
             = vk::ImageUsageFlags::COLOR_ATTACHMENT_BIT
             | vk::ImageUsageFlags::TRANSFER_DST_BIT;
         if !caps.supported_usage_flags.contains(image_usage)
-            { Err("swapchain image usage not supported")?; }
+            { Err(err_msg!("swapchain image usage not supported"))?; }
 
         let create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
@@ -361,7 +360,7 @@ impl Default for Token {
 }
 
 pub unsafe fn device_for_surface(surface: &Surface) ->
-    Result<vk::PhysicalDevice, AnyError>
+    DeviceResult<vk::PhysicalDevice>
 {
     let instance = &*surface.instance;
     let surface = surface.inner;
@@ -383,13 +382,13 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
         return Ok(pd);
     }
 
-    Err("no presentable graphics device".into())
+    Err(err_msg!("no presentable graphics device"))
 }
 
 pub unsafe fn init_swapchain(
     app_info: AppInfo,
     window: Arc<window::Window>
-) -> Result<(Swapchain, Vec<Vec<Arc<Queue>>>), AnyError> {
+) -> DeviceResult<(Swapchain, Vec<Vec<Arc<Queue>>>)> {
     let vk_platform = window.vk_platform().clone();
     let instance = Arc::new(Instance::new(vk_platform, app_info)?);
     let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);

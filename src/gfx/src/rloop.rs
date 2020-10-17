@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use device::*;
 use log::{debug, trace};
-use prelude::*;
 
 use crate::*;
 
@@ -40,7 +39,7 @@ impl Drop for RenderLoop {
 
 impl RenderLoop {
     pub fn new(app_info: AppInfo, window: Arc<window::Window>) ->
-        Result<Self, AnyError>
+        DeviceResult<Self>
     {
         let (swapchain, queues) = unsafe { init_swapchain(app_info, window)? };
         let device = Arc::clone(swapchain.device());

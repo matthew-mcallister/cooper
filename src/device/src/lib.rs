@@ -40,6 +40,12 @@ macro_rules! test_type {
     () => { crate::testing::Test }
 }
 
+macro_rules! err_msg {
+    ($msg:literal) => {
+        crate::Error(anyhow::anyhow!($msg))
+    }
+}
+
 #[macro_use]
 mod util;
 
@@ -86,6 +92,22 @@ pub use vertex::*;
 
 #[cfg(test)]
 mod testing;
+
+use derive_more::Display;
+
+#[derive(Debug, Display)]
+#[display(fmt = "{}", _0)]
+pub struct Error(anyhow::Error);
+
+impl std::error::Error for Error {}
+
+impl From<vk::Result> for Error {
+    fn from(res: vk::Result) -> Self {
+        Self(res.into())
+    }
+}
+
+pub type DeviceResult<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 fn main() {

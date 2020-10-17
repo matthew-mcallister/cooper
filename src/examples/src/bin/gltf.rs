@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use anyhow as any;
+use anyhow::Result as AnyResult;
 use asset::{AssetCache, NodeData, Primitive, SceneCollection};
 use gfx::{
     MaterialDef, MeshInstance, PerspectiveParams, RenderLoop, RenderWorld,
@@ -141,7 +141,7 @@ fn main() {
     unsafe { with_event_loop(main_with_proxy); }
 }
 
-fn main_with_proxy(proxy: window::EventLoopProxy) -> any::Result<()> {
+fn main_with_proxy(proxy: window::EventLoopProxy) -> AnyResult<()> {
     let info = window::CreateInfo {
         title: NAME.to_owned(),
         dims: (1280, 768).into(),
@@ -155,7 +155,7 @@ fn main_with_proxy(proxy: window::EventLoopProxy) -> any::Result<()> {
         debug: true,
         ..Default::default()
     };
-    let mut rloop = RenderLoop::new(app_info, Arc::clone(&window)).unwrap();
+    let mut rloop = RenderLoop::new(app_info, Arc::clone(&window))?;
     let mut assets = AssetCache::new();
 
     let path = std::env::var("GLTF_PATH")?;
