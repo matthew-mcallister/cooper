@@ -9,6 +9,7 @@ SHADER_SRC_FILES := \
     trivial_vert.glsl \
     trivial_frag.glsl \
     static_vert.glsl \
+    minimal_vert.glsl \
     geom_vis_frag.glsl \
     tex_vis_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))

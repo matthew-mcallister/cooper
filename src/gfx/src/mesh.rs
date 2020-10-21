@@ -5,6 +5,9 @@ use device::*;
 
 use crate::*;
 
+/// A `RenderMesh` is an unresolved triangle stream. It contains handles
+/// to the asynchronously uploaded vertex attribute data which must be
+/// resolved before baking into a renderable primitive.
 #[derive(Debug, Default)]
 pub struct RenderMesh {
     vertex_count: u32,
@@ -12,17 +15,17 @@ pub struct RenderMesh {
     bindings: PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>,
 }
 
-// TODO: constant/dummy attributes (buffer stride = 0)
+// TODO: Hide this type
 #[derive(Debug)]
 pub struct AttrBuffer<B> {
-    pub buffer: Arc<B>,
-    pub format: Format,
+    crate buffer: Arc<B>,
+    crate format: Format,
 }
 
 #[derive(Debug)]
 pub struct IndexBuffer<B> {
-    pub buffer: Arc<B>,
-    pub ty: IndexType,
+    crate buffer: Arc<B>,
+    crate ty: IndexType,
 }
 
 impl RenderMesh {

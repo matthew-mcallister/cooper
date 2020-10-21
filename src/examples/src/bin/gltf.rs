@@ -101,7 +101,7 @@ fn render_mesh(
 ) {
     let rot = xform.submatrix(0, 0);
     let pos = xform[3].xyz();
-    // TODO: Uhhh is this API supposed to support non-uniform scaling?
+    // TODO: Is this API supposed to support anisotropic scaling?
     world.add_object(MeshInstance {
         mesh: Arc::clone(&prim.mesh),
         pos,
@@ -156,7 +156,7 @@ fn main_with_proxy(proxy: window::EventLoopProxy) -> AnyResult<()> {
         ..Default::default()
     };
     let mut rloop = RenderLoop::new(app_info, Arc::clone(&window))?;
-    let mut assets = AssetCache::new();
+    let mut assets = AssetCache::new(&mut rloop);
 
     let path = std::env::var("GLTF_PATH")?;
     let scene = assets.get_or_load_scene(&mut rloop, &path)?;

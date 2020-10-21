@@ -17,6 +17,8 @@ pub struct Shader {
     source_file: Option<String>,
     inputs: Vec<ShaderLocation>,
     outputs: Vec<ShaderLocation>,
+    // TODO: reflect uniforms so we can make sure all descriptors are
+    // bound.
 }
 
 /// A choice of shader plus specialization constant values.

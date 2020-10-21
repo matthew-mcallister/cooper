@@ -29,6 +29,7 @@ impl Globals {
         let shaders = GlobalShaders::new(&device);
         let specs = GlobalShaderSpecs::new(&shaders);
 
+        // TODO: Probably should make sure these are filled with zero.
         let empty_uniform_buffer = Arc::new(state.buffers.alloc(
             BufferBinding::Uniform,
             Lifetime::Static,

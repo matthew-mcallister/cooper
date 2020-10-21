@@ -86,6 +86,12 @@ impl From<Transform> for Matrix4 {
     }
 }
 
+impl Transform {
+    pub fn to_matrix(self) -> Matrix4 {
+        self.into()
+    }
+}
+
 impl NodeData {
     crate fn from_node(node: &gltf::Node<'_>) -> Self {
         if let Some(mesh) = node.mesh() {

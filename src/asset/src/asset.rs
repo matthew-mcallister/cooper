@@ -11,15 +11,19 @@ use crate::Error;
 use crate::gltf::load_gltf;
 use crate::scene::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AssetCache {
     images: HashMap<String, Arc<ImageDef>>,
     scenes: HashMap<String, SceneCollection>,
 }
 
 impl AssetCache {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(rloop: &mut RenderLoop) -> Self {
+        let _ = rloop;
+        Self {
+            images: Default::default(),
+            scenes: Default::default(),
+        }
     }
 
     #[throws]

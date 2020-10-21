@@ -310,19 +310,25 @@ fn accessor_index_type(ty: accessor::DataType) -> IndexType {
     match ty {
         DataType::U16 => IndexType::U16,
         DataType::U32 => IndexType::U32,
-        _ => throw!(format!("bad index type: {:?}", ty)),
+        _ => throw!(format!("unsupported index type: {:?}", ty)),
     }
 }
 
+// TODO: Actually implement all required shaders
 #[throws]
 fn load_material<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     mesh: &Arc<RenderMesh>,
     material: gltf::Material<'dat>,
 ) -> MaterialDesc {
-    // TODO: Actually implement shaders
-    let vertex_shader = Arc::clone(&loader.rloop.shaders().static_vert);
+    let vertex_shader = if mesh.bindings().contains_key(VertexAttr::Texcoord0)
+    {
+        Arc::clone(&loader.rloop.shaders().static_vert)
+    } else {
+        Arc::clone(&loader.rloop.shaders().minimal_vert)
+    };
     let vertex_shader: Arc<ShaderSpec> = Arc::new(vertex_shader.into());
+
     let frag_shader = Arc::clone(&loader.rloop.specs().albedo_frag);
 
     let vertex_layout = mesh.vertex_layout()
@@ -353,31 +359,27 @@ fn load_material_images<'a, 'st, 'dat>(
     tassert!(material.alpha_mode() == gltf::material::AlphaMode::Opaque,
         "transparency not supported");
 
-    let normal = if let Some(binding) = material.normal_texture() {
-        tassert!(binding.tex_coord() == 0, "texcoord != 0");
-        tassert!(binding.scale() == 1.0, "normal scale != 1");
-        Some(load_texture(loader, binding.texture())?)
-    } else { None };
+    if let Some(binding) = material.normal_texture() {
+        tassert!(binding.scale() == 1.0, "normal texture scale != 1");
+    }
 
     let pbr = material.pbr_metallic_roughness();
 
-    macro_rules! try_load_texture { ($texture:expr) => {
+    macro_rules! try_load_texture(($texture:expr) => {
         if let Some(binding) = $texture {
             tassert!(binding.tex_coord() == 0, "texcoord != 0");
             Some(load_texture(loader, binding.texture())?)
         } else { None }
-    } }
+    });
 
-    let albedo = try_load_texture!(pbr.base_color_texture());
-    let metal_rough = try_load_texture!(pbr.metallic_roughness_texture());
+    let images = partial_map_opt! {
+        MaterialImage::Normal => try_load_texture!(material.normal_texture()),
+        MaterialImage::Albedo => try_load_texture!(pbr.base_color_texture()),
+        MaterialImage::MetallicRoughness =>
+            try_load_texture!(pbr.metallic_roughness_texture()),
+    };
 
-    // NB: This is fixed in the upcoming version of fehler
-    #[allow(unused_parens)]
-    (partial_map_opt! {
-        MaterialImage::Albedo => albedo,
-        MaterialImage::Normal => normal,
-        MaterialImage::MetallicRoughness => metal_rough,
-    })
+    images
 }
 
 #[throws]

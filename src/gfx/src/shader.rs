@@ -10,6 +10,7 @@ pub struct GlobalShaders {
     pub trivial_vert: Arc<Shader>,
     pub trivial_frag: Arc<Shader>,
     pub static_vert: Arc<Shader>,
+    pub minimal_vert: Arc<Shader>,
     pub geom_vis_frag: Arc<Shader>,
     pub tex_vis_frag: Arc<Shader>,
 }
@@ -61,6 +62,7 @@ mod shader_sources {
         trivial_vert = "trivial_vert";
         trivial_frag = "trivial_frag";
         static_vert = "static_vert";
+        minimal_vert = "minimal_vert";
         geom_vis_frag = "geom_vis_frag";
         tex_vis_frag = "tex_vis_frag";
     }
@@ -84,6 +86,7 @@ impl GlobalShaders {
             trivial_vert,
             trivial_frag,
             static_vert,
+            minimal_vert,
             geom_vis_frag,
             tex_vis_frag,
         }

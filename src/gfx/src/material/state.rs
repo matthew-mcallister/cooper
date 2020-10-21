@@ -124,8 +124,9 @@ unsafe fn create_pipeline(
     Arc::clone(state.pipelines.get_or_create_committed_gfx(&desc))
 }
 
-// TODO: Resolve resources as they become available rather than
-// checking all resources every time.
+// If all images used in a material are available to shaders, prepares
+// a descriptor set that can be passed directly to shaders for
+// rendering. Fails if some images are unavailable.
 fn try_resolve_material_resources(
     state: &mut SystemState,
     globals: &Globals,
@@ -150,10 +151,9 @@ fn try_resolve_material_resources(
     Some(MaterialResources { images, desc })
 }
 
-fn create_image_view(
-    binding: &ImageBindingDesc,
-    image: Arc<Image>,
-) -> Arc<ImageView> {
+fn create_image_view(binding: &ImageBindingDesc, image: Arc<Image>) ->
+    Arc<ImageView>
+{
     // TODO: We currently create a new ImageView for every image,
     // but it may be worthwhile to cache and share views.
     unsafe { Arc::new(ImageView::new(
