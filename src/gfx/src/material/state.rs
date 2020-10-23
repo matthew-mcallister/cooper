@@ -126,43 +126,28 @@ unsafe fn create_pipeline(
 
 // If all images used in a material are available to shaders, prepares
 // a descriptor set that can be passed directly to shaders for
-// rendering. Fails if some images are unavailable.
+// rendering. Fails if any image is unavailable.
 fn try_resolve_material_resources(
     state: &mut SystemState,
     globals: &Globals,
     resources: &ResourceSystem,
     def: &Arc<MaterialDef>,
 ) -> Option<MaterialResources> {
-    let images: PartialEnumMap<_, _> = def.image_bindings().iter()
-        .map(|(k, binding)| {
-            let image = resources.get_image(&binding.image)?;
-            Some((k, (binding, image)))
-        }: Option<_>)
-        .collect::<Option<_>>()?;
-    let default_view = &globals.immediate_image_2d;
-    let images = EnumMap::from(|k| {
-        let state = if let Some((binding, image)) = images.get(k) {
-            create_image_view(binding, Arc::clone(image))
-        } else { Arc::clone(default_view) };
-        state
-    });
+    // TODO: EnumMap doesn't allow fallible creation...
+    let mut images = PartialEnumMap::new();
+    for k in MaterialImage::values() {
+        let def = if let Some(binding) = def.image_bindings().get(k) {
+            &binding.image
+        } else {
+            &globals.empty_image_2d
+        };
+        images.insert(k, resources.get_image(def)?);
+    }
+    // TODO: This creates many redundant image views
+    let images = EnumMap::from(|k| images[k].create_full_view());
     let desc = Arc::new(create_descriptor_set(
         state, def.set_layout(), &images));
     Some(MaterialResources { images, desc })
-}
-
-fn create_image_view(binding: &ImageBindingDesc, image: Arc<Image>) ->
-    Arc<ImageView>
-{
-    // TODO: We currently create a new ImageView for every image,
-    // but it may be worthwhile to cache and share views.
-    unsafe { Arc::new(ImageView::new(
-        image,
-        Default::default(),
-        binding.image.format(),
-        Default::default(),
-        binding.subresources,
-    )) }
 }
 
 pub(super) fn create_set_layout(

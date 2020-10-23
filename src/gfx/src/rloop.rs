@@ -51,7 +51,6 @@ impl RenderLoop {
 
         let globals = Arc::new(Globals::new(&mut state));
         globals.upload_images(&mut resources);
-        // TODO: transition layout of global default images
 
         let materials = MaterialStateTable::new(&state, &globals);
         let renderer = WorldRenderer::new(

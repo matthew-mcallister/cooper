@@ -3,8 +3,8 @@ use std::sync::Arc;
 use base::PartialEnumMap;
 use derivative::Derivative;
 use device::{
-    CullMode, DescriptorSetLayout, Image, ImageDef, ImageSubresources,
-    SamplerDesc, ShaderSpec, ShaderStage, ShaderStageMap, VertexInputLayout,
+    CullMode, DescriptorSetLayout, ImageDef, SamplerDesc, ShaderSpec,
+    ShaderStage, ShaderStageMap, VertexInputLayout,
 };
 use enum_map::Enum;
 
@@ -30,7 +30,6 @@ pub struct ImageBindingDesc {
     #[derivative(Hash(hash_with = "ptr_hash"))]
     #[derivative(PartialEq(compare_with = "ptr_eq"))]
     pub image: Arc<ImageDef>,
-    pub subresources: ImageSubresources,
     pub sampler_state: SamplerDesc,
 }
 impl Eq for ImageBindingDesc {}

@@ -42,7 +42,7 @@ impl UploadStage {
     crate unsafe fn stage_buffer(&self) {
         // No need to stage buffers on UMA
         // TODO: assert!(!buffer.is_device_local());
-        todo!()
+        todo!("support discrete memory")
     }
 
     /// In the returned buffer, mipmap levels are allocated contiguously

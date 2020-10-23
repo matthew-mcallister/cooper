@@ -150,7 +150,7 @@ impl UploadScheduler {
 
     crate fn query_tasks(&mut self) -> SchedulerStatus {
         self.avail_batch = self.sem.get_value();
-        let status = if self.avail_batch() < self.pending_batch {
+        let status = if self.avail_batch < self.pending_batch {
             SchedulerStatus::Busy
         } else {
             SchedulerStatus::Idle
@@ -171,6 +171,8 @@ impl UploadScheduler {
         if self.tasks.is_empty() { return; }
 
         self.pending_batch += 1;
+        debug!("UploadScheduler::schedule: pending_batch: {}",
+            self.pending_batch);
 
         let mut pool = self.pool.take().unwrap();
         let mut cmds = unsafe {

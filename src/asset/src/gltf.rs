@@ -389,7 +389,6 @@ fn load_texture<'a, 'st, 'dat>(
 ) -> ImageBindingDesc {
     let image = Arc::clone(&loader.images[tex.source().index() as usize]);
     ImageBindingDesc {
-        subresources: image.all_subresources(),
         image,
         sampler_state: load_sampler(tex.sampler()),
     }

@@ -801,6 +801,16 @@ impl XferCmds {
         buffer_barriers: &[vk::BufferMemoryBarrier],
         image_barriers: &[vk::ImageMemoryBarrier],
     ) {
+        trace!(concat!(
+            "XferCmds::pipeline_barrier(",
+            "src_stage_mask: {:?}, ",
+            "dst_stage_mask: {:?}, ",
+            "dependency_flags: {:?}, ",
+            "global_barriers: {:?}, ",
+            "buffer_barriers: {:?}, ",
+            "image_barriers: {:?})",
+        ), src_stage_mask, dst_stage_mask, dependency_flags, global_barriers,
+            buffer_barriers, image_barriers);
         self.dt().cmd_pipeline_barrier(
             self.raw(),
             src_stage_mask,

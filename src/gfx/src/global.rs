@@ -107,6 +107,8 @@ impl Globals {
         }
     }
 
+    /// Zero-fills the global default image, preparing it to be used in
+    /// shaders.
     crate fn upload_images(&self, resources: &mut ResourceSystem) {
         let image_data = Arc::new(vec![0, 0, 0, 0]);
         resources.upload_image(

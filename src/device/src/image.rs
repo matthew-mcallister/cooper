@@ -252,7 +252,9 @@ impl Image {
         self.def.all_layers_for_mip_level(mip_level)
     }
 
-    pub fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
+    pub fn create_view(self: &Arc<Self>, subresources: ImageSubresources) ->
+        Arc<ImageView>
+    {
         let mut flags = ImageViewFlags::empty();
         let min_array_layers;
         if self.ty() == ImageType::Cube {
@@ -270,9 +272,13 @@ impl Image {
                 flags,
                 self.format(),
                 Default::default(),
-                self.all_subresources(),
+                subresources,
             ))
         }
+    }
+
+    pub fn create_full_view(self: &Arc<Self>) -> Arc<ImageView> {
+        self.create_view(self.all_subresources())
     }
 }
 
