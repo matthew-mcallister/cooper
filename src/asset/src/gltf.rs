@@ -11,7 +11,7 @@ use log::trace;
 use math::{BBox3, vec};
 use prelude::tryopt;
 
-use crate::{Error, Result};
+use crate::{Error, Result, vec_to_bytes};
 use crate::asset::*;
 use crate::scene::*;
 
@@ -74,6 +74,7 @@ impl<'st, 'dat> Loader<'st, 'dat> {
         (&self.buffers[view.buffer().index()], view.offset())
     }
 
+    // TODO: prevent creating redundant copies in VRAM
     #[throws]
     fn read_attr_accessor(&self, accessor: &gltf::Accessor<'_>) ->
         (Format, SharedSlice)
@@ -84,14 +85,31 @@ impl<'st, 'dat> Loader<'st, 'dat> {
         (format, SharedSlice::new(Arc::clone(data), offset, len))
     }
 
+    // TODO: redundant copies
     #[throws]
     fn read_index_accessor(&self, accessor: &gltf::Accessor<'_>) ->
         (IndexType, SharedSlice)
     {
-        let ty = accessor_index_type(accessor.data_type())?;
+        use gltf::accessor::DataType;
         let (data, offset) = self.accessor_view_data(accessor)?;
-        let len = accessor.count() * ty.size();
-        (ty, SharedSlice::new(Arc::clone(data), offset, len))
+        let acc_ty = accessor.data_type();
+        let idx_ty = match acc_ty {
+            DataType::U8 => {
+                // Convert U8 to U16
+                let len = accessor.count();
+                let old_data = &data[offset..][..len];
+                let new_data = old_data.iter().map(|&x| x as u16).collect();
+                let new_data = vec_to_bytes(new_data);
+                let new_len = new_data.len();
+                let shared = SharedSlice::new(Arc::new(new_data), 0, new_len);
+                return (IndexType::U16, shared);
+            },
+            DataType::U16 => IndexType::U16,
+            DataType::U32 => IndexType::U32,
+            _ => throw!(format!("unsupported index type: {:?}", acc_ty)),
+        };
+        let len = accessor.count() * idx_ty.size();
+        (idx_ty, SharedSlice::new(Arc::clone(data), offset, len))
     }
 
     #[throws]
@@ -143,8 +161,6 @@ fn load_resources(
     loader.images = loader.bundle.document.images()
         .map(|image| load_image(&mut loader, image))
         .collect::<Result<_>>()?;
-    // TODO: Load accessors here (in case same data is reused on
-    // multiple meshes)
     loader.meshes = loader.bundle.document.meshes()
         .map(|mesh| load_mesh(&mut loader, mesh))
         .collect::<Result<_>>()?;
@@ -301,16 +317,6 @@ fn accessor_format(acc: &gltf::Accessor<'_>) -> Format {
         (Type::F32, Dim::Vec3, _) => Format::RGB32F,
         (Type::F32, Dim::Vec4, _) => Format::RGBA32F,
         _ => throw!(format!("unsupported format: {:?}", tuple)),
-    }
-}
-
-#[throws]
-fn accessor_index_type(ty: accessor::DataType) -> IndexType {
-    use accessor::DataType;
-    match ty {
-        DataType::U16 => IndexType::U16,
-        DataType::U32 => IndexType::U32,
-        _ => throw!(format!("unsupported index type: {:?}", ty)),
     }
 }
 
