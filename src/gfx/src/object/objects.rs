@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use derive_more::From;
-use math::{Matrix3, Vector3, Matrix4};
+use math::Matrix4;
 
 use crate::RenderMesh;
 use crate::material::MaterialDef;
@@ -16,15 +16,12 @@ pub enum RenderObject {
 pub struct MeshInstance {
     pub mesh: Arc<RenderMesh>,
     pub material: Arc<MaterialDef>,
-    /// Assumed to be orthogonal.
-    pub rot: Matrix3,
-    pub pos: Vector3,
-    //TODO:
-    //pub scale: f32,
+    /// Must be decomposible into scale + rotation + translation.
+    pub xform: Matrix4,
 }
 
 impl MeshInstance {
     pub fn xform(&self) -> Matrix4 {
-        self.rot.translate(self.pos)
+        self.xform
     }
 }

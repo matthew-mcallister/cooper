@@ -85,7 +85,7 @@ fn render_world(
                     .zip(materials[idx].iter())
                 {
                     let material = &materials[mat_idx % materials.len()];
-                    let xform = &xforms[node_idx];
+                    let xform = xforms[node_idx];
                     render_mesh(world, prim, Arc::clone(material), xform);
                 }
             }
@@ -97,15 +97,11 @@ fn render_mesh(
     world: &mut RenderWorld,
     prim: &Primitive,
     material: Arc<MaterialDef>,
-    xform: &Matrix4,
+    xform: Matrix4,
 ) {
-    let rot = xform.submatrix(0, 0);
-    let pos = xform[3].xyz();
-    // TODO: Is this API supposed to support anisotropic scaling?
     world.add_object(MeshInstance {
         mesh: Arc::clone(&prim.mesh),
-        pos,
-        rot,
+        xform,
         material,
     });
 }

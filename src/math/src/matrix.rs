@@ -14,7 +14,7 @@ use crate::vector::*;
 /// Indexing a matrix returns the column vector in that position, which
 /// is typical in numeric code but the reverse of the mathematical
 /// convention, in which the row comes first.
-// TODO: Override alignment for 2x2 and 4x4
+// TODO: Override alignment for 2x2 and 4x4?
 #[derive(AsRef, AsMut, Derivative, From, Into)]
 #[derivative(
     Clone(bound = ""),
