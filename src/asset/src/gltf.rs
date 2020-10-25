@@ -357,6 +357,16 @@ fn load_material<'a, 'st, 'dat>(
     }
 }
 
+fn default_sampler() -> SamplerDesc {
+    SamplerDesc {
+        mag_filter: Filter::Nearest,
+        min_filter: Filter::Nearest,
+        mipmap_mode: SamplerMipmapMode::Nearest,
+        anisotropy_level: AnisotropyLevel::One,
+        ..Default::default()
+    }
+}
+
 #[throws]
 fn load_material_images<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
@@ -374,12 +384,18 @@ fn load_material_images<'a, 'st, 'dat>(
     macro_rules! try_load_texture(($texture:expr) => {
         if let Some(binding) = $texture {
             tassert!(binding.tex_coord() == 0, "texcoord != 0");
-            Some(load_texture(loader, binding.texture())?)
+            Some(load_texture(loader, binding.texture()))
         } else { None }
     });
 
+    let normal = try_load_texture!(material.normal_texture())
+        .unwrap_or_else(|| ImageBindingDesc {
+            image: Arc::clone(loader.assets.default_normal_map()),
+            sampler_state: default_sampler(),
+        });
+
     let images = partial_map_opt! {
-        MaterialImage::Normal => try_load_texture!(material.normal_texture()),
+        MaterialImage::Normal => Some(normal),
         MaterialImage::Albedo => try_load_texture!(pbr.base_color_texture()),
         MaterialImage::MetallicRoughness =>
             try_load_texture!(pbr.metallic_roughness_texture()),
@@ -388,7 +404,6 @@ fn load_material_images<'a, 'st, 'dat>(
     images
 }
 
-#[throws]
 fn load_texture<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     tex: gltf::texture::Texture<'dat>,

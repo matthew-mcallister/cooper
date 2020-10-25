@@ -15,14 +15,27 @@ use crate::scene::*;
 pub struct AssetCache {
     images: HashMap<String, Arc<ImageDef>>,
     scenes: HashMap<String, SceneCollection>,
+    default_normal_map: Arc<ImageDef>,
 }
 
 impl AssetCache {
     pub fn new(rloop: &mut RenderLoop) -> Self {
-        let _ = rloop;
+        let default_normal_map = rloop.define_image(
+            Default::default(),
+            ImageType::Dim2,
+            Format::RGBA8,
+            (1, 1).into(),
+            1,
+            1,
+            Some("default_normal_map"),
+        );
+        let data = Arc::new(vec![127, 127, 255, 0]);
+        rloop.upload_image(&default_normal_map, data, 0);
+
         Self {
             images: Default::default(),
             scenes: Default::default(),
+            default_normal_map,
         }
     }
 
@@ -58,6 +71,10 @@ impl AssetCache {
 
     pub fn get_scene(&self, path: &str) -> Option<&SceneCollection> {
         self.scenes.get(path)
+    }
+
+    crate fn default_normal_map(&self) -> &Arc<ImageDef> {
+        &self.default_normal_map
     }
 }
 
