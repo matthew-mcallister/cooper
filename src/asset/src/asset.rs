@@ -20,22 +20,11 @@ pub struct AssetCache {
 
 impl AssetCache {
     pub fn new(rloop: &mut RenderLoop) -> Self {
-        let default_normal_map = rloop.define_image(
-            Default::default(),
-            ImageType::Dim2,
-            Format::RGBA8,
-            (1, 1).into(),
-            1,
-            1,
-            Some("default_normal_map"),
-        );
-        let data = Arc::new(vec![127, 127, 255, 0]);
-        rloop.upload_image(&default_normal_map, data, 0);
-
         Self {
             images: Default::default(),
             scenes: Default::default(),
-            default_normal_map,
+            default_normal_map:
+                create_monochrome_image(rloop, [128, 128, 255, 0]),
         }
     }
 
@@ -103,5 +92,24 @@ crate fn load_image(
     );
     rloop.upload_image(&image, Arc::new(data), 0);
 
+    image
+}
+
+crate fn create_monochrome_image(
+    rloop: &mut RenderLoop,
+    [r, g, b, a]: [u8; 4],
+) -> Arc<ImageDef> {
+    let name = format!("color_{}_{}_{}_{}", r, g, b, a);
+    let image = rloop.define_image(
+        Default::default(),
+        ImageType::Dim2,
+        Format::RGBA8,
+        (1, 1).into(),
+        1,
+        1,
+        Some(name),
+    );
+    let data = Arc::new(vec![r, g, b, a]);
+    rloop.upload_image(&image, data, 0);
     image
 }

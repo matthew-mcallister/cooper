@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use base::{PartialEnumMap, partial_map, partial_map_opt};
+use base::{PartialEnumMap, partial_map};
 use device::*;
 use derive_more::Constructor;
 use fehler::{throw, throws};
@@ -11,7 +11,7 @@ use log::trace;
 use math::{BBox3, vec};
 use prelude::tryopt;
 
-use crate::{Error, Result, vec_to_bytes};
+use crate::{Error, Result, create_monochrome_image, vec_to_bytes};
 use crate::asset::*;
 use crate::scene::*;
 
@@ -367,6 +367,13 @@ fn default_sampler() -> SamplerDesc {
     }
 }
 
+fn sfloat4_to_unorm4([r, g, b, a]: [f32; 4]) -> [u8; 4] {
+    fn f(x: f32) -> u8 {
+        (x * 255.0 + 0.5) as u8
+    }
+    [f(r), f(g), f(b), f(a)]
+}
+
 #[throws]
 fn load_material_images<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
@@ -378,8 +385,6 @@ fn load_material_images<'a, 'st, 'dat>(
     if let Some(binding) = material.normal_texture() {
         tassert!(binding.scale() == 1.0, "normal texture scale != 1");
     }
-
-    let pbr = material.pbr_metallic_roughness();
 
     macro_rules! try_load_texture(($texture:expr) => {
         if let Some(binding) = $texture {
@@ -394,11 +399,27 @@ fn load_material_images<'a, 'st, 'dat>(
             sampler_state: default_sampler(),
         });
 
-    let images = partial_map_opt! {
-        MaterialImage::Normal => Some(normal),
-        MaterialImage::Albedo => try_load_texture!(pbr.base_color_texture()),
-        MaterialImage::MetallicRoughness =>
-            try_load_texture!(pbr.metallic_roughness_texture()),
+    let pbr = material.pbr_metallic_roughness();
+
+    let base = sfloat4_to_unorm4(pbr.base_color_factor());
+    let albedo = try_load_texture!(pbr.base_color_texture())
+        .unwrap_or_else(|| ImageBindingDesc {
+            image: create_monochrome_image(&mut loader.rloop, base),
+            sampler_state: default_sampler(),
+        });
+
+    let (m, r) = (pbr.metallic_factor(), pbr.roughness_factor());
+    let base = sfloat4_to_unorm4([m, r, 0.0, 0.0]);
+    let metal_rough = try_load_texture!(pbr.metallic_roughness_texture())
+        .unwrap_or_else(|| ImageBindingDesc {
+            image: create_monochrome_image(&mut loader.rloop, base),
+            sampler_state: default_sampler(),
+        });
+
+    let images = partial_map! {
+        MaterialImage::Normal => normal,
+        MaterialImage::Albedo => albedo,
+        MaterialImage::MetallicRoughness => metal_rough,
     };
 
     images
