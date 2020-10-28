@@ -1,5 +1,6 @@
 #![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 
+use std::fmt;
 use std::ops::*;
 
 use derive_more::{AsRef, AsMut, From, Into};
@@ -39,6 +40,20 @@ pub type Matrix3x2 = Matrix<3, 2>;
 pub type Matrix3x4 = Matrix<3, 4>;
 pub type Matrix4x2 = Matrix<4, 2>;
 pub type Matrix4x3 = Matrix<4, 3>;
+
+// TODO: This is adequate for debugging but doesn't obey proper
+// indentation...
+impl<const M: usize, const N: usize> fmt::Display for Matrix<M, N>
+    where f32: SimdArray<M>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "[")?;
+        for i in 0..N {
+            writeln!(f, "    {},", self[i])?;
+        }
+        write!(f, "]")
+    }
+}
 
 impl<const M: usize, const N: usize> Matrix<M, N>
     where f32: SimdArray<M>

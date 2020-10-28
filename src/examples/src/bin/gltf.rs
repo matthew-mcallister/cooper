@@ -73,8 +73,7 @@ fn render_world(
 
     let mat_idx = (world.frame_num() / 109) as usize;
     for (node_idx, node) in scene.nodes.iter()
-        .map(|&node| &collection.nodes[node as usize])
-        .enumerate()
+        .map(|&node| (node as usize, &collection.nodes[node as usize]))
     {
         match node.data {
             NodeData::Empty => {},

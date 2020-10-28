@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::ops::*;
 
 use derivative::Derivative;
@@ -36,8 +36,8 @@ pub type Vector4 = Vector<4>;
 /// This trait provides basic vector methods that are usable with
 /// generics.
 pub trait SimdOps<const N: usize>:
-    Copy + Debug + Default + PartialEq + VectorOps<f32>
-        + Index<usize, Output = f32> + IndexMut<usize>
+    AsRef<[f32; N]> + AsMut<[f32; N]> + Copy + Debug + Default + PartialEq
+        + VectorOps<f32> + Index<usize, Output = f32> + IndexMut<usize>
 {
     fn splat(scalar: f32) -> Self;
     fn load(src: &[f32; N]) -> Self;
@@ -120,6 +120,21 @@ pub trait Swizzle4: Swizzle3 {
     fn a(self) -> f32 { self.w() }
     #[inline(always)]
     fn q(self) -> f32 { self.w() }
+}
+
+impl<const N: usize> fmt::Display for Vector<N>
+where
+    f32: Simd<N>,
+    Self: AsRef<[f32; N]>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let elems = self.as_ref();
+        write!(f, "[{}", elems[0])?;
+        for i in 1..N {
+            write!(f, ", {}", elems[i])?;
+        }
+        write!(f, "]")
+    }
 }
 
 const fn mask(n: usize) -> u8 {
@@ -509,9 +524,7 @@ macro_rules! impl_array_ops {
             }
         }
 
-        impl From<Vector<$n>> for [f32; $n]
-            where f32: Simd<$n>
-        {
+        impl From<Vector<$n>> for [f32; $n] {
             #[inline(always)]
             fn from(vec: Vector<$n>) -> Self {
                 let mut array: Self = [0.0; $n];
@@ -520,9 +533,7 @@ macro_rules! impl_array_ops {
             }
         }
 
-        impl AsRef<[f32; $n]> for Vector<$n>
-            where f32: Simd<$n>
-        {
+        impl AsRef<[f32; $n]> for Vector<$n> {
             #[inline(always)]
             fn as_ref(&self) -> &[f32; $n] {
                 unsafe { &*(self as *const Self as *const [f32; $n]) }
