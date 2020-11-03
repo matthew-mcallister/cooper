@@ -1,26 +1,15 @@
-use device::*;
 use math::matrix::*;
-use math::vector::*;
-
-use crate::*;
 
 #[derive(Debug)]
 crate struct SceneViewState {
     crate uniforms: SceneViewUniforms,
-    crate force_cull_mode: Option<CullMode>,
 }
 
 // TODO: Override Default
-// TODO: Give clearer names to rot and pos
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SceneView {
     pub perspective: PerspectiveParams,
-    /// Rotation of view camera.
-    pub rot: Matrix3,
-    /// Position of view camera.
-    pub pos: Vector3,
-    /// For debugging
-    pub force_cull_mode: Option<CullMode>,
+    pub view: Matrix4,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -46,47 +35,22 @@ crate struct PerspectiveUniforms {
     crate max_depth: f32,
 }
 
-// TODO: Give clearer names to view and view_pos
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 crate struct SceneViewUniforms {
     crate perspective: PerspectiveUniforms,
     /// Transforms from world space to view space.
     crate view: Matrix4,
-    /// Transforms from view space to world space.
-    crate view_inv: Matrix4,
-    // TODO:
-    //crate view_proj: [[f32; 4]; 4],
-    //crate view_proj_inv: [[f32; 4]; 4],
+    // Transforms from view space to world space.
+    //crate view_inv: Matrix4,
 }
 
-impl SceneViewState {
-    crate fn new(view: &SceneView) -> Self {
-        Self {
-            uniforms: view_uniforms(view),
-            force_cull_mode: view.force_cull_mode,
+impl SceneViewUniforms {
+    crate fn new(view: &SceneView) -> SceneViewUniforms {
+        SceneViewUniforms {
+            perspective: view.perspective.into(),
+            view: view.view,
         }
-    }
-
-    crate fn write_descriptor(
-        &self,
-        state: &SystemState,
-        descriptors: &mut SceneDescriptors,
-    ) {
-        let uniform_buffer = state.buffers.boxed(
-            BufferBinding::Uniform, Lifetime::Frame, self.uniforms);
-        descriptors.write_view_uniforms(BufferBox::range(&uniform_buffer));
-    }
-}
-
-fn view_uniforms(view: &SceneView) -> SceneViewUniforms {
-    let view_inv = view.rot.translate(view.pos);
-    let rot_inv = view.rot.transpose();
-    let view_mat = rot_inv.translate(rot_inv * (-view.pos));
-    SceneViewUniforms {
-        perspective: view.perspective.into(),
-        view: view_mat,
-        view_inv,
     }
 }
 

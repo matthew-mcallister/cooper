@@ -1,10 +1,6 @@
-use std::mem::MaybeUninit;
 use std::sync::Arc;
 
-use device::{
-    BufferAlloc, BufferBinding, BufferBox, DescriptorSet, GraphicsPipeline,
-    Lifetime, VertexInputLayout,
-};
+use device::{BufferAlloc, DescriptorSet, GraphicsPipeline, VertexInputLayout};
 use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
@@ -12,7 +8,6 @@ use prelude::*;
 use crate::{ResourceUnavailable, SystemState};
 use crate::material::MaterialStateTable;
 use crate::mesh::{AttrBuffer, IndexBuffer, RenderMesh};
-use crate::render::{PerInstanceData, SceneDescriptors, SceneViewUniforms};
 use crate::resource::ResourceSystem;
 use crate::util::SmallVec;
 use super::*;
@@ -22,6 +17,7 @@ crate struct RenderItem {
     crate mesh: MeshData,
     crate pipeline: Arc<GraphicsPipeline>,
     crate descriptors: Arc<DescriptorSet>,
+    crate instance: u32,
 }
 
 #[derive(Debug)]
@@ -49,10 +45,8 @@ impl MeshData {
 #[derive(Debug)]
 struct LowerCtx<'ctx> {
     state: &'ctx SystemState,
-    uniforms: &'ctx SceneViewUniforms,
     resources: &'ctx ResourceSystem,
     materials: &'ctx MaterialStateTable,
-    instance_data: &'static mut [PerInstanceData],
 }
 
 trait Lower {
@@ -63,42 +57,23 @@ trait Lower {
 impl<'ctx> LowerCtx<'ctx> {
     fn new(
         state: &'ctx SystemState,
-        uniforms: &'ctx SceneViewUniforms,
         resources: &'ctx ResourceSystem,
         materials: &'ctx MaterialStateTable,
-        descs: &'ctx mut SceneDescriptors,
         object_count: usize,
     ) -> Self {
         assert_gt!(object_count, 0);
-
-        let instance_buf = state.buffers.box_uninit(
-            BufferBinding::Storage,
-            Lifetime::Frame,
-            object_count,
-        );
-        descs.write_instance_uniforms(BufferBox::range(&instance_buf));
-
-        // TODO: 99% sure lifetimes can be used to ensure that there are
-        // no dangling pointers like this one at the end of a frame
-        let instance_data = unsafe {
-            let slice = &mut *BufferBox::leak(instance_buf).as_ptr();
-            MaybeUninit::slice_assume_init_mut(slice)
-        };
-
-        Self { state, uniforms, resources, materials, instance_data }
+        Self { state, resources, materials }
     }
 }
 
 crate fn lower_objects<'a>(
     state: &'a SystemState,
-    uniforms: &'a SceneViewUniforms,
     resources: &'a ResourceSystem,
     materials: &'a MaterialStateTable,
-    descs: &'a mut SceneDescriptors,
     objects: impl ExactSizeIterator<Item = RenderObject> + 'a,
 ) -> impl Iterator<Item = RenderItem> + 'a {
     let mut ctx = LowerCtx::new(
-        state, uniforms, resources, materials, descs, objects.len());
+        state, resources, materials, objects.len());
     // TODO: Allow overriding the action to take when lowering fails
     objects.into_iter().enumerate().filter_map(move |(i, obj)| {
         obj.lower(i as _, &mut ctx)
@@ -118,12 +93,9 @@ impl Lower for RenderObject {
 }
 
 impl Lower for MeshInstance {
-    fn lower(self, instance: u32, ctx: &mut LowerCtx<'_>) ->
+    fn lower(self, _instance: u32, ctx: &mut LowerCtx<'_>) ->
         Result<RenderItem, ResourceUnavailable>
     {
-        let xform = ctx.uniforms.view * self.xform();
-        ctx.instance_data[instance as usize].set_xform(xform);
-
         let state = ctx.materials.get(&self.material);
         let pipeline = Arc::clone(state.pipeline()?);
         let descriptors = Arc::clone(state.desc()?);
@@ -135,6 +107,7 @@ impl Lower for MeshInstance {
             mesh,
             pipeline,
             descriptors,
+            instance: self.xform_index,
         })
     }
 }

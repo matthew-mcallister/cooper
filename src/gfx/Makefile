@@ -25,7 +25,7 @@ shaders: $(SHADER_OBJS)
 
 $(SHADER_OBJ_DIR)/%.spv: \
     $(SHADER_SRC_DIR)/%.glsl \
-    $(SHADER_SRCS) \
+    $(SHADER_HDRS) \
     $(SHADER_OBJ_DIR)
 > $(SHADERC) $(SHADERC_FLAGS) $< -o $@
 

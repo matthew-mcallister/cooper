@@ -6,8 +6,8 @@
 layout(set = 0, binding = 0) uniform blk_scene {
     SceneView g_scene_view;
 };
-layout(set = 0, binding = 1) readonly buffer blk_inst {
-    Instance g_instances[];
+layout(set = 0, binding = 1) readonly buffer blk_xforms {
+    mat4 g_xforms[];
 };
 
 layout(location = VERTEX_ATTR_POSITION) in vec3 in_pos;
@@ -17,8 +17,7 @@ layout(location = 0) out vec3 out_normal;
 layout(location = 1) out vec2 out_texcoord0;
 
 void main() {
-    vec4 xform[3] = g_instances[gl_InstanceIndex].xform;
-    mat4 mv = transpose(mat4(xform[0], xform[1], xform[2], vec4(vec3(0), 1)));
+    mat4 mv = g_xforms[gl_InstanceIndex];
 
     vec4 view_pos = mv * vec4(in_pos, 1);
     gl_Position = g_scene_view.perspective.proj * view_pos;

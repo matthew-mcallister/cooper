@@ -35,11 +35,7 @@ struct Perspective {
 struct SceneView {
     Perspective perspective;
     mat4 view;
-    mat4 view_inv;
-};
-
-struct Instance {
-    vec4 xform[3];
+    //mat4 view_inv;
 };
 
 // Good for debugging

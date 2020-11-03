@@ -189,7 +189,12 @@ impl RenderLoop {
         state.frame_over();
         self.resources.schedule(&self.image_heap);
         self.materials.update_resolved_resources(state, &self.resources);
-        self.renderer.create_pipelines(state, &mut self.materials);
+        let layout = WorldUniforms::create_set_layout(&mut state.set_layouts);
+        self.renderer.create_pipelines(
+            &layout.into_owned(),
+            state,
+            &mut self.materials,
+        );
     }
 
     crate fn wait_for_render(&self) {

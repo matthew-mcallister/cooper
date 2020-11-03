@@ -21,7 +21,7 @@ impl InstanceRenderer {
 
     crate fn render(
         &mut self,
-        descriptors: &SceneDescriptors,
+        descriptors: &DescriptorSet,
         instances: &[RenderItem],
         cmds: &mut SubpassCmds,
     ) {
@@ -32,7 +32,7 @@ impl InstanceRenderer {
 }
 
 unsafe fn render_instances(
-    descriptors: &SceneDescriptors,
+    descriptors: &DescriptorSet,
     instances: &[RenderItem],
     cmds: &mut SubpassCmds,
 ) {
@@ -41,17 +41,16 @@ unsafe fn render_instances(
         cmds.bind_gfx_pipe(&item.pipeline);
 
         // TODO: this could be done outside the loop
-        if i == 0 { cmds.bind_gfx_descs(0, descriptors.inner()); }
+        if i == 0 { cmds.bind_gfx_descs(0, descriptors); }
         cmds.bind_gfx_descs(1, &item.descriptors);
 
         let mesh = &item.mesh;
         bind_mesh_data(cmds, mesh);
-        let fst_inst = i as u32;
         let count = mesh.vertex_count();
         if mesh.index().is_some() {
-            cmds.draw_indexed_offset(count, 1, 0, 0, fst_inst);
+            cmds.draw_indexed_offset(count, 1, 0, 0, item.instance);
         } else {
-            cmds.draw_offset(count, 1, 0, fst_inst);
+            cmds.draw_offset(count, 1, 0, item.instance);
         }
     }
 }

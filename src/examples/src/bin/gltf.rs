@@ -14,10 +14,10 @@ use anyhow::Result as AnyResult;
 use asset::{AssetCache, NodeData, Primitive, SceneCollection};
 use gfx::{
     MaterialDef, MeshInstance, PerspectiveParams, RenderLoop, RenderWorld,
-    SceneView,
+    SceneView, WorldUniforms,
 };
 use device::{AppInfo, ShaderStage};
-use math::{BBox3, MathItertools, Matrix3, Matrix4, vec3};
+use math::{BBox3, MathItertools, Matrix3, vec3};
 
 use cooper_examples::with_event_loop;
 
@@ -33,8 +33,6 @@ fn render_world(
     let fovy2 = 45.0f32.to_radians();
     let tan_fovy2 = fovy2.tan();
     let tan_fovx2 = 16.0 / 9.0 * tan_fovy2;
-
-    let xforms = collection.world_xforms();
     let scene = collection.default_scene();
 
     // TODO: compute transformed AABBs
@@ -67,13 +65,19 @@ fn render_world(
     ]);
 
     let mid = (bbox.min + bbox.max) / 2.0;
-    view.rot = rot;
-    view.pos = mid - rot * vec3(0.0, 0.0, dist);
-    world.set_view(view);
+    let pos = mid - rot * vec3(0.0, 0.0, dist);
+
+    let v = rot.translate(rot * (-pos));
+    view.view = v;
+
+    let mut xforms = collection.world_xforms();
+    xforms.iter_mut().for_each(|m| *m = v * *m);
+
+    world.set_uniforms(WorldUniforms { view, xforms });
 
     let mat_idx = (world.frame_num() / 109) as usize;
     for (node_idx, node) in scene.nodes.iter()
-        .map(|&node| (node as usize, &collection.nodes[node as usize]))
+        .map(|&idx| (idx as usize, &collection.nodes[idx as usize]))
     {
         match node.data {
             NodeData::Empty => {},
@@ -84,8 +88,8 @@ fn render_world(
                     .zip(materials[idx].iter())
                 {
                     let material = &materials[mat_idx % materials.len()];
-                    let xform = xforms[node_idx];
-                    render_mesh(world, prim, Arc::clone(material), xform);
+                    let xform_idx = node_idx as u32;
+                    render_mesh(world, prim, Arc::clone(material), xform_idx);
                 }
             }
         }
@@ -96,12 +100,12 @@ fn render_mesh(
     world: &mut RenderWorld,
     prim: &Primitive,
     material: Arc<MaterialDef>,
-    xform: Matrix4,
+    xform_index: u32,
 ) {
     world.add_object(MeshInstance {
         mesh: Arc::clone(&prim.mesh),
-        xform,
         material,
+        xform_index,
     });
 }
 

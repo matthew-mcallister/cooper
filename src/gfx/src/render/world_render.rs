@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use device::*;
+use more_asserts::assert_lt;
 use smallvec::smallvec;
 
 use crate::*;
@@ -122,11 +123,12 @@ impl WorldRenderer {
         self.scheduler
     }
 
-    crate fn base_desc(&self) -> GraphicsPipelineDesc {
+    crate fn base_desc(&self, base_layout: &Arc<DescriptorSetLayout>) ->
+        GraphicsPipelineDesc
+    {
         let subpass = self.basic_pass.subpass.clone();
         let mut desc = GraphicsPipelineDesc::new(subpass);
-        let layout = Arc::clone(&self.globals.scene_desc_layout);
-        desc.layout.set_layouts = smallvec![layout; 2];
+        desc.layout.set_layouts = smallvec![Arc::clone(base_layout); 2];
         // FIXME: Supposed to be part of material
         desc.cull_mode = CullMode::Back;
         desc.depth_test = true;
@@ -137,10 +139,12 @@ impl WorldRenderer {
 
     crate fn create_pipelines(
         &self,
+        base_layout: &Arc<DescriptorSetLayout>,
         state: &mut SystemState,
         materials: &mut MaterialStateTable,
     ) {
-        unsafe { materials.create_pipelines(state, &mut self.base_desc()); }
+        let mut base = self.base_desc(base_layout);
+        unsafe { materials.create_pipelines(state, &mut base); }
     }
 
     fn objects_pass(
@@ -148,8 +152,7 @@ impl WorldRenderer {
         state: &Arc<Box<SystemState>>,
         resources: &ResourceSystem,
         materials: &MaterialStateTable,
-        mut descriptors: SceneDescriptors,
-        view: SceneViewState,
+        descriptors: DescriptorSet,
         pass: &mut RenderPassNode,
         objects: Vec<RenderObject>,
     ) {
@@ -158,9 +161,7 @@ impl WorldRenderer {
         if objects.is_empty() { return; }
 
         let items: Vec<_> = lower_objects(
-            &state, &view.uniforms, resources, &materials, &mut descriptors,
-            objects.into_iter(),
-        ).collect();
+            &state, resources, &materials, objects.into_iter()).collect();
 
         let mut inst = InstanceRenderer::new(&state, &self.globals);
         pass.add_task(0, Box::new(move |cmds| {
@@ -187,15 +188,19 @@ impl WorldRenderer {
         let clear_values = self.clear_values.to_vec();
         let mut pass = RenderPassNode::with_clear(framebuffer, clear_values);
 
-        let mut descriptors = SceneDescriptors::new(&state, &self.globals);
-        let view = SceneViewState::new(&world.view);
-        view.write_descriptor(&state, &mut descriptors);
-
-        let objects = world.objects; // TODO: reuse this memory
+        // Check that indices used in shaders are in bounds
+        for object in world.objects.iter() {
+            match object {
+                RenderObject::MeshInstance(obj) => assert_lt!(
+                    obj.xform_index as usize,
+                    world.uniforms.xforms.len(),
+                ),
+            }
+        }
+        let descriptors = world.uniforms.create_descriptor_set(&state);
+        let objects = world.objects;
         self.objects_pass(
-            &state, resources, materials, descriptors, view, &mut pass,
-            objects,
-        );
+            &state, resources, materials, descriptors, &mut pass, objects);
 
         self.scheduler.schedule_pass(
             pass,

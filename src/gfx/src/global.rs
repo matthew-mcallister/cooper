@@ -15,7 +15,6 @@ crate struct Globals {
     crate immediate_storage_image_2d: Arc<ImageView>,
     crate empty_image_2d: Arc<ImageDef>,
     crate empty_sampler: Arc<Sampler>,
-    crate scene_desc_layout: Arc<DescriptorSetLayout>,
 }
 
 impl Globals {
@@ -90,9 +89,6 @@ impl Globals {
         let empty_sampler =
             Arc::clone(&state.samplers.get_or_create_committed(&desc));
 
-        let scene_desc_layout =
-            SceneDescriptors::create_layout(&state.set_layouts);
-
         Globals {
             device,
             shaders,
@@ -103,7 +99,6 @@ impl Globals {
             immediate_storage_image_2d,
             empty_image_2d,
             empty_sampler,
-            scene_desc_layout,
         }
     }
 

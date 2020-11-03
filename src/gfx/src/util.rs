@@ -1,5 +1,3 @@
-use math::{Matrix4, Matrix4x3};
-
 crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
 macro_rules! impl_from_via_default {
@@ -38,11 +36,6 @@ macro_rules! include_u32 {
             $crate::util::cast_aligned_u32(ALIGNED)
         }
     }
-}
-
-#[inline(always)]
-crate fn pack_xform(xform: Matrix4) -> Matrix4x3 {
-    xform.transpose().submatrix(0, 0)
 }
 
 macro_rules! set_name {
