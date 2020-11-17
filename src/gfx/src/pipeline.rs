@@ -30,84 +30,39 @@ struct MaterialResources {
     desc: Arc<DescriptorSet>,
 }
 
-// Idea: each subpass has its own pipeline cache. When a material
-// is created, any subpass in which it will be used has to create a
-// pipeline, e.g. depth pass, deferred pass, translucent/forward pass.
-#[derive(Debug, Default)]
-crate struct MaterialState {
-    pipeline: Option<Arc<GraphicsPipeline>>,
-    resources: Option<MaterialResources>,
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct PatchDef {
+    pub mesh: RenderMesh,
+    pub stages: ShaderStageMap,
+    /// Binds image handles to material image slots. Slots without
+    /// explicit bindings will have a default image/sampler pair bound
+    /// to them.
+    pub image_bindings: MaterialImageBindings,
+    pub cull_mode: CullMode,
 }
 
 #[derive(Debug)]
-crate struct MaterialStateTable {
-    globals: Arc<Globals>,
-    defs: HashMap<Arc<MaterialDesc>, Arc<MaterialDef>>,
-    materials: HashMap<ByPtr<Arc<MaterialDef>>, MaterialState>,
+crate struct Patch {
+    crate index: Option<IndexBuffer<BufferAlloc>>,
+    crate attrs: SmallVec<AttrBuffer<BufferAlloc>, 6>,
+    crate pipeline: Arc<GraphicsPipeline>,
+    crate resources: MaterialResources,
 }
 
-impl MaterialState {
-    crate fn pipeline(&self) -> Option<&Arc<GraphicsPipeline>> {
-        self.pipeline.as_ref()
-    }
-
-    crate fn desc(&self) -> Option<&Arc<DescriptorSet>> {
-        Some(&self.resources.as_ref()?.desc)
-    }
+#[derive(Debug)]
+crate struct PatchTable {
+    patches: HashMap<ByPtr<Arc<PatchDef>>, Patch>,
 }
 
-impl MaterialStateTable {
-    crate fn new(_state: &SystemState, globals: &Arc<Globals>) -> Self {
+impl PatchTable {
+    crate fn new() -> Self {
         Self {
-            globals: Arc::clone(globals),
-            defs: Default::default(),
-            materials: Default::default(),
+            patches: Default::default(),
         }
     }
 
-    crate fn define(
-        &mut self,
-        state: &mut SystemState,
-        desc: &MaterialDesc,
-    ) -> Arc<MaterialDef> {
-        tryopt! { return Arc::clone(self.defs.get(desc)?) };
-        let desc = Arc::new(desc.clone());
-        let set_layout = create_set_layout(
-            state, &self.globals, &desc.image_bindings);
-        let def = Arc::new(MaterialDef { desc, set_layout });
-        self.materials.insert(Arc::clone(&def).into(), Default::default());
-        def
-    }
-
-    crate fn update_resolved_resources(
-        &mut self,
-        state: &mut SystemState,
-        resources: &ResourceSystem,
-    ) {
-        for (def, mat) in self.materials.iter_mut()
-            .filter(|(_, mat)| mat.resources.is_none())
-        {
-            mat.resources = try_resolve_material_resources(
-                state, &self.globals, resources, ByPtr::by_value(def));
-        }
-    }
-
-    // TODO: Multiple pipelines per material keyed by the base pipeline
-    // descriptor.
-    crate unsafe fn create_pipelines(
-        &mut self,
-        state: &mut SystemState,
-        base_desc: &mut GraphicsPipelineDesc,
-    ) {
-        for (def, mat) in self.materials.iter_mut()
-            .filter(|(_, mat)| mat.pipeline.is_none())
-        {
-            mat.pipeline = Some(create_pipeline(state, base_desc, def));
-        }
-    }
-
-    crate fn get(&self, def: &Arc<MaterialDef>) -> &MaterialState {
-        &self.materials[ByPtr::by_ptr(def)]
+    fn get(&self, def: &Arc<PatchDef>) -> Option<&MaterialState> {
+        self.materials.get(ByPtr::by_ptr(def))
     }
 }
 

@@ -37,23 +37,6 @@ impl Eq for ImageBindingDesc {}
 pub type MaterialImageBindings =
     PartialEnumMap<MaterialImage, ImageBindingDesc>;
 
-// TODO: This type (a) doesn't actually represent a physical material
-// and (b) is tightly coupled to the choice of geometry. I think it only
-// makes sense to join it with the mesh to create some kind of "render
-// atom" which is the smallest unit which can be meaningfully rendered.
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub struct MaterialDesc {
-    pub vertex_layout: VertexInputLayout,
-    pub stages: ShaderStageMap,
-    /// Binds image handles to material image slots. Slots without
-    /// explicit bindings will have a default image/sampler pair bound
-    /// to them.
-    // TODO: User should have to opt-in to using the default bindings.
-    // Or, better yet, provide defaults on their own.
-    pub image_bindings: MaterialImageBindings,
-    pub cull_mode: CullMode,
-}
-
 // TODO: Allow descriptor set layout to be customized somewhat?
 #[derive(Debug)]
 pub struct MaterialDef {
