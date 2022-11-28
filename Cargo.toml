@@ -9,7 +9,6 @@ members = [
     "src/prelude",
     "src/spirv",
     "src/unit",
-    "src/window",
 ]
 
 [profile.dev.package."*"]

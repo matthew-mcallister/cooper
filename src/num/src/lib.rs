@@ -1,4 +1,4 @@
-#![feature(clamp, trait_alias)]
+#![feature(trait_alias)]
 
 mod float;
 mod num;
