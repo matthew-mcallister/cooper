@@ -8,7 +8,6 @@ members = [
     "src/math",
     "src/prelude",
     "src/spirv",
-    "src/unit",
 ]
 
 [profile.dev.package."*"]

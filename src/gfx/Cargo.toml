@@ -25,7 +25,6 @@ num = { path = "../num", package = "cooper-num" }
 prelude = { path = "../prelude", package = "cooper-prelude" }
 smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
 spv = { path = "../spirv", package = "cooper-spirv" }
-unit = { path = "../unit", package = "cooper-unit" }
 anyhow = "1.0.33"
 
 [dependencies.vk]
