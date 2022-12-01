@@ -1,4 +1,4 @@
-#![feature(crate_visibility_modifier, trait_alias)]
+#![feature(trait_alias)]
 
 use spirv_headers as spv;
 
@@ -13,6 +13,6 @@ pub use view::*;
 pub use spv::ExecutionModel;
 pub use spv::StorageClass;
 
-crate fn is_interface_storage(class: spv::StorageClass) -> bool {
+pub(crate) fn is_interface_storage(class: spv::StorageClass) -> bool {
     [spv::StorageClass::Input, spv::StorageClass::Output].contains(&class)
 }

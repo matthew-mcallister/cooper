@@ -10,8 +10,8 @@ use self::Payload::*;
 // TODO: sizeof(Option<PoolId>) should be 8
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct PoolId {
-    crate idx: u32,
-    crate gen: u32,
+    pub(crate) idx: u32,
+    pub(crate) gen: u32,
 }
 
 bitfield! {

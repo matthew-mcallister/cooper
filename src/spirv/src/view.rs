@@ -45,7 +45,7 @@ pub struct EntryPoint<'m> {
 }
 
 impl Module {
-    crate fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             header: ModuleHeader::new(0),
             entry_points: Default::default(),
