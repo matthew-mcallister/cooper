@@ -1,9 +1,4 @@
 #![feature(
-    array_value_iter,
-    bool_to_option,
-    const_generics,
-    iterator_fold_self,
-    maybe_uninit_extra,
     maybe_uninit_uninit_array,
     trait_alias,
 )]
