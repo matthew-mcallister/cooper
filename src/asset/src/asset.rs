@@ -4,12 +4,12 @@ use device::*;
 use fehler::throws;
 use fnv::FnvHashMap as HashMap;
 use gfx::RenderLoop;
-use log::trace;
 use image::GenericImageView;
+use log::trace;
 
-use crate::Error;
 use crate::gltf::load_gltf;
 use crate::scene::*;
+use crate::Error;
 
 #[derive(Debug)]
 pub struct AssetCache {
@@ -23,15 +23,12 @@ impl AssetCache {
         Self {
             images: Default::default(),
             scenes: Default::default(),
-            default_normal_map:
-                create_monochrome_image(rloop, [128, 128, 255, 0]),
+            default_normal_map: create_monochrome_image(rloop, [128, 128, 255, 0]),
         }
     }
 
     #[throws]
-    pub fn get_or_load_image(&mut self, rloop: &mut RenderLoop, path: &str) ->
-        &Arc<ImageDef>
-    {
+    pub fn get_or_load_image(&mut self, rloop: &mut RenderLoop, path: &str) -> &Arc<ImageDef> {
         if !self.images.contains_key(path) {
             trace!("AssetCache: loading image {}", path);
             let image = image::open(path)?;
@@ -47,9 +44,7 @@ impl AssetCache {
     }
 
     #[throws]
-    pub fn get_or_load_scene(&mut self, rloop: &mut RenderLoop, path: &str) ->
-        &SceneCollection
-    {
+    pub fn get_or_load_scene(&mut self, rloop: &mut RenderLoop, path: &str) -> &SceneCollection {
         if !self.images.contains_key(path) {
             trace!("AssetCache: loading scene {}", path);
             let scene = load_gltf(rloop, self, path)?;
@@ -62,12 +57,12 @@ impl AssetCache {
         self.scenes.get(path)
     }
 
-    crate fn default_normal_map(&self) -> &Arc<ImageDef> {
+    pub(crate) fn default_normal_map(&self) -> &Arc<ImageDef> {
         &self.default_normal_map
     }
 }
 
-crate fn load_image(
+pub(crate) fn load_image(
     rloop: &mut gfx::RenderLoop,
     image: image::DynamicImage,
     name: Option<String>,
@@ -95,7 +90,7 @@ crate fn load_image(
     image
 }
 
-crate fn create_monochrome_image(
+pub(crate) fn create_monochrome_image(
     rloop: &mut RenderLoop,
     [r, g, b, a]: [u8; 4],
 ) -> Arc<ImageDef> {

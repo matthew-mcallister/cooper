@@ -9,9 +9,8 @@ use self::{
 
 // Perhaps these should always go by the short name
 pub use self::{
-    DescriptorSetLayout as SetLayout, DescriptorSetLayoutDesc as SetLayoutDesc,
-    DescriptorSetLayoutBinding as SetLayoutBinding,
-    DescriptorSetLayoutCache as SetLayoutCache,
+    DescriptorSetLayout as SetLayout, DescriptorSetLayoutBinding as SetLayoutBinding,
+    DescriptorSetLayoutCache as SetLayoutCache, DescriptorSetLayoutDesc as SetLayoutDesc,
 };
 
 mod layout;
@@ -47,18 +46,23 @@ impl DescriptorType {
 
     #[inline]
     pub fn is_image(self) -> bool {
-        matches!(self, Self::CombinedImageSampler | Self::SampledImage
-            | Self::StorageImage | Self::InputAttachment)
+        matches!(
+            self,
+            Self::CombinedImageSampler
+                | Self::SampledImage
+                | Self::StorageImage
+                | Self::InputAttachment
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::testing::*;
+    use crate::*;
     use std::sync::Arc;
     use vk::traits::*;
-    use crate::*;
-    use crate::testing::*;
-    use super::*;
 
     unsafe fn alloc(vars: TestVars) {
         let device = vars.device();
@@ -73,15 +77,11 @@ mod tests {
 
         let constant_buffer_layout = Arc::new(SetLayout::new(
             Arc::clone(device),
-            set_layout_desc![
-                (0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),
-            ],
+            set_layout_desc![(0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),],
         ));
         let material_layout = Arc::new(SetLayout::new(
             Arc::clone(device),
-            set_layout_desc![
-                (0, CombinedImageSampler[3], FRAGMENT_BIT),
-            ],
+            set_layout_desc![(0, CombinedImageSampler[3], FRAGMENT_BIT),],
         ));
 
         let set0 = pool.alloc(&constant_buffer_layout);
@@ -108,11 +108,14 @@ mod tests {
         let resources = TestResources::new(&device);
         let descriptors = &resources.descriptors;
 
-        let layout = Arc::new(SetLayout::new(device, set_layout_desc![
-            (0, UniformBuffer[2]),
-            (1, SampledImage),
-            (2, CombinedImageSampler[2]),
-        ]));
+        let layout = Arc::new(SetLayout::new(
+            device,
+            set_layout_desc![
+                (0, UniformBuffer[2]),
+                (1, SampledImage),
+                (2, CombinedImageSampler[2]),
+            ],
+        ));
 
         let mut desc = descriptors.alloc(Lifetime::Static, &layout);
         let buffers = vec![resources.empty_uniform_buffer.range(); 2];
@@ -129,30 +132,29 @@ mod tests {
     }
 
     fn layout_zero_count(vars: TestVars) {
-        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
-            (0, UniformBuffer[0]),
-        ]);
+        SetLayout::new(
+            Arc::clone(vars.device()),
+            set_layout_desc![(0, UniformBuffer[0]),],
+        );
     }
 
     fn layout_duplicate_binding(vars: TestVars) {
-        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
-            (0, UniformBuffer),
-            (0, UniformBuffer),
-        ]);
+        SetLayout::new(
+            Arc::clone(vars.device()),
+            set_layout_desc![(0, UniformBuffer), (0, UniformBuffer),],
+        );
     }
 
     fn layout_unordered_bindings(vars: TestVars) {
-        SetLayout::new(Arc::clone(vars.device()), set_layout_desc![
-            (1, UniformBuffer),
-            (0, UniformBuffer),
-        ]);
+        SetLayout::new(
+            Arc::clone(vars.device()),
+            set_layout_desc![(1, UniformBuffer), (0, UniformBuffer),],
+        );
     }
 
     fn layout_cache(vars: TestVars) {
         let mut cache = SetLayoutCache::new(Arc::clone(vars.device()));
-        let desc = set_layout_desc![
-            (0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),
-        ];
+        let desc = set_layout_desc![(0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),];
         let layout: Arc<_> = cache.get_or_create(&desc).into_owned();
         assert_eq!(layout.desc(), &desc);
         let layout1 = cache.get_or_create(&desc);
@@ -161,23 +163,10 @@ mod tests {
         let layout2 = cache.get_committed(&desc).unwrap();
         assert_eq!(&*layout as *const _, &**layout2 as *const _);
 
-        let desc = set_layout_desc![
-            (0, SampledImage, FRAGMENT_BIT),
-        ];
+        let desc = set_layout_desc![(0, SampledImage, FRAGMENT_BIT),];
         let layout: Arc<_> = cache.get_or_create(&desc).into_owned();
         assert_eq!(layout.desc(), &desc);
         let layout1 = cache.get_or_create(&desc);
         assert_eq!(&*layout as *const _, &**layout1 as *const _);
     }
-
-    unit::declare_tests![
-        alloc,
-        write,
-        (#[should_err] layout_zero_count),
-        (#[should_err] layout_duplicate_binding),
-        (#[should_err] layout_unordered_bindings),
-        layout_cache,
-    ];
 }
-
-unit::collect_tests![tests];

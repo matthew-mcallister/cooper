@@ -69,7 +69,9 @@ impl Eq for GraphicsPipelineDesc {}
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
         let dt = &*self.device.table;
-        unsafe { dt.destroy_pipeline_layout(self.inner, ptr::null()); }
+        unsafe {
+            dt.destroy_pipeline_layout(self.inner, ptr::null());
+        }
     }
 }
 
@@ -78,17 +80,14 @@ impl PipelineLayout {
         unsafe { Self::unsafe_new(device, desc) }
     }
 
-    unsafe fn unsafe_new(device: Arc<Device>, desc: PipelineLayoutDesc) ->
-        Self
-    {
+    unsafe fn unsafe_new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
         let dt = &*device.table;
         let set_layouts = desc.set_layouts;
         let cap = device.limits().max_bound_descriptor_sets as usize;
         assert!(set_layouts.len() < cap);
 
-        let vk_set_layouts: SmallVec<_, 4> = set_layouts.iter()
-            .map(|layout| layout.inner())
-            .collect();
+        let vk_set_layouts: SmallVec<_, 4> =
+            set_layouts.iter().map(|layout| layout.inner()).collect();
         let create_info = vk::PipelineLayoutCreateInfo {
             set_layout_count: vk_set_layouts.len() as _,
             p_set_layouts: vk_set_layouts.as_ptr(),
@@ -96,7 +95,8 @@ impl PipelineLayout {
         };
         let mut inner = vk::null();
         dt.create_pipeline_layout(&create_info, ptr::null(), &mut inner)
-            .check().unwrap();
+            .check()
+            .unwrap();
 
         PipelineLayout {
             device,
@@ -124,14 +124,14 @@ impl PipelineLayout {
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
         let dt = &*self.device.table;
-        unsafe { dt.destroy_pipeline(self.inner, ptr::null()); }
+        unsafe {
+            dt.destroy_pipeline(self.inner, ptr::null());
+        }
     }
 }
 
 impl GraphicsPipeline {
-    unsafe fn new(layout: Arc<PipelineLayout>, desc: GraphicsPipelineDesc) ->
-        Self
-    {
+    unsafe fn new(layout: Arc<PipelineLayout>, desc: GraphicsPipelineDesc) -> Self {
         create_graphics_pipeline(layout, desc)
     }
 
@@ -221,10 +221,14 @@ unsafe fn create_graphics_pipeline(
 
     // TODO: This redundancy is unfortunate.
     assert!(
-        layout.set_layouts.iter().zip(desc.layout.set_layouts.iter())
+        layout
+            .set_layouts
+            .iter()
+            .zip(desc.layout.set_layouts.iter())
             .all(|(layout, desc)| Arc::ptr_eq(layout, desc)),
         "layout: {:?}, desc: {:?}",
-        layout.set_layouts, desc.layout.set_layouts,
+        layout.set_layouts,
+        desc.layout.set_layouts,
     );
 
     let have = |stage| desc.stages.contains_key(stage);
@@ -238,21 +242,27 @@ unsafe fn create_graphics_pipeline(
         assert_eq!(
             stage0.shader().outputs(),
             stage1.shader().inputs(),
-            "{:?}, {:?}", stage0, stage1,
+            "{:?}, {:?}",
+            stage0,
+            stage1,
         );
         stage0 = stage1;
     }
-    let stages: Vec<_> = desc.stages.iter().map(|(stage, spec)| {
-        let shader = spec.shader();
-        assert_eq!(stage, shader.stage());
-        vk::PipelineShaderStageCreateInfo {
-            module: shader.module(),
-            stage: stage.into(),
-            p_name: shader.entry_cstr().as_ptr(),
-            p_specialization_info: spec.spec_info(),
-            ..Default::default()
-        }
-    }).collect();
+    let stages: Vec<_> = desc
+        .stages
+        .iter()
+        .map(|(stage, spec)| {
+            let shader = spec.shader();
+            assert_eq!(stage, shader.stage());
+            vk::PipelineShaderStageCreateInfo {
+                module: shader.module(),
+                stage: stage.into(),
+                p_name: shader.entry_cstr().as_ptr(),
+                p_specialization_info: spec.spec_info(),
+                ..Default::default()
+            }
+        })
+        .collect();
 
     let vertex_shader = desc.vertex_stage().shader();
     let vertex_layout = &desc.vertex_layout;
@@ -264,7 +274,9 @@ unsafe fn create_graphics_pipeline(
 
     for &location in vertex_shader.inputs().iter() {
         // TODO: Check that format is compatible with input.ty
-        assert!(vertex_layout.attributes.iter()
+        assert!(vertex_layout
+            .attributes
+            .iter()
             .any(|attr| attr.location == location));
     }
 
@@ -295,9 +307,11 @@ unsafe fn create_graphics_pipeline(
     };
 
     let rasterization = vk::PipelineRasterizationStateCreateInfo {
-        polygon_mode:
-            if desc.wireframe { vk::PolygonMode::LINE }
-            else { vk::PolygonMode::FILL },
+        polygon_mode: if desc.wireframe {
+            vk::PolygonMode::LINE
+        } else {
+            vk::PolygonMode::FILL
+        },
         cull_mode: desc.cull_mode.into(),
         front_face: vk::FrontFace::COUNTER_CLOCKWISE,
         depth_bias_enable: bool32(desc.depth_bias),
@@ -445,7 +459,7 @@ macro_rules! pipeline_cache {
                 })
             }
         }
-    }
+    };
 }
 
 pipeline_cache! {
@@ -466,32 +480,22 @@ impl PipelineLayoutCache {
         self.inner.commit();
     }
 
-    pub fn get_committed(&self, desc: &PipelineLayoutDesc) ->
-        Option<&Arc<PipelineLayout>>
-    {
+    pub fn get_committed(&self, desc: &PipelineLayoutDesc) -> Option<&Arc<PipelineLayout>> {
         self.inner.get_committed(desc)
     }
 
-    pub fn get_or_create_committed(&mut self, desc: &PipelineLayoutDesc) ->
-        &Arc<PipelineLayout>
-    {
+    pub fn get_or_create_committed(&mut self, desc: &PipelineLayoutDesc) -> &Arc<PipelineLayout> {
         let device = &self.device;
         self.inner.get_or_insert_committed_with(desc, || {
-            Arc::new(PipelineLayout::new(
-                Arc::clone(&device),
-                desc.clone(),
-            ))
+            Arc::new(PipelineLayout::new(Arc::clone(&device), desc.clone()))
         })
     }
 
-    pub unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) ->
-        Cow<Arc<PipelineLayout>>
-    {
+    pub unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) -> Cow<Arc<PipelineLayout>> {
         let device = &self.device;
-        self.inner.get_or_insert_with(desc, || Arc::new(PipelineLayout::new(
-            Arc::clone(&device),
-            desc.clone(),
-        )))
+        self.inner.get_or_insert_with(desc, || {
+            Arc::new(PipelineLayout::new(Arc::clone(&device), desc.clone()))
+        })
     }
 }
 
@@ -508,21 +512,18 @@ impl PipelineCache {
         self.gfx.commit();
     }
 
-    pub fn get_committed_layout(&self, desc: &PipelineLayoutDesc) ->
-        Option<&Arc<PipelineLayout>>
-    {
+    pub fn get_committed_layout(&self, desc: &PipelineLayoutDesc) -> Option<&Arc<PipelineLayout>> {
         self.layouts.get_committed(desc)
     }
 
-    pub fn get_or_create_committed_layout(&mut self, desc: &PipelineLayoutDesc)
-        -> &Arc<PipelineLayout>
-    {
+    pub fn get_or_create_committed_layout(
+        &mut self,
+        desc: &PipelineLayoutDesc,
+    ) -> &Arc<PipelineLayout> {
         self.layouts.get_or_create_committed(desc)
     }
 
-    pub fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) ->
-        Option<&Arc<GraphicsPipeline>>
-    {
+    pub fn get_committed_gfx(&self, desc: &GraphicsPipelineDesc) -> Option<&Arc<GraphicsPipeline>> {
         self.gfx.get_committed(desc)
     }
 
@@ -534,15 +535,17 @@ impl PipelineCache {
         self.gfx.get_or_create_committed(&layout, desc)
     }
 
-    pub unsafe fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) ->
-        Cow<Arc<PipelineLayout>>
-    {
+    pub unsafe fn get_or_create_layout(
+        &self,
+        desc: &PipelineLayoutDesc,
+    ) -> Cow<Arc<PipelineLayout>> {
         self.layouts.get_or_create(desc)
     }
 
-    pub unsafe fn get_or_create_gfx(&self, desc: &GraphicsPipelineDesc) ->
-        Cow<Arc<GraphicsPipeline>>
-    {
+    pub unsafe fn get_or_create_gfx(
+        &self,
+        desc: &GraphicsPipelineDesc,
+    ) -> Cow<Arc<GraphicsPipeline>> {
         let layout = self.layouts.get_or_create(&desc.layout);
         self.gfx.get_or_create(&layout, desc)
     }
@@ -550,10 +553,10 @@ impl PipelineCache {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use crate::*;
-    use crate::testing::*;
     use super::*;
+    use crate::testing::*;
+    use crate::*;
+    use std::sync::Arc;
 
     unsafe fn create(vars: testing::TestVars) {
         let device = vars.device();
@@ -587,13 +590,9 @@ mod tests {
 
         cache.commit();
 
-        assert!(Arc::ptr_eq(cache.get_or_create_committed_gfx(&desc), &pipe1));
+        assert!(Arc::ptr_eq(
+            cache.get_or_create_committed_gfx(&desc),
+            &pipe1
+        ));
     }
-
-    unit::declare_tests![
-        create,
-        cache,
-    ];
 }
-
-unit::collect_tests![tests];

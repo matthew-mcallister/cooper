@@ -7,13 +7,13 @@ use smallvec::smallvec;
 use crate::*;
 
 #[derive(Debug)]
-crate struct BasicPass {
-    crate pass: Arc<RenderPass>,
-    crate subpass: Subpass,
+pub(crate) struct BasicPass {
+    pub(crate) pass: Arc<RenderPass>,
+    pub(crate) subpass: Subpass,
 }
 
 impl BasicPass {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub(crate) fn new(device: Arc<Device>) -> Self {
         let pass = unsafe { create_basic_pass(device) };
         let mut subpasses = pass.subpasses();
         BasicPass {
@@ -22,21 +22,18 @@ impl BasicPass {
         }
     }
 
-    crate fn create_framebuffers(
+    pub(crate) fn create_framebuffers(
         &self,
         heap: &ImageHeap,
         swapchain: &Swapchain,
     ) -> Vec<Arc<Framebuffer>> {
         unsafe {
-            swapchain.create_views().into_iter()
+            swapchain
+                .create_views()
+                .into_iter()
                 .map(|view| {
-                    let depth_view = create_render_target(
-                        heap,
-                        &self.pass,
-                        1,
-                        swapchain.extent(),
-                        false,
-                    );
+                    let depth_view =
+                        create_render_target(heap, &self.pass, 1, swapchain.extent(), false);
                     Arc::new(Framebuffer::new(
                         Arc::clone(&self.pass),
                         vec![view.into(), depth_view.into()],
@@ -70,17 +67,15 @@ unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
                 ..Default::default()
             },
         ],
-        vec![
-            SubpassDesc {
-                layouts: vec![
-                    Il::COLOR_ATTACHMENT_OPTIMAL,
-                    Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                ],
-                color_attchs: vec![0],
-                depth_stencil_attch: Some(1),
-                ..Default::default()
-            },
-        ],
+        vec![SubpassDesc {
+            layouts: vec![
+                Il::COLOR_ATTACHMENT_OPTIMAL,
+                Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ],
+            color_attchs: vec![0],
+            depth_stencil_attch: Some(1),
+            ..Default::default()
+        }],
         vec![],
     )
 }
@@ -88,7 +83,7 @@ unsafe fn create_basic_pass(device: Arc<Device>) -> Arc<RenderPass> {
 /// Top-level renderer.
 // NB: Try to ensure this this type persists no state between frames.
 #[derive(Debug)]
-crate struct WorldRenderer {
+pub(crate) struct WorldRenderer {
     globals: Arc<Globals>,
     scheduler: RenderScheduler,
     basic_pass: BasicPass,
@@ -97,7 +92,7 @@ crate struct WorldRenderer {
 }
 
 impl WorldRenderer {
-    crate fn new(
+    pub(crate) fn new(
         state: &SystemState,
         heap: &ImageHeap,
         globals: Arc<Globals>,
@@ -119,13 +114,11 @@ impl WorldRenderer {
 
     /// Used when recreating the swapchain
     #[allow(dead_code)]
-    crate fn into_inner(self) -> RenderScheduler {
+    pub(crate) fn into_inner(self) -> RenderScheduler {
         self.scheduler
     }
 
-    crate fn base_desc(&self, base_layout: &Arc<DescriptorSetLayout>) ->
-        GraphicsPipelineDesc
-    {
+    pub(crate) fn base_desc(&self, base_layout: &Arc<DescriptorSetLayout>) -> GraphicsPipelineDesc {
         let subpass = self.basic_pass.subpass.clone();
         let mut desc = GraphicsPipelineDesc::new(subpass);
         desc.layout.set_layouts = smallvec![Arc::clone(base_layout); 2];
@@ -137,14 +130,16 @@ impl WorldRenderer {
         desc
     }
 
-    crate fn create_pipelines(
+    pub(crate) fn create_pipelines(
         &self,
         base_layout: &Arc<DescriptorSetLayout>,
         state: &mut SystemState,
         materials: &mut MaterialStateTable,
     ) {
         let mut base = self.base_desc(base_layout);
-        unsafe { materials.create_pipelines(state, &mut base); }
+        unsafe {
+            materials.create_pipelines(state, &mut base);
+        }
     }
 
     fn objects_pass(
@@ -158,18 +153,23 @@ impl WorldRenderer {
     ) {
         // TODO: It should be possible to get this code working when
         // `objects` is empty
-        if objects.is_empty() { return; }
+        if objects.is_empty() {
+            return;
+        }
 
-        let items: Vec<_> = lower_objects(
-            &state, resources, &materials, objects.into_iter()).collect();
+        let items: Vec<_> =
+            lower_objects(&state, resources, &materials, objects.into_iter()).collect();
 
         let mut inst = InstanceRenderer::new(&state, &self.globals);
-        pass.add_task(0, Box::new(move |cmds| {
-            inst.render(&descriptors, &items, cmds);
-        }));
+        pass.add_task(
+            0,
+            Box::new(move |cmds| {
+                inst.render(&descriptors, &items, cmds);
+            }),
+        );
     }
 
-    crate fn run(
+    pub(crate) fn run(
         &mut self,
         state: Arc<Box<SystemState>>,
         resources: &ResourceSystem,
@@ -181,26 +181,32 @@ impl WorldRenderer {
         present_sem: &mut BinarySemaphore,
         render_sem: &mut TimelineSemaphore,
     ) {
-        unsafe { self.scheduler.clear(); }
+        unsafe {
+            self.scheduler.clear();
+        }
 
-        let framebuffer =
-            Arc::clone(&self.framebuffers[swapchain_image as usize]);
+        let framebuffer = Arc::clone(&self.framebuffers[swapchain_image as usize]);
         let clear_values = self.clear_values.to_vec();
         let mut pass = RenderPassNode::with_clear(framebuffer, clear_values);
 
         // Check that indices used in shaders are in bounds
         for object in world.objects.iter() {
             match object {
-                RenderObject::MeshInstance(obj) => assert_lt!(
-                    obj.xform_index as usize,
-                    world.uniforms.xforms.len(),
-                ),
+                RenderObject::MeshInstance(obj) => {
+                    assert_lt!(obj.xform_index as usize, world.uniforms.xforms.len(),)
+                }
             }
         }
         let descriptors = world.uniforms.create_descriptor_set(&state);
         let objects = world.objects;
         self.objects_pass(
-            &state, resources, materials, descriptors, &mut pass, objects);
+            &state,
+            resources,
+            materials,
+            descriptors,
+            &mut pass,
+            objects,
+        );
 
         self.scheduler.schedule_pass(
             pass,

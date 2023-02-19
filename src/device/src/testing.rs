@@ -6,9 +6,8 @@ use prelude::*;
 
 use crate::*;
 
-crate type TestInput = TestVars;
-crate type TestData = unsafe fn(TestInput);
-crate type Test = unit::Test<TestData>;
+pub(crate) type TestInput = TestVars;
+pub(crate) type TestData = unsafe fn(TestInput);
 
 #[derive(Debug, From)]
 pub struct TestContext {
@@ -30,8 +29,7 @@ fn app_info() -> AppInfo {
 
 impl TestContext {
     fn create_window(&self) -> DeviceResult<Arc<window::Window>> {
-        let show_window = std::env::var("TESTING_SHOW_WINDOW")
-            .map_or(false, |val| val == "1");
+        let show_window = std::env::var("TESTING_SHOW_WINDOW").map_or(false, |val| val == "1");
         let info = window::CreateInfo {
             title: WINDOW_NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
@@ -60,30 +58,22 @@ impl TestContext {
     }
 }
 
-impl unit::PanicTestInvoker<TestData> for TestContext {
-    fn invoke(&self, test: &Test) {
-        let vars = unsafe { self.create_swapchain() }
-            .unwrap_or_else(|e| panic!("failed to initialize: {}", e));
-        unsafe { (test.data())(vars); }
-    }
-}
-
 #[derive(Debug)]
-crate struct TestVars {
-    crate swapchain: Swapchain,
-    crate gfx_queue: Arc<Queue>,
+pub(crate) struct TestVars {
+    pub(crate) swapchain: Swapchain,
+    pub(crate) gfx_queue: Arc<Queue>,
 }
 
 impl TestVars {
-    crate fn swapchain(&self) -> &Swapchain {
+    pub(crate) fn swapchain(&self) -> &Swapchain {
         &self.swapchain
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         &self.swapchain.device
     }
 
-    crate fn gfx_queue(&self) -> &Arc<Queue> {
+    pub(crate) fn gfx_queue(&self) -> &Arc<Queue> {
         &self.gfx_queue
     }
 }
@@ -91,12 +81,12 @@ impl TestVars {
 macro_rules! test_shaders {
     ($($name:ident,)*) => {
         #[derive(Debug)]
-        crate struct TestShaders {
+        pub(crate) struct TestShaders {
             $(crate $name: Arc<Shader>,)*
         }
 
         impl TestShaders {
-            crate fn new(device: &Arc<Device>) -> Self {
+            pub(crate) fn new(device: &Arc<Device>) -> Self {
                 unsafe {
                     TestShaders {
                         $($name: Arc::new(Shader::from_path(
@@ -119,22 +109,22 @@ test_shaders! {
 }
 
 #[derive(Debug)]
-crate struct TestResources {
+pub(crate) struct TestResources {
     // N.B.: Field order is important
-    crate empty_uniform_buffer: Arc<BufferAlloc>,
-    crate empty_storage_buffer: Arc<BufferAlloc>,
-    crate empty_image_2d: Arc<ImageView>,
-    crate empty_storage_image_2d: Arc<ImageView>,
-    crate empty_sampler: Arc<Sampler>,
-    crate buffer_heap: Arc<BufferHeap>,
-    crate image_heap: ImageHeap,
-    crate samplers: SamplerCache,
-    crate descriptors: Arc<DescriptorHeap>,
-    crate shaders: TestShaders,
+    pub(crate) empty_uniform_buffer: Arc<BufferAlloc>,
+    pub(crate) empty_storage_buffer: Arc<BufferAlloc>,
+    pub(crate) empty_image_2d: Arc<ImageView>,
+    pub(crate) empty_storage_image_2d: Arc<ImageView>,
+    pub(crate) empty_sampler: Arc<Sampler>,
+    pub(crate) buffer_heap: Arc<BufferHeap>,
+    pub(crate) image_heap: ImageHeap,
+    pub(crate) samplers: SamplerCache,
+    pub(crate) descriptors: Arc<DescriptorHeap>,
+    pub(crate) shaders: TestShaders,
 }
 
 impl TestResources {
-    crate fn new(device: &Arc<Device>) -> Self {
+    pub(crate) fn new(device: &Arc<Device>) -> Self {
         let buffer_heap = BufferHeap::new(Arc::clone(device));
         let image_heap = ImageHeap::new(Arc::clone(device));
         let samplers = SamplerCache::new(Arc::clone(device));
@@ -163,9 +153,10 @@ impl TestResources {
             (1, 1).into(),
             1,
             1,
-        ).with_name("empty_image_2d")
-            .build_image(&image_heap)
-            .create_full_view();
+        )
+        .with_name("empty_image_2d")
+        .build_image(&image_heap)
+        .create_full_view();
         let empty_storage_image_2d = ImageDef::new(
             &device,
             ImageFlags::STORAGE | ImageFlags::NO_SAMPLE,
@@ -175,9 +166,10 @@ impl TestResources {
             (1, 1).into(),
             1,
             1,
-        ).with_name("empty_storage_image_2d")
-            .build_image(&image_heap)
-            .create_full_view();
+        )
+        .with_name("empty_storage_image_2d")
+        .build_image(&image_heap)
+        .create_full_view();
 
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
@@ -202,32 +194,29 @@ impl TestResources {
         }
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         self.image_heap.device()
     }
 }
 
 /// Render pass with a single subpass and single backbuffer attachment.
 #[derive(Debug)]
-crate struct TrivialPass {
-    crate pass: Arc<RenderPass>,
-    crate subpass: Subpass,
+pub(crate) struct TrivialPass {
+    pub(crate) pass: Arc<RenderPass>,
+    pub(crate) subpass: Subpass,
 }
 
 impl TrivialPass {
-    crate fn new(device: &Arc<Device>) -> Self {
+    pub(crate) fn new(device: &Arc<Device>) -> Self {
         unsafe { create_trivial_pass(Arc::clone(device)) }
     }
 
-    crate fn create_framebuffers(&self, swapchain: &Swapchain) ->
-        Vec<Arc<Framebuffer>>
-    {
+    pub(crate) fn create_framebuffers(&self, swapchain: &Swapchain) -> Vec<Arc<Framebuffer>> {
         unsafe {
-            swapchain.create_views().into_iter()
-                .map(|view| Arc::new(Framebuffer::new(
-                    Arc::clone(&self.pass),
-                    vec![view.into()],
-                )))
+            swapchain
+                .create_views()
+                .into_iter()
+                .map(|view| Arc::new(Framebuffer::new(Arc::clone(&self.pass), vec![view.into()])))
                 .collect()
         }
     }
@@ -237,21 +226,17 @@ unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
     use vk::ImageLayout as Layout;
     let pass = RenderPass::new(
         device,
-        vec![
-            AttachmentDescription {
-                name: Attachment::Backbuffer,
-                format: Format::BGRA8_SRGB,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-                ..Default::default()
-            },
-        ],
-        vec![
-            SubpassDesc {
-                layouts: vec![Layout::COLOR_ATTACHMENT_OPTIMAL],
-                color_attchs: vec![0],
-                ..Default::default()
-            },
-        ],
+        vec![AttachmentDescription {
+            name: Attachment::Backbuffer,
+            format: Format::BGRA8_SRGB,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            ..Default::default()
+        }],
+        vec![SubpassDesc {
+            layouts: vec![Layout::COLOR_ATTACHMENT_OPTIMAL],
+            color_attchs: vec![0],
+            ..Default::default()
+        }],
         vec![],
     );
 
@@ -263,7 +248,7 @@ unsafe fn create_trivial_pass(device: Arc<Device>) -> TrivialPass {
 }
 
 #[derive(Debug)]
-crate struct TrivialRenderer {
+pub(crate) struct TrivialRenderer {
     vert_shader: Arc<ShaderSpec>,
     frag_shader: Arc<ShaderSpec>,
     set_layouts: [Arc<SetLayout>; 2],
@@ -273,25 +258,28 @@ crate struct TrivialRenderer {
 const VERTEX_COUNT: u32 = 3;
 
 impl TrivialRenderer {
-    crate const fn vertex_count() -> u32 {
+    pub(crate) const fn vertex_count() -> u32 {
         VERTEX_COUNT
     }
 
-    crate fn new(resources: &TestResources) -> Self {
+    pub(crate) fn new(resources: &TestResources) -> Self {
         let device = resources.device();
         let dev = || Arc::clone(device);
         let descriptors = &resources.descriptors;
         let shaders = &resources.shaders;
 
-        let layout0 = Arc::new(SetLayout::new(dev(), set_layout_desc![
-            (0, UniformBuffer),
-            (1, StorageBuffer),
-        ]));
-        let layout1 = Arc::new(SetLayout::new(dev(), set_layout_desc![
-            (0, CombinedImageSampler),
-            (1, StorageImage),
-            (2, SampledImage),
-        ]));
+        let layout0 = Arc::new(SetLayout::new(
+            dev(),
+            set_layout_desc![(0, UniformBuffer), (1, StorageBuffer),],
+        ));
+        let layout1 = Arc::new(SetLayout::new(
+            dev(),
+            set_layout_desc![
+                (0, CombinedImageSampler),
+                (1, StorageImage),
+                (2, SampledImage),
+            ],
+        ));
 
         let vert_shader = Arc::new(Arc::clone(&shaders.trivial_vert).into());
         let frag_shader = Arc::new(Arc::clone(&shaders.trivial_frag).into());
@@ -331,17 +319,15 @@ impl TrivialRenderer {
         }
     }
 
-    crate fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {
+    pub(crate) fn init_pipe_desc(&self, desc: &mut GraphicsPipelineDesc) {
         desc.layout.set_layouts = self.set_layouts[..].into();
-        desc.stages.insert(ShaderStage::Vertex, Arc::clone(&self.vert_shader));
-        desc.stages.insert(ShaderStage::Fragment, Arc::clone(&self.frag_shader));
+        desc.stages
+            .insert(ShaderStage::Vertex, Arc::clone(&self.vert_shader));
+        desc.stages
+            .insert(ShaderStage::Fragment, Arc::clone(&self.frag_shader));
     }
 
-    crate fn render(
-        &self,
-        pipelines: &PipelineCache,
-        cmds: &mut SubpassCmds,
-    ) {
+    pub(crate) fn render(&self, pipelines: &PipelineCache, cmds: &mut SubpassCmds) {
         let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
         self.init_pipe_desc(&mut desc);
 
@@ -351,6 +337,8 @@ impl TrivialRenderer {
         cmds.bind_gfx_descs(0, &self.descs[0]);
         cmds.bind_gfx_descs(1, &self.descs[1]);
 
-        unsafe { cmds.draw(Self::vertex_count(), 1); }
+        unsafe {
+            cmds.draw(Self::vertex_count(), 1);
+        }
     }
 }

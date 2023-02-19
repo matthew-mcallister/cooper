@@ -3,17 +3,17 @@ use std::sync::Arc;
 use base::PartialEnumMap;
 use derivative::Derivative;
 use device::{
-    CullMode, DescriptorSetLayout, ImageDef, SamplerDesc, ShaderSpec,
-    ShaderStage, ShaderStageMap, VertexInputLayout,
+    CullMode, DescriptorSetLayout, ImageDef, SamplerDesc, ShaderSpec, ShaderStage, ShaderStageMap,
+    VertexInputLayout,
 };
 use enum_map::Enum;
 
-use crate::SystemState;
 use crate::util::{ptr_eq, ptr_hash};
+use crate::SystemState;
 
 mod state;
 
-crate use state::*;
+pub(crate) use state::*;
 
 #[derive(Clone, Copy, Debug, Enum, Eq, Hash, PartialEq)]
 #[non_exhaustive]
@@ -34,8 +34,7 @@ pub struct ImageBindingDesc {
 }
 impl Eq for ImageBindingDesc {}
 
-pub type MaterialImageBindings =
-    PartialEnumMap<MaterialImage, ImageBindingDesc>;
+pub type MaterialImageBindings = PartialEnumMap<MaterialImage, ImageBindingDesc>;
 
 // TODO: This type (a) doesn't actually represent a physical material
 // and (b) is tightly coupled to the choice of geometry. I think it only
@@ -97,7 +96,7 @@ impl MaterialImage {
     const SIZE: usize = <Self as Enum<()>>::POSSIBLE_VALUES;
 
     #[allow(dead_code)]
-    crate fn values() -> impl ExactSizeIterator<Item = Self> {
+    pub(crate) fn values() -> impl ExactSizeIterator<Item = Self> {
         (0..Self::SIZE).map(<Self as Enum<()>>::from_usize)
     }
 }

@@ -248,6 +248,7 @@ dependencies = [
  "smallvec 1.10.0",
  "vulkan-headers",
  "vulkan-loader",
+ "winit",
 ]
 
 [[package]]

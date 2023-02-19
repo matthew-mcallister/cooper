@@ -87,8 +87,7 @@ fn compatible_type(type_bits: u32, type_index: u32) -> bool {
 }
 
 #[inline]
-fn iter_memory_types(device: &Device) -> impl Iterator<Item = &vk::MemoryType>
-{
+fn iter_memory_types(device: &Device) -> impl Iterator<Item = &vk::MemoryType> {
     let props = &device.mem_props;
     props.memory_types.iter().take(props.memory_type_count as _)
 }
@@ -104,8 +103,7 @@ fn find_memory_type(
     iter_memory_types(device)
         .enumerate()
         .find(|&(idx, ty)| {
-            compatible_type(type_mask, idx as u32)
-                && ty.property_flags.contains(flags)
+            compatible_type(type_mask, idx as u32) && ty.property_flags.contains(flags)
         })
         .map(|(idx, _)| idx as u32)
 }
@@ -124,8 +122,7 @@ fn find_memory_type_2(
 
 #[inline(always)]
 pub fn visible_coherent_flags() -> vk::MemoryPropertyFlags {
-    vk::MemoryPropertyFlags::HOST_VISIBLE_BIT |
-        vk::MemoryPropertyFlags::HOST_COHERENT_BIT
+    vk::MemoryPropertyFlags::HOST_VISIBLE_BIT | vk::MemoryPropertyFlags::HOST_COHERENT_BIT
 }
 
 unsafe fn alloc_device_memory(
@@ -134,9 +131,9 @@ unsafe fn alloc_device_memory(
 ) -> vk::DeviceMemory {
     let dt = &*device.table;
     let mut memory = vk::null();
-    dt.allocate_memory(alloc_info, ptr::null(), &mut memory).check()
-        .unwrap_or_else(|_|
-            panic!("failed to allocate device memory: {:?}", alloc_info));
+    dt.allocate_memory(alloc_info, ptr::null(), &mut memory)
+        .check()
+        .unwrap_or_else(|_| panic!("failed to allocate device memory: {:?}", alloc_info));
     memory
 }
 
@@ -151,8 +148,13 @@ unsafe fn alloc_resource_memory(
 
     // TODO: Can't actually see fields of VkMemoryRequirements...
     // Should really derive(Debug) on structs that support it.
-    trace!("alloc_resource_memory({:?}, {:?}, {:?}, {:?})",
-        mapping, reqs, content, tiling);
+    trace!(
+        "alloc_resource_memory({:?}, {:?}, {:?}, {:?})",
+        mapping,
+        reqs,
+        content,
+        tiling
+    );
 
     let mut p_next = ptr::null_mut();
 
@@ -174,8 +176,10 @@ unsafe fn alloc_resource_memory(
     };
 
     if let Some(content) = content {
-        debug!("creating dedicated allocation: size: {:?}, type: {:?}, {:?}",
-            reqs.size, type_index, content);
+        debug!(
+            "creating dedicated allocation: size: {:?}, type: {:?}, {:?}",
+            reqs.size, type_index, content
+        );
     }
 
     let inner = alloc_device_memory(&device, &alloc_info);
@@ -198,9 +202,10 @@ unsafe fn alloc_resource_memory(
     memory
 }
 
-unsafe fn get_buffer_memory_reqs(device: &Device, buffer: vk::Buffer) ->
-    (vk::MemoryRequirements, vk::MemoryDedicatedRequirements)
-{
+unsafe fn get_buffer_memory_reqs(
+    device: &Device,
+    buffer: vk::Buffer,
+) -> (vk::MemoryRequirements, vk::MemoryDedicatedRequirements) {
     let dt = &*device.table;
     let mut dedicated_reqs = vk::MemoryDedicatedRequirements::default();
     let mut reqs = vk::MemoryRequirements2 {
@@ -215,9 +220,10 @@ unsafe fn get_buffer_memory_reqs(device: &Device, buffer: vk::Buffer) ->
     (reqs.memory_requirements, dedicated_reqs)
 }
 
-unsafe fn get_image_memory_reqs(device: &Device, image: vk::Image) ->
-    (vk::MemoryRequirements, vk::MemoryDedicatedRequirements)
-{
+unsafe fn get_image_memory_reqs(
+    device: &Device,
+    image: vk::Image,
+) -> (vk::MemoryRequirements, vk::MemoryDedicatedRequirements) {
     let dt = &*device.table;
     let mut dedicated_reqs = vk::MemoryDedicatedRequirements::default();
     let mut reqs = vk::MemoryRequirements2 {
@@ -306,8 +312,7 @@ pub trait MemoryRegion {
     }
 
     #[inline]
-    fn as_mut_slice<T>(&mut self, len: usize) -> Option<&mut [MaybeUninit<T>]>
-    {
+    fn as_mut_slice<T>(&mut self, len: usize) -> Option<&mut [MaybeUninit<T>]> {
         unsafe { Some(&mut *self.as_slice_ptr(len)?.as_ptr()) }
     }
 
@@ -334,7 +339,9 @@ unsafe impl Sync for DeviceMemory {}
 impl Drop for DeviceMemory {
     fn drop(&mut self) {
         let dt = &*self.device.table;
-        unsafe { dt.free_memory(self.inner, ptr::null()); }
+        unsafe {
+            dt.free_memory(self.inner, ptr::null());
+        }
     }
 }
 
@@ -382,12 +389,14 @@ impl DeviceMemory {
 
     #[inline]
     pub fn flags(&self) -> vk::MemoryPropertyFlags {
-        self.device.mem_props.memory_types[self.type_index as usize]
-            .property_flags
+        self.device.mem_props.memory_types[self.type_index as usize].property_flags
     }
 
     unsafe fn init(&mut self) {
-        if self.flags().contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT) {
+        if self
+            .flags()
+            .contains(vk::MemoryPropertyFlags::HOST_VISIBLE_BIT)
+        {
             self.map();
         }
     }
@@ -397,7 +406,8 @@ impl DeviceMemory {
         let flags = Default::default();
         let mut ptr = ptr::null_mut();
         dt.map_memory(self.inner, 0, self.size, flags, &mut ptr)
-            .check().expect("failed to map device memory");
+            .check()
+            .expect("failed to map device memory");
         self.ptr = NonNull::new(ptr);
     }
 }
@@ -429,5 +439,3 @@ impl MemoryMapping {
         }
     }
 }
-
-unit::collect_tests![alloc, buffer_heap, image, staging];

@@ -2,20 +2,19 @@ use std::sync::Arc;
 
 use derive_more::Display;
 use device::{
-    Device, Image, ImageSubresources, MemoryRegion, SampleCount, StagingBuffer,
-    XferCmds, fmt_named,
+    fmt_named, Device, Image, ImageSubresources, MemoryRegion, SampleCount, StagingBuffer, XferCmds,
 };
 use log::trace;
 use more_asserts::assert_le;
 
 #[derive(Clone, Copy, Debug, Default, Display, Eq, PartialEq)]
 #[display(fmt = "staging buffer out of memory")]
-crate struct StagingOutOfMemory;
+pub(crate) struct StagingOutOfMemory;
 impl std::error::Error for StagingOutOfMemory {}
 
 /// Staging type for uploading images and buffers
 #[derive(Debug)]
-crate struct UploadStage {
+pub(crate) struct UploadStage {
     staging: StagingBuffer,
     pre_barriers: Vec<vk::ImageMemoryBarrier>,
     post_barriers: Vec<vk::ImageMemoryBarrier>,
@@ -29,7 +28,7 @@ struct ImageCopy {
 }
 
 impl UploadStage {
-    crate fn new(device: Arc<Device>, capacity: usize) -> Self {
+    pub(crate) fn new(device: Arc<Device>, capacity: usize) -> Self {
         UploadStage {
             staging: StagingBuffer::new(device, capacity),
             pre_barriers: Vec::new(),
@@ -39,7 +38,7 @@ impl UploadStage {
     }
 
     #[allow(dead_code)]
-    crate unsafe fn stage_buffer(&self) {
+    pub(crate) unsafe fn stage_buffer(&self) {
         // No need to stage buffers on UMA
         // TODO: assert!(!buffer.is_device_local());
         todo!("support discrete memory")
@@ -47,7 +46,7 @@ impl UploadStage {
 
     /// In the returned buffer, mipmap levels are allocated contiguously
     /// starting from the base mipmap level.
-    crate fn stage_image(
+    pub(crate) fn stage_image(
         &mut self,
         image: &Arc<Image>,
         emit_pre_barrier: bool,
@@ -61,7 +60,10 @@ impl UploadStage {
                 "emit_pre_barrier: {:?}, final_layout: {:?}, ",
                 "access_mask: {:?}, subresources: {:?})",
             ),
-            fmt_named(&**image), emit_pre_barrier, final_layout, access_mask,
+            fmt_named(&**image),
+            emit_pre_barrier,
+            final_layout,
+            access_mask,
             subresources,
         );
 
@@ -71,8 +73,12 @@ impl UploadStage {
         assert_eq!(image.samples(), SampleCount::One);
 
         let size = image.subresource_size(&sub) as usize;
-        assert_le!(size, self.staging.capacity(),
-            "image data too large for staging buffer: {} bytes", size);
+        assert_le!(
+            size,
+            self.staging.capacity(),
+            "image data too large for staging buffer: {} bytes",
+            size
+        );
         let mut alloc = self.staging.alloc(size).ok_or(StagingOutOfMemory)?;
 
         let extent = image.extent();
@@ -116,7 +122,7 @@ impl UploadStage {
         Ok(unsafe { &mut *(bytes as *mut _) })
     }
 
-    crate unsafe fn record_cmds(&self, cmds: &mut XferCmds) {
+    pub(crate) unsafe fn record_cmds(&self, cmds: &mut XferCmds) {
         cmds.pipeline_barrier(
             vk::PipelineStageFlags::TOP_OF_PIPE_BIT,
             vk::PipelineStageFlags::TRANSFER_BIT,
@@ -147,7 +153,7 @@ impl UploadStage {
         );
     }
 
-    crate unsafe fn clear(&mut self) {
+    pub(crate) unsafe fn clear(&mut self) {
         self.staging.clear();
         self.pre_barriers.clear();
         self.post_barriers.clear();
@@ -157,8 +163,8 @@ impl UploadStage {
 
 #[cfg(test)]
 mod tests {
-    use device::*;
     use super::*;
+    use device::*;
 
     unsafe fn staging_inner(
         heap: &ImageHeap,
@@ -174,8 +180,7 @@ mod tests {
         pool: Box<CmdPool>,
         should_fail: bool,
     ) -> (vk::CommandBuffer, Box<CmdPool>) {
-        let mut cmds =
-            XferCmds::new(CmdBuffer::new(pool, CmdBufferLevel::Primary));
+        let mut cmds = XferCmds::new(CmdBuffer::new(pool, CmdBufferLevel::Primary));
 
         let extent = Extent3D::new(128, 128, 1);
         let img = Arc::new(Image::with(
@@ -195,13 +200,15 @@ mod tests {
             // Give the validation code a chance to do its job
             layers: if should_fail { [1, 7] } else { [0, 6] },
         };
-        let buf = staging.stage_image(
-            &img,
-            true,
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::SHADER_READ_BIT,
-            subresource,
-        ).unwrap();
+        let buf = staging
+            .stage_image(
+                &img,
+                true,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::AccessFlags::SHADER_READ_BIT,
+                subresource,
+            )
+            .unwrap();
         assert_eq!(buf.len(), img.subresource_size(&subresource) as usize);
 
         assert_eq!(staging.pre_barriers.len(), 1);
@@ -244,7 +251,8 @@ mod tests {
 
     unit::declare_tests![
         stage,
-        (#[should_err] stage_validation_error),
+        (#[should_err]
+        stage_validation_error),
     ];
 }
 

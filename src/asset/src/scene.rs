@@ -66,12 +66,15 @@ impl From<GltfTransform> for Transform {
     fn from(transform: GltfTransform) -> Self {
         match transform {
             GltfTransform::Matrix { matrix } => Self::Matrix(matrix.into()),
-            GltfTransform::Decomposed { translation, rotation, scale } =>
-                Self::Decomposed {
-                    translation: translation.into(),
-                    rotation: rotation.into(),
-                    scale: scale.into(),
-                },
+            GltfTransform::Decomposed {
+                translation,
+                rotation,
+                scale,
+            } => Self::Decomposed {
+                translation: translation.into(),
+                rotation: rotation.into(),
+                scale: scale.into(),
+            },
         }
     }
 }
@@ -80,8 +83,11 @@ impl From<Transform> for Matrix4 {
     fn from(transform: Transform) -> Self {
         match transform {
             Transform::Matrix(matrix) => matrix,
-            Transform::Decomposed { translation, rotation, scale } =>
-                rotation.to_matrix().scale(scale).translate(translation),
+            Transform::Decomposed {
+                translation,
+                rotation,
+                scale,
+            } => rotation.to_matrix().scale(scale).translate(translation),
         }
     }
 }
@@ -93,7 +99,7 @@ impl Transform {
 }
 
 impl NodeData {
-    crate fn from_node(node: &gltf::Node<'_>) -> Self {
+    pub(crate) fn from_node(node: &gltf::Node<'_>) -> Self {
         if let Some(mesh) = node.mesh() {
             Self::Mesh(mesh.index() as u32)
         } else {
@@ -111,6 +117,9 @@ impl SceneCollection {
     /// collection according to the node hierarchy.
     pub fn world_xforms(&self) -> Vec<Matrix4> {
         // TODO: Real implementation
-        self.nodes.iter().map(|node| node.transform.into()).collect()
+        self.nodes
+            .iter()
+            .map(|node| node.transform.into())
+            .collect()
     }
 }

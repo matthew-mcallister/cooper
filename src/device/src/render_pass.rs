@@ -120,30 +120,36 @@ impl RenderPass {
     }
 
     #[inline]
-    pub fn subpasses<'a>(self: &'a Arc<Self>) ->
-        impl Iterator<Item = Subpass> + ExactSizeIterator + 'a
-    {
-        (0..self.subpasses.len())
-            .map(move |index| Subpass { pass: Arc::clone(self), index })
+    pub fn subpasses<'a>(
+        self: &'a Arc<Self>,
+    ) -> impl Iterator<Item = Subpass> + ExactSizeIterator + 'a {
+        (0..self.subpasses.len()).map(move |index| Subpass {
+            pass: Arc::clone(self),
+            index,
+        })
     }
 
     #[inline]
     pub fn subpass(self: &Arc<Self>, index: usize) -> Subpass {
         assert!(index < self.subpasses.len());
-        Subpass { pass: Arc::clone(self), index }
+        Subpass {
+            pass: Arc::clone(self),
+            index,
+        }
     }
 
     #[inline]
     pub fn is_input_attachment(&self, index: usize) -> bool {
         assert!(index < self.attachments.len());
-        self.subpasses.iter()
+        self.subpasses
+            .iter()
             .flat_map(|subpass| subpass.input_attchs.iter())
             .any(|aref| aref.attachment == index as u32)
     }
 }
 
 impl Subpass {
-        #[inline]
+    #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
@@ -205,20 +211,17 @@ impl From<AttachmentDescription> for vk::AttachmentDescription {
     }
 }
 
-fn subpass_samples(
-    attachments: &[AttachmentDescription],
-    desc: &SubpassDesc,
-) -> SampleCount {
-    let idx = desc.color_attchs.first()
+fn subpass_samples(attachments: &[AttachmentDescription], desc: &SubpassDesc) -> SampleCount {
+    let idx = desc
+        .color_attchs
+        .first()
         .or(desc.input_attchs.first())
         .or(desc.depth_stencil_attch.as_ref());
     tryopt! { return attachments[*idx? as usize].samples; };
     SampleCount::One
 }
 
-fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
-    SubpassState
-{
+fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) -> SubpassState {
     let attch = |idx: u32| vk::AttachmentReference {
         attachment: idx,
         layout: desc.layouts[idx as usize],
@@ -226,7 +229,7 @@ fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
     macro_rules! attchs {
         ($iter:expr) => {
             $iter.map(|&idx| attch(idx))
-        }
+        };
     }
 
     validate_subpass(attachments, &desc);
@@ -248,15 +251,16 @@ fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) ->
     }
 }
 
-fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
-{
+fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc) {
     let get = |idx: u32| &attachments[idx as usize];
 
     assert_eq!(desc.layouts.len(), attachments.len());
 
     // Sample count
     let samples = subpass_samples(attachments, desc);
-    for &idx in desc.color_attchs.iter()
+    for &idx in desc
+        .color_attchs
+        .iter()
         .chain(desc.input_attchs.iter())
         .chain(desc.depth_stencil_attch.iter())
     {
@@ -264,7 +268,9 @@ fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
     }
 
     // Disallow unused references except as resolve attachments
-    for &idx in desc.color_attchs.iter()
+    for &idx in desc
+        .color_attchs
+        .iter()
         .chain(desc.input_attchs.iter())
         .chain(desc.preserve_attchs.iter())
         .chain(desc.depth_stencil_attch.iter())
@@ -275,7 +281,9 @@ fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
     // Disallow multiple attachment use. This is sometimes allowed
     // (e.g. input feedback) but not really desired.
     let mut counts = vec![0u32; attachments.len()];
-    for &idx in desc.color_attchs.iter()
+    for &idx in desc
+        .color_attchs
+        .iter()
         .chain(desc.input_attchs.iter())
         .chain(desc.preserve_attchs.iter())
         .chain(desc.depth_stencil_attch.iter())
@@ -290,7 +298,9 @@ fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
 
     // Validate sample counts
     let samples = subpass_samples(attachments, desc);
-    for &idx in desc.color_attchs.iter()
+    for &idx in desc
+        .color_attchs
+        .iter()
         .chain(desc.input_attchs.iter())
         .chain(desc.depth_stencil_attch.iter())
     {
@@ -315,15 +325,14 @@ fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc)
     }
 }
 
-fn validate_dependencies(
-    subpasses: &[SubpassState],
-    dependencies: &[vk::SubpassDependency],
-) {
+fn validate_dependencies(subpasses: &[SubpassState], dependencies: &[vk::SubpassDependency]) {
     for dep in dependencies.iter() {
-        assert!((dep.src_subpass == vk::SUBPASS_EXTERNAL)
-            | (dep.src_subpass < subpasses.len() as _));
-        assert!((dep.dst_subpass == vk::SUBPASS_EXTERNAL)
-            | (dep.dst_subpass < subpasses.len() as _));
+        assert!(
+            (dep.src_subpass == vk::SUBPASS_EXTERNAL) | (dep.src_subpass < subpasses.len() as _)
+        );
+        assert!(
+            (dep.dst_subpass == vk::SUBPASS_EXTERNAL) | (dep.dst_subpass < subpasses.len() as _)
+        );
     }
 }
 
@@ -338,14 +347,16 @@ unsafe fn create_render_pass(
 ) -> Arc<RenderPass> {
     let dt = &*device.table;
 
-    let vk_attachments: Vec<vk::AttachmentDescription> = attachments.iter()
-        .map(|&attch| attch.into())
-        .collect();
+    let vk_attachments: Vec<vk::AttachmentDescription> =
+        attachments.iter().map(|&attch| attch.into()).collect();
 
-    let subpasses: Vec<_> = subpasses.into_iter()
-        .map(|desc| subpass_state(&attachments, desc)).collect();
-    let vk_subpasses: Vec<_> = subpasses.iter().map(|subpass| {
-        vk::SubpassDescription {
+    let subpasses: Vec<_> = subpasses
+        .into_iter()
+        .map(|desc| subpass_state(&attachments, desc))
+        .collect();
+    let vk_subpasses: Vec<_> = subpasses
+        .iter()
+        .map(|subpass| vk::SubpassDescription {
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             input_attachment_count: subpass.input_attchs.len() as _,
             p_input_attachments: subpass.input_attchs.as_ptr(),
@@ -354,11 +365,10 @@ unsafe fn create_render_pass(
             p_resolve_attachments: subpass.resolve_attchs.c_ptr(),
             preserve_attachment_count: subpass.preserve_attchs.len() as _,
             p_preserve_attachments: subpass.preserve_attchs.as_ptr(),
-            p_depth_stencil_attachment:
-                subpass.depth_stencil_attch.as_ref().as_ptr(),
+            p_depth_stencil_attachment: subpass.depth_stencil_attch.as_ref().as_ptr(),
             ..Default::default()
-        }
-    }).collect();
+        })
+        .collect();
 
     validate_dependencies(&subpasses, &dependencies);
 
@@ -373,7 +383,8 @@ unsafe fn create_render_pass(
     };
     let mut render_pass = vk::null();
     dt.create_render_pass(&create_info, ptr::null(), &mut render_pass)
-        .check().unwrap();
+        .check()
+        .unwrap();
 
     Arc::new(RenderPass {
         device,
@@ -516,9 +527,9 @@ pub unsafe fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
-    use crate::testing::*;
     use super::*;
+    use crate::testing::*;
+    use crate::*;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         let _trivial_pass = TrivialPass::new(vars.device());
@@ -527,11 +538,4 @@ mod tests {
     unsafe fn deferred_test(vars: testing::TestVars) {
         let _pass = create_test_pass(vars.device());
     }
-
-    unit::declare_tests![
-        smoke_test,
-        deferred_test,
-    ];
 }
-
-unit::collect_tests![tests];

@@ -21,7 +21,9 @@ pub struct DeviceAlloc {
 impl Drop for DeviceAlloc {
     fn drop(&mut self) {
         if let Some(ref pool) = self.pool {
-            unsafe { pool.free(self); }
+            unsafe {
+                pool.free(self);
+            }
         }
     }
 }
@@ -74,8 +76,12 @@ pub struct ImageHeap {
 impl Drop for HeapPoolInner {
     fn drop(&mut self) {
         for chunk in self.chunks.iter() {
-            assert_eq!(Arc::strong_count(chunk), 1,
-                "allocator destroyed while chunk in use: {:?}", chunk);
+            assert_eq!(
+                Arc::strong_count(chunk),
+                1,
+                "allocator destroyed while chunk in use: {:?}",
+                chunk
+            );
         }
     }
 }
@@ -99,8 +105,7 @@ impl HeapPool {
     }
 
     fn memory_type(&self) -> &vk::MemoryType {
-        &self.device.mem_props
-            .memory_types[self.type_index as usize]
+        &self.device.mem_props.memory_types[self.type_index as usize]
     }
 
     fn heap_index(&self) -> u32 {
@@ -115,19 +120,18 @@ impl HeapPool {
         32
     }
 
-    unsafe fn add_chunk(
-        &self,
-        inner: &mut HeapPoolInner,
-        min_size: vk::DeviceSize,
-    ) {
+    unsafe fn add_chunk(&self, inner: &mut HeapPoolInner, min_size: vk::DeviceSize) {
         let chunk = inner.chunks.len() as u32;
         // TODO: Possibly size should be a power of two times chunk size
         let size = align(self.chunk_size(), min_size);
-        let mem = alloc_device_memory(&self.device, &vk::MemoryAllocateInfo {
-            allocation_size: size,
-            memory_type_index: self.type_index,
-            ..Default::default()
-        });
+        let mem = alloc_device_memory(
+            &self.device,
+            &vk::MemoryAllocateInfo {
+                allocation_size: size,
+                memory_type_index: self.type_index,
+                ..Default::default()
+            },
+        );
         let mut mem = DeviceMemory {
             device: Arc::clone(&self.device),
             inner: mem,
@@ -152,7 +156,9 @@ impl HeapPool {
         trace!("HeapPool::alloc(size: {}, alignment: {})", size, alignment);
         let alignment = std::cmp::max(self.min_alignment(), alignment);
         let mut inner = self.inner.lock();
-        let block = inner.allocator.alloc(size, alignment)
+        let block = inner
+            .allocator
+            .alloc(size, alignment)
             .or_else(|| {
                 self.add_chunk(&mut *inner, size);
                 inner.allocator.alloc(size, alignment)
@@ -183,8 +189,12 @@ impl HeapPool {
     fn clear(&mut self) {
         let mut inner = self.inner.lock();
         for chunk in inner.chunks.iter() {
-            assert_eq!(Arc::strong_count(chunk), 1,
-                "chunk cleared while in use: {:?}", chunk);
+            assert_eq!(
+                Arc::strong_count(chunk),
+                1,
+                "chunk cleared while in use: {:?}",
+                chunk
+            );
         }
         inner.allocator.clear()
     }
@@ -194,14 +204,9 @@ impl ImageHeap {
     pub fn new(device: Arc<Device>) -> Self {
         let pools: Vec<_> = iter_memory_types(&device)
             .enumerate()
-            .map(|(idx, _)| {
-                Arc::new(HeapPool::new(Arc::clone(&device), idx as _))
-            })
+            .map(|(idx, _)| Arc::new(HeapPool::new(Arc::clone(&device), idx as _)))
             .collect();
-        Self {
-            device,
-            pools,
-        }
+        Self { device, pools }
     }
 
     #[inline]
@@ -237,7 +242,8 @@ impl ImageHeap {
             &*self.device,
             MemoryMapping::DeviceLocal.memory_property_flags(),
             reqs.memory_type_bits,
-        ).unwrap();
+        )
+        .unwrap();
         self.pool(type_idx).alloc(reqs.size, reqs.alignment)
     }
 
@@ -246,8 +252,7 @@ impl ImageHeap {
         let device = &self.device;
         let (reqs, dedicated_reqs) = get_image_memory_reqs(device, image);
 
-        let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE
-        {
+        let alloc = if dedicated_reqs.prefers_dedicated_allocation == vk::TRUE {
             DeviceAlloc::whole_range(Arc::new(alloc_resource_memory(
                 Arc::clone(&device),
                 MemoryMapping::DeviceLocal,
@@ -255,11 +260,16 @@ impl ImageHeap {
                 Some(DedicatedAllocContent::Image(image)),
                 Tiling::Nonlinear,
             )))
-        } else { self.alloc(reqs) };
+        } else {
+            self.alloc(reqs)
+        };
 
         let memory = alloc.memory().inner();
         let offset = alloc.offset();
-        self.dt().bind_image_memory(image, memory, offset).check().unwrap();
+        self.dt()
+            .bind_image_memory(image, memory, offset)
+            .check()
+            .unwrap();
 
         alloc
     }
@@ -267,9 +277,9 @@ impl ImageHeap {
 
 #[cfg(test)]
 mod tests {
+    use crate::*;
     use std::sync::Arc;
     use vk::traits::*;
-    use crate::*;
 
     unsafe fn alloc(vars: testing::TestVars) {
         let device = Arc::clone(&vars.swapchain.device);
@@ -284,8 +294,4 @@ mod tests {
         let _alloc1 = heap.alloc(reqs);
         assert_ne!(_alloc0.as_raw(), 0 as _);
     }
-
-    unit::declare_tests![alloc];
 }
-
-unit::collect_tests![tests];

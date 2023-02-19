@@ -1,4 +1,4 @@
-crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
+pub(crate) type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
 macro_rules! impl_from_via_default {
     ($name:ident, $from:ty) => {
@@ -7,11 +7,11 @@ macro_rules! impl_from_via_default {
                 Default::default()
             }
         }
-    }
+    };
 }
 
 #[repr(C)]
-crate struct Aligned<T, U: ?Sized>(crate [T; 0], crate U);
+pub(crate) struct Aligned<T, U: ?Sized>(pub(crate) [T; 0], pub(crate) U);
 
 impl<T> Aligned<T, [u8]> {
     const unsafe fn cast(&self) -> &[T] {
@@ -24,7 +24,7 @@ impl<T> Aligned<T, [u8]> {
     }
 }
 
-crate const fn cast_aligned_u32(aligned: &Aligned<u32, [u8]>) -> &[u32] {
+pub(crate) const fn cast_aligned_u32(aligned: &Aligned<u32, [u8]>) -> &[u32] {
     unsafe { aligned.cast() }
 }
 
@@ -47,14 +47,15 @@ macro_rules! set_name {
 }
 
 #[inline(always)]
-crate fn ptr_eq<P, T>(lhs: &P, rhs: &P) -> bool
-    where P: std::ops::Deref<Target = T>
+pub(crate) fn ptr_eq<P, T>(lhs: &P, rhs: &P) -> bool
+where
+    P: std::ops::Deref<Target = T>,
 {
     lhs.deref() as *const _ == rhs.deref() as *const _
 }
 
 #[inline(always)]
-crate fn ptr_hash<P, H>(ptr: &P, state: &mut H)
+pub(crate) fn ptr_hash<P, H>(ptr: &P, state: &mut H)
 where
     P: std::ops::Deref,
     H: std::hash::Hasher,

@@ -18,14 +18,14 @@ pub struct RenderMesh {
 // TODO: Hide this type
 #[derive(Debug)]
 pub struct AttrBuffer<B> {
-    crate buffer: Arc<B>,
-    crate format: Format,
+    pub(crate) buffer: Arc<B>,
+    pub(crate) format: Format,
 }
 
 #[derive(Debug)]
 pub struct IndexBuffer<B> {
-    crate buffer: Arc<B>,
-    crate ty: IndexType,
+    pub(crate) buffer: Arc<B>,
+    pub(crate) ty: IndexType,
 }
 
 impl RenderMesh {
@@ -38,18 +38,23 @@ impl RenderMesh {
         self.index.as_ref()
     }
 
-    pub fn bindings(&self) ->
-        &PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>>
-    {
+    pub fn bindings(&self) -> &PartialEnumMap<VertexAttr, AttrBuffer<BufferDef>> {
         &self.bindings
     }
 
     pub fn vertex_layout(&self) -> VertexStreamLayout {
         VertexStreamLayout {
             topology: PrimitiveTopology::TriangleList,
-            attributes: self.bindings.iter()
+            attributes: self
+                .bindings
+                .iter()
                 .map(|(name, binding)| {
-                    (name, VertexStreamAttr { format: binding.format })
+                    (
+                        name,
+                        VertexStreamAttr {
+                            format: binding.format,
+                        },
+                    )
                 })
                 .collect(),
         }
@@ -128,7 +133,9 @@ impl<'a> RenderMeshBuilder<'a> {
             src_len as _,
         );
         self.rloop.upload_buffer(&buffer, src, src_offset);
-        self.mesh.bindings.insert(attr, AttrBuffer { buffer, format });
+        self.mesh
+            .bindings
+            .insert(attr, AttrBuffer { buffer, format });
         self
     }
 
@@ -136,10 +143,11 @@ impl<'a> RenderMeshBuilder<'a> {
         if let Some(index) = &self.mesh.index {
             self.mesh.vertex_count = index.count();
         } else {
-            let mut counts = self.mesh.bindings.values()
-                .map(|attr| attr.count());
+            let mut counts = self.mesh.bindings.values().map(|attr| attr.count());
             let count = counts.next().unwrap();
-            for other in counts { assert_eq!(other, count); }
+            for other in counts {
+                assert_eq!(other, count);
+            }
             self.mesh.vertex_count = count;
         }
     }

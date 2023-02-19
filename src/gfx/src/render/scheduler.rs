@@ -3,10 +3,10 @@ use std::sync::Arc;
 use derivative::Derivative;
 use device::*;
 
-crate type SubpassTask = Box<dyn FnOnce(&mut SubpassCmds) + Send>;
+pub(crate) type SubpassTask = Box<dyn FnOnce(&mut SubpassCmds) + Send>;
 
 #[derive(Debug)]
-crate struct RenderScheduler {
+pub(crate) struct RenderScheduler {
     pool: Option<Box<CmdPool>>,
     // List of buffers to free each frame.
     buffers: Vec<vk::CommandBuffer>,
@@ -15,7 +15,7 @@ crate struct RenderScheduler {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-crate struct RenderPassNode {
+pub(crate) struct RenderPassNode {
     framebuffer: Arc<Framebuffer>,
     clear_values: Vec<vk::ClearValue>,
     // An array of tasks per subpass
@@ -27,11 +27,11 @@ crate struct RenderPassNode {
 
 impl RenderPassNode {
     #[allow(dead_code)]
-    crate fn new(framebuffer: Arc<Framebuffer>) -> Self {
+    pub(crate) fn new(framebuffer: Arc<Framebuffer>) -> Self {
         Self::with_clear(framebuffer, Vec::new())
     }
 
-    crate fn with_clear(
+    pub(crate) fn with_clear(
         framebuffer: Arc<Framebuffer>,
         clear_values: Vec<vk::ClearValue>,
     ) -> Self {
@@ -41,7 +41,11 @@ impl RenderPassNode {
             .collect();
 
         // validate
-        for (i, _) in framebuffer.pass().attachments().iter().enumerate()
+        for (i, _) in framebuffer
+            .pass()
+            .attachments()
+            .iter()
+            .enumerate()
             .filter(|(_, attch)| attch.load_op == vk::AttachmentLoadOp::CLEAR)
         {
             assert!(clear_values.len() > i);
@@ -54,13 +58,13 @@ impl RenderPassNode {
         }
     }
 
-    crate fn add_task(&mut self, subpass: usize, task: SubpassTask) {
+    pub(crate) fn add_task(&mut self, subpass: usize, task: SubpassTask) {
         self.tasks[subpass].push(task)
     }
 }
 
 impl RenderScheduler {
-    crate fn new(gfx_queue: Arc<Queue>) -> Self {
+    pub(crate) fn new(gfx_queue: Arc<Queue>) -> Self {
         assert!(gfx_queue.family().supports_graphics());
         let flags = vk::CommandPoolCreateFlags::TRANSIENT_BIT;
         let mut pool = Box::new(CmdPool::new(gfx_queue.family(), flags));
@@ -72,7 +76,7 @@ impl RenderScheduler {
         }
     }
 
-    crate fn schedule_pass(
+    pub(crate) fn schedule_pass(
         &mut self,
         pass: RenderPassNode,
         // TODO: Ought to abstract over these arguments
@@ -112,7 +116,7 @@ impl RenderScheduler {
         self.pool = Some(pool);
     }
 
-    crate unsafe fn clear(&mut self) {
+    pub(crate) unsafe fn clear(&mut self) {
         let pool = self.pool.as_mut().unwrap();
         pool.reset();
         pool.free(&self.buffers);

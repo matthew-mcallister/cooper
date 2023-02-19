@@ -86,14 +86,15 @@ impl Format {
     #[inline]
     pub fn is_depth_stencil(self) -> bool {
         use vk::ImageAspectFlags as Flags;
-        self.aspects().intersects(Flags::DEPTH_BIT | Flags::STENCIL_BIT)
+        self.aspects()
+            .intersects(Flags::DEPTH_BIT | Flags::STENCIL_BIT)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
+    use crate::*;
 
     unsafe fn smoke_test(_: testing::TestVars) {
         use Format::*;
@@ -118,8 +119,4 @@ mod tests {
         assert!(fmt.is_depth_stencil());
         assert_eq!(vk::Format::from(fmt), vk::Format::D32_SFLOAT_S8_UINT);
     }
-
-    unit::declare_tests![smoke_test];
 }
-
-unit::collect_tests![tests];

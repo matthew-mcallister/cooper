@@ -14,7 +14,7 @@ use prelude::tryopt;
 // TODO: Parameterize hash function: FNV is a poor choice for pipelines
 #[derive(Derivative)]
 #[derivative(Debug(bound = "FnvHashMap<K, V>: Debug"))]
-crate struct StagedCache<K, V> {
+pub(crate) struct StagedCache<K, V> {
     committed: FnvHashMap<K, V>,
     // TODO: *Maybe* should be a true concurrent hashmap
     staged: Mutex<FnvHashMap<K, V>>,
@@ -31,7 +31,7 @@ impl<K, V> Default for StagedCache<K, V> {
 
 impl<K, V> StagedCache<K, V> {
     #[allow(dead_code)]
-    crate fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Default::default()
     }
 }
@@ -42,31 +42,32 @@ where
     V: Clone,
 {
     /// Gets a committed entry with zero synchronization guaranteed.
-    crate fn get_committed(&self, key: &K) -> Option<&V> {
+    pub(crate) fn get_committed(&self, key: &K) -> Option<&V> {
         self.committed.get(key)
     }
 
     /// Gets or creates a committed entry with zero synchronization
     /// guaranteed. All entries *must* be committed beforehand.
-    crate fn get_or_insert_committed_with(
+    pub(crate) fn get_or_insert_committed_with(
         &mut self,
         key: &K,
         f: impl FnOnce() -> V,
     ) -> &mut V {
         assert!(self.staged.get_mut().is_empty());
-        self.committed.raw_entry_mut().from_key(key)
-            .or_insert_with(|| (key.clone(), f())).1
+        self.committed
+            .raw_entry_mut()
+            .from_key(key)
+            .or_insert_with(|| (key.clone(), f()))
+            .1
     }
 
     /// Commits all staged additions.
-    crate fn commit(&mut self) {
+    pub(crate) fn commit(&mut self) {
         self.committed.extend(std::mem::take(self.staged.get_mut()));
     }
 
     // TODO: Allow f fallible.
-    crate fn get_or_insert_with(&self, key: &K, f: impl FnOnce() -> V) ->
-        Cow<V>
-    {
+    pub(crate) fn get_or_insert_with(&self, key: &K, f: impl FnOnce() -> V) -> Cow<V> {
         tryopt! { return Cow::Borrowed(self.get_committed(key)?); };
         let mut staged = self.staged.lock();
         // NB: hold the lock while creating entry to avoid racing
@@ -77,10 +78,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use super::*;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering::Relaxed;
-    use super::*;
+    use std::sync::Arc;
 
     // TODO: Doesn't require device
     unsafe fn cache(_: crate::testing::TestVars) {
@@ -105,8 +106,4 @@ mod tests {
         );
         assert!(cache.get_or_insert_with(&-12, new).is_borrowed());
     }
-
-    unit::declare_tests![cache];
 }
-
-unit::collect_tests![tests];

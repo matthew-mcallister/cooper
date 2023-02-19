@@ -13,12 +13,12 @@ use crate::*;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Instance {
-    crate vk: window::VulkanPlatform,
+    pub(crate) vk: window::VulkanPlatform,
     #[derivative(Debug = "ignore")]
-    crate entry: Arc<vkl::Entry>,
+    pub(crate) entry: Arc<vkl::Entry>,
     #[derivative(Debug = "ignore")]
-    crate table: Arc<vkl::InstanceTable>,
-    crate app_info: Arc<AppInfo>,
+    pub(crate) table: Arc<vkl::InstanceTable>,
+    pub(crate) app_info: Arc<AppInfo>,
     debug_messengers: Vec<DebugMessenger>,
     debug_handler: Arc<DefaultDebugMessageHandler>,
 }
@@ -50,16 +50,19 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    pub unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) ->
-        DeviceResult<Self>
-    {
-        if !vk.supported() { Err(err_msg!("vulkan not available"))?; }
+    pub unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) -> DeviceResult<Self> {
+        if !vk.supported() {
+            Err(err_msg!("vulkan not available"))?;
+        }
 
         let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
         let mut version = 0;
-        entry.enumerate_instance_version(&mut version).check().unwrap();
+        entry
+            .enumerate_instance_version(&mut version)
+            .check()
+            .unwrap();
         let version = unpack_version(version);
         assert_ge!(version, [1, 2, 0]);
         debug!("Vulkan version: {:?}", version);
@@ -86,8 +89,10 @@ impl Instance {
         }
 
         info!("enabled layers: {:?}", debug_cstrs(&layers));
-        info!("enabled instance extensions: {:?}",
-            debug_cstrs(&extensions));
+        info!(
+            "enabled instance extensions: {:?}",
+            debug_cstrs(&extensions)
+        );
 
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &vk_app_info,
@@ -99,9 +104,10 @@ impl Instance {
         };
 
         let mut inst = vk::null();
-        entry.create_instance(&create_info, ptr::null(), &mut inst).check()?;
-        let table =
-            Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
+        entry
+            .create_instance(&create_info, ptr::null(), &mut inst)
+            .check()?;
+        let table = Arc::new(vkl::InstanceTable::load(inst, get_instance_proc_addr));
 
         let app_info = Arc::new(app_info);
         let mut instance = Instance {
@@ -114,11 +120,9 @@ impl Instance {
         };
 
         if instance.app_info.test {
-            let severity
-                = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING_BIT_EXT
+            let severity = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING_BIT_EXT
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR_BIT_EXT;
-            let ty
-                = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION_BIT_EXT
+            let ty = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION_BIT_EXT
                 | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE_BIT_EXT;
             let handler = Arc::clone(&instance.debug_handler);
             instance.register_debug_messenger(severity, ty, handler);
@@ -147,17 +151,16 @@ impl Instance {
         )
     }
 
-    pub unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) ->
-        vk::PhysicalDeviceProperties
-    {
+    pub unsafe fn get_properties(&self, pdev: vk::PhysicalDevice) -> vk::PhysicalDeviceProperties {
         let mut res = Default::default();
         self.table.get_physical_device_properties(pdev, &mut res);
         res
     }
 
-    pub unsafe fn create_device(self: &Arc<Self>, pdev: vk::PhysicalDevice) ->
-        DeviceResult<(Arc<Device>, Vec<Vec<Arc<Queue>>>)>
-    {
+    pub unsafe fn create_device(
+        self: &Arc<Self>,
+        pdev: vk::PhysicalDevice,
+    ) -> DeviceResult<(Arc<Device>, Vec<Vec<Arc<Queue>>>)> {
         Ok(Device::new(Arc::clone(self), pdev)?)
     }
 
@@ -165,10 +168,13 @@ impl Instance {
         self: &Arc<Self>,
         window: &Arc<window::Window>,
     ) -> DeviceResult<Arc<Surface>> {
-        Ok(Arc::new(Surface::new(Arc::clone(self), Arc::clone(window))?))
+        Ok(Arc::new(Surface::new(
+            Arc::clone(self),
+            Arc::clone(window),
+        )?))
     }
 
-    crate unsafe fn register_debug_messenger(
+    pub(crate) unsafe fn register_debug_messenger(
         &mut self,
         severity: vk::DebugUtilsMessageSeverityFlagsEXT,
         types: vk::DebugUtilsMessageTypeFlagsEXT,

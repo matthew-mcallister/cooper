@@ -3,7 +3,7 @@ mod scheduler;
 mod view;
 mod world_render;
 
-crate use instance::*;
-crate use scheduler::*;
+pub(crate) use instance::*;
+pub(crate) use scheduler::*;
 pub use view::*;
-crate use world_render::*;
+pub(crate) use world_render::*;

@@ -22,7 +22,7 @@ pub struct RenderLoop {
 }
 
 #[derive(Debug)]
-crate struct SwapchainControl {
+pub(crate) struct SwapchainControl {
     swapchain: Swapchain,
     acquired_image: Option<u32>,
     acquire_sem: BinarySemaphore,
@@ -38,9 +38,7 @@ impl Drop for RenderLoop {
 }
 
 impl RenderLoop {
-    pub fn new(app_info: AppInfo, window: Arc<window::Window>) ->
-        DeviceResult<Self>
-    {
+    pub fn new(app_info: AppInfo, window: Arc<window::Window>) -> DeviceResult<Self> {
         let (swapchain, queues) = unsafe { init_swapchain(app_info, window)? };
         let device = Arc::clone(swapchain.device());
         let gfx_queue = Arc::clone(&queues[0][0]);
@@ -64,8 +62,7 @@ impl RenderLoop {
         let frame_num = 1;
         let swapchain = SwapchainControl::new(swapchain);
 
-        let mut master_sem = TimelineSemaphore::new(
-            Arc::clone(&device), frame_num);
+        let mut master_sem = TimelineSemaphore::new(Arc::clone(&device), frame_num);
         set_name!(master_sem);
 
         Ok(Self {
@@ -83,11 +80,11 @@ impl RenderLoop {
         })
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn frame_num(&self) -> u64 {
+    pub(crate) fn frame_num(&self) -> u64 {
         self.frame_num
     }
 
@@ -132,7 +129,12 @@ impl RenderLoop {
         mapping: MemoryMapping,
         size: vk::DeviceSize,
     ) -> Arc<BufferDef> {
-        Arc::new(BufferDef { binding, lifetime, mapping, size })
+        Arc::new(BufferDef {
+            binding,
+            lifetime,
+            mapping,
+            size,
+        })
     }
 
     pub fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
@@ -143,69 +145,61 @@ impl RenderLoop {
         self.resources.query_status() == SchedulerStatus::Busy
     }
 
-    pub fn upload_image(
-        &mut self,
-        image: &Arc<ImageDef>,
-        src: Arc<Vec<u8>>,
-        src_offset: usize,
-    ) {
+    pub fn upload_image(&mut self, image: &Arc<ImageDef>, src: Arc<Vec<u8>>, src_offset: usize) {
         self.resources.upload_image(image, src, src_offset)
     }
 
-    pub fn upload_buffer(
-        &mut self,
-        buffer: &Arc<BufferDef>,
-        src: Arc<Vec<u8>>,
-        src_offset: usize,
-    ) {
+    pub fn upload_buffer(&mut self, buffer: &Arc<BufferDef>, src: Arc<Vec<u8>>, src_offset: usize) {
         trace!(
             concat!(
                 "RenderLoop::upload_buffer(buffer: {:?}, src.len: {}, ",
                 "src_offset: {})",
             ),
-            buffer, src.len(), src_offset,
+            buffer,
+            src.len(),
+            src_offset,
         );
         let heap = &self.state.as_ref().unwrap().buffers;
         self.resources.upload_buffer(heap, buffer, src, src_offset)
     }
 
-    pub fn define_material(&mut self, desc: &MaterialDesc) -> Arc<MaterialDef>
-    {
+    pub fn define_material(&mut self, desc: &MaterialDesc) -> Arc<MaterialDef> {
         let state = &mut *self.state.as_mut().unwrap();
         self.materials.define(state, desc)
     }
 
     // TODO: Shouldn't be unsafe
-    pub unsafe fn read_shader(&mut self, path: impl Into<String>) ->
-        std::io::Result<Arc<Shader>>
-    {
-        Ok(Arc::new(Shader::from_path(Arc::clone(self.device()), path)?))
+    pub unsafe fn read_shader(&mut self, path: impl Into<String>) -> std::io::Result<Arc<Shader>> {
+        Ok(Arc::new(Shader::from_path(
+            Arc::clone(self.device()),
+            path,
+        )?))
     }
 
-    crate fn new_frame(&mut self) {
+    pub(crate) fn new_frame(&mut self) {
         self.frame_num += 1;
         debug!("beginning frame {}", self.frame_num);
         let state = &mut *self.state.as_mut().unwrap();
         state.frame_over();
         self.resources.schedule(&self.image_heap);
-        self.materials.update_resolved_resources(state, &self.resources);
+        self.materials
+            .update_resolved_resources(state, &self.resources);
         let layout = WorldUniforms::create_set_layout(&mut state.set_layouts);
-        self.renderer.create_pipelines(
-            &layout.into_owned(),
-            state,
-            &mut self.materials,
-        );
+        self.renderer
+            .create_pipelines(&layout.into_owned(), state, &mut self.materials);
     }
 
-    crate fn wait_for_render(&self) {
+    pub(crate) fn wait_for_render(&self) {
         let _ = self.master_sem.wait(self.frame_num, u64::MAX);
     }
 
-    crate fn render(&mut self, world: RenderWorldData) {
+    pub(crate) fn render(&mut self, world: RenderWorldData) {
         self.wait_for_render();
         self.new_frame();
 
-        unsafe { self.swapchain.acquire(); }
+        unsafe {
+            self.swapchain.acquire();
+        }
         let state = Arc::new(self.state.take().unwrap());
         self.renderer.run(
             Arc::clone(&state),
@@ -220,7 +214,9 @@ impl RenderLoop {
         );
         self.state = Some(Arc::try_unwrap(state).unwrap());
 
-        unsafe { self.swapchain.present(&self.gfx_queue); }
+        unsafe {
+            self.swapchain.present(&self.gfx_queue);
+        }
     }
 }
 
@@ -250,9 +246,11 @@ impl SwapchainControl {
     unsafe fn acquire(&mut self) {
         trace!("SwapchainControl::acquire()");
         assert!(self.acquired_image.is_none());
-        self.acquired_image = self.swapchain
+        self.acquired_image = self
+            .swapchain
             .acquire_next_image(&mut self.acquire_sem)
-            .unwrap().into();
+            .unwrap()
+            .into();
     }
 
     unsafe fn present(&mut self, present_queue: &Arc<Queue>) {
@@ -261,11 +259,10 @@ impl SwapchainControl {
             fmt_named(&**present_queue),
         );
         let index = self.image_index();
-        present_queue.present(
-            &[&mut self.present_sem],
-            &mut self.swapchain,
-            index,
-        ).check().unwrap();
+        present_queue
+            .present(&[&mut self.present_sem], &mut self.swapchain, index)
+            .check()
+            .unwrap();
         self.acquired_image = None;
     }
 }

@@ -7,9 +7,9 @@ use device::*;
 
 use crate::*;
 
-crate type UnitTestInput = TestVars;
-crate type UnitTestData = unsafe fn(UnitTestInput);
-crate type UnitTest = unit::Test<UnitTestData>;
+pub(crate) type UnitTestInput = TestVars;
+pub(crate) type UnitTestData = unsafe fn(UnitTestInput);
+pub(crate) type UnitTest = unit::Test<UnitTestData>;
 
 // TODO: This really *shouldn't* be public, but it basically has to be
 // for integration tests.
@@ -23,9 +23,9 @@ pub struct TestContext {
 }
 
 #[derive(Debug)]
-crate struct TestVars {
-    crate swapchain: Swapchain,
-    crate gfx_queue: Arc<Queue>,
+pub(crate) struct TestVars {
+    pub(crate) swapchain: Swapchain,
+    pub(crate) gfx_queue: Arc<Queue>,
 }
 
 const WINDOW_NAME: &str = "cooper test";
@@ -42,8 +42,7 @@ fn app_info() -> AppInfo {
 
 impl TestContext {
     fn create_window(&self) -> AnyResult<Arc<window::Window>> {
-        let show_window = std::env::var("TESTING_SHOW_WINDOW")
-            .map_or(false, |val| val == "1");
+        let show_window = std::env::var("TESTING_SHOW_WINDOW").map_or(false, |val| val == "1");
         let info = window::CreateInfo {
             title: WINDOW_NAME.to_owned(),
             dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
@@ -72,7 +71,10 @@ impl TestContext {
     }
 
     unsafe fn create_render_loop(&self) -> AnyResult<Box<RenderLoop>> {
-        Ok(Box::new(RenderLoop::new(app_info(), self.create_window()?)?))
+        Ok(Box::new(RenderLoop::new(
+            app_info(),
+            self.create_window()?,
+        )?))
     }
 }
 
@@ -80,7 +82,9 @@ impl unit::PanicTestInvoker<UnitTestData> for TestContext {
     fn invoke(&self, test: &UnitTest) {
         let vars = unsafe { self.create_swapchain() }
             .unwrap_or_else(|e| panic!("failed to initialize: {}", e));
-        unsafe { (test.data())(vars); }
+        unsafe {
+            (test.data())(vars);
+        }
     }
 }
 
@@ -88,21 +92,23 @@ impl unit::PanicTestInvoker<IntegrationTestData> for TestContext {
     fn invoke(&self, test: &IntegrationTest) {
         let vars = unsafe { self.create_render_loop() }
             .unwrap_or_else(|e| panic!("failed to initialize: {}", e));
-        unsafe { (test.data())(vars); }
+        unsafe {
+            (test.data())(vars);
+        }
     }
 }
 
 #[allow(dead_code)]
 impl TestVars {
-    crate fn swapchain(&self) -> &Swapchain {
+    pub(crate) fn swapchain(&self) -> &Swapchain {
         &self.swapchain
     }
 
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         self.swapchain.device()
     }
 
-    crate fn gfx_queue(&self) -> &Arc<Queue> {
+    pub(crate) fn gfx_queue(&self) -> &Arc<Queue> {
         &self.gfx_queue
     }
 }

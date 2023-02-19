@@ -5,20 +5,20 @@ use device::*;
 use crate::*;
 
 #[derive(Debug)]
-crate struct Globals {
-    crate device: Arc<Device>,
-    crate shaders: GlobalShaders,
-    crate specs: GlobalShaderSpecs,
-    crate empty_uniform_buffer: Arc<BufferAlloc>,
-    crate empty_storage_buffer: Arc<BufferAlloc>,
-    crate immediate_image_2d: Arc<ImageView>,
-    crate immediate_storage_image_2d: Arc<ImageView>,
-    crate empty_image_2d: Arc<ImageDef>,
-    crate empty_sampler: Arc<Sampler>,
+pub(crate) struct Globals {
+    pub(crate) device: Arc<Device>,
+    pub(crate) shaders: GlobalShaders,
+    pub(crate) specs: GlobalShaderSpecs,
+    pub(crate) empty_uniform_buffer: Arc<BufferAlloc>,
+    pub(crate) empty_storage_buffer: Arc<BufferAlloc>,
+    pub(crate) immediate_image_2d: Arc<ImageView>,
+    pub(crate) immediate_storage_image_2d: Arc<ImageView>,
+    pub(crate) empty_image_2d: Arc<ImageDef>,
+    pub(crate) empty_sampler: Arc<Sampler>,
 }
 
 impl Globals {
-    crate fn new(state: &mut SystemState) -> Self {
+    pub(crate) fn new(state: &mut SystemState) -> Self {
         unsafe { Self::unsafe_new(state) }
     }
 
@@ -51,9 +51,10 @@ impl Globals {
             (1, 1).into(),
             1,
             1,
-        ).with_name("immediate_image_2d")
-            .build_image(&state.image_heap)
-            .create_full_view();
+        )
+        .with_name("immediate_image_2d")
+        .build_image(&state.image_heap)
+        .create_full_view();
 
         let immediate_storage_image_2d = ImageDef::new(
             &device,
@@ -64,20 +65,24 @@ impl Globals {
             (1, 1).into(),
             1,
             1,
-        ).with_name("immediate_storage_image_2d")
-            .build_image(&state.image_heap)
-            .create_full_view();
+        )
+        .with_name("immediate_storage_image_2d")
+        .build_image(&state.image_heap)
+        .create_full_view();
 
-        let empty_image_2d = Arc::new(ImageDef::new(
-            &device,
-            Default::default(),
-            ImageType::Dim2,
-            Format::RGBA8,
-            SampleCount::One,
-            (1, 1).into(),
-            1,
-            1,
-        ).with_name("empty_image_2d"));
+        let empty_image_2d = Arc::new(
+            ImageDef::new(
+                &device,
+                Default::default(),
+                ImageType::Dim2,
+                Format::RGBA8,
+                SampleCount::One,
+                (1, 1).into(),
+                1,
+                1,
+            )
+            .with_name("empty_image_2d"),
+        );
 
         let desc = SamplerDesc {
             mag_filter: Filter::Linear,
@@ -86,8 +91,7 @@ impl Globals {
             anisotropy_level: AnisotropyLevel::Sixteen,
             ..Default::default()
         };
-        let empty_sampler =
-            Arc::clone(&state.samplers.get_or_create_committed(&desc));
+        let empty_sampler = Arc::clone(&state.samplers.get_or_create_committed(&desc));
 
         Globals {
             device,
@@ -104,12 +108,8 @@ impl Globals {
 
     /// Zero-fills the global default image, preparing it to be used in
     /// shaders.
-    crate fn upload_images(&self, resources: &mut ResourceSystem) {
+    pub(crate) fn upload_images(&self, resources: &mut ResourceSystem) {
         let image_data = Arc::new(vec![0, 0, 0, 0]);
-        resources.upload_image(
-            &self.empty_image_2d,
-            Arc::clone(&image_data),
-            0,
-        );
+        resources.upload_image(&self.empty_image_2d, Arc::clone(&image_data), 0);
     }
 }

@@ -1,25 +1,24 @@
 use std::sync::Arc;
 
 use device::{
-    BufferHeap, DescriptorHeap, Device, ImageHeap, PipelineCache, SamplerCache,
-    SetLayoutCache,
+    BufferHeap, DescriptorHeap, Device, ImageHeap, PipelineCache, SamplerCache, SetLayoutCache,
 };
 use log::trace;
 
 #[derive(Debug)]
-crate struct SystemState {
-    crate device: Arc<Device>,
-    crate buffers: Arc<BufferHeap>,
-    crate image_heap: Arc<ImageHeap>,
-    crate descriptors: Arc<DescriptorHeap>,
-    crate set_layouts: SetLayoutCache,
-    crate pipelines: PipelineCache,
-    crate samplers: SamplerCache,
+pub(crate) struct SystemState {
+    pub(crate) device: Arc<Device>,
+    pub(crate) buffers: Arc<BufferHeap>,
+    pub(crate) image_heap: Arc<ImageHeap>,
+    pub(crate) descriptors: Arc<DescriptorHeap>,
+    pub(crate) set_layouts: SetLayoutCache,
+    pub(crate) pipelines: PipelineCache,
+    pub(crate) samplers: SamplerCache,
     //shader_specs: ..., (maybe)
 }
 
 impl SystemState {
-    crate fn new(device: Arc<Device>) -> Self {
+    pub(crate) fn new(device: Arc<Device>) -> Self {
         let dev = || Arc::clone(&device);
         let buffers = BufferHeap::new(dev());
         let image_heap = Arc::new(ImageHeap::new(dev()));
@@ -39,11 +38,11 @@ impl SystemState {
     }
 
     #[allow(dead_code)]
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
-    crate fn frame_over(&mut self) {
+    pub(crate) fn frame_over(&mut self) {
         trace!("SystemState::frame_over(...)");
         unsafe {
             self.buffers.clear_frame();

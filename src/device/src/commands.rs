@@ -84,15 +84,14 @@ wrap_vk_enum! {
 impl Drop for CmdPool {
     fn drop(&mut self) {
         let dt = &*self.device.table;
-        unsafe { dt.destroy_command_pool(self.inner, ptr::null()); }
+        unsafe {
+            dt.destroy_command_pool(self.inner, ptr::null());
+        }
     }
 }
 
 impl CmdPool {
-    pub fn new(
-        queue_family: QueueFamily<'_>,
-        flags: vk::CommandPoolCreateFlags,
-    ) -> Self {
+    pub fn new(queue_family: QueueFamily<'_>, flags: vk::CommandPoolCreateFlags) -> Self {
         use vk::CommandPoolCreateFlags as Flags;
         let allowed = Flags::TRANSIENT_BIT | Flags::RESET_COMMAND_BUFFER_BIT;
         assert!(allowed.contains(flags));
@@ -107,7 +106,8 @@ impl CmdPool {
         let mut pool = vk::null();
         unsafe {
             dt.create_command_pool(&create_info, ptr::null(), &mut pool)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
 
         Self {
@@ -156,8 +156,11 @@ impl CmdPool {
     }
 
     pub fn alloc(&mut self, level: CmdBufferLevel) -> vk::CommandBuffer {
-        trace!("CmdPool::alloc(self: {:?}, level: {:?})",
-            fmt_named(&*self), level);
+        trace!(
+            "CmdPool::alloc(self: {:?}, level: {:?})",
+            fmt_named(&*self),
+            level
+        );
         let dt = &*self.device.table;
         let mut buffer = vk::null();
         let buffers = std::slice::from_mut(&mut buffer);
@@ -169,14 +172,19 @@ impl CmdPool {
         };
         unsafe {
             dt.allocate_command_buffers(&alloc_info, buffers.as_mut_ptr())
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
         buffer
     }
 
     pub unsafe fn free(&mut self, cmds: &[vk::CommandBuffer]) {
-        trace!("CmdPool::free(self: {:?}, queue_family: {}, cmds: {:?})",
-            fmt_named(&*self), self.queue_family, cmds);
+        trace!(
+            "CmdPool::free(self: {:?}, queue_family: {}, cmds: {:?})",
+            fmt_named(&*self),
+            self.queue_family,
+            cmds
+        );
         let dt = &*self.device.table;
         dt.free_command_buffers(self.inner, cmds.len() as _, cmds.as_ptr());
     }
@@ -189,7 +197,9 @@ impl CmdPool {
     pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.inner, name); }
+        unsafe {
+            self.device().set_name(self.inner, name);
+        }
     }
 }
 
@@ -282,26 +292,28 @@ impl CmdBuffer {
         assert_eq!(self.state, CmdBufferState::Recording);
     }
 
-    unsafe fn begin(
-        &mut self,
-        inheritance_info: Option<&vk::CommandBufferInheritanceInfo>,
-    ) {
-        trace!("CmdBuffer::begin(self: {:?}, inheritance_info: {:?})",
-            self, inheritance_info);
+    unsafe fn begin(&mut self, inheritance_info: Option<&vk::CommandBufferInheritanceInfo>) {
+        trace!(
+            "CmdBuffer::begin(self: {:?}, inheritance_info: {:?})",
+            self,
+            inheritance_info
+        );
 
         let dt = &*self.device.table;
 
         assert_eq!(self.state, CmdBufferState::Initial);
 
         // TODO (eventually): reusable buffers
-        let flags = self.level.required_usage_flags() |
-            vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT_BIT;
+        let flags =
+            self.level.required_usage_flags() | vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT_BIT;
         let begin_info = vk::CommandBufferBeginInfo {
             flags,
             p_inheritance_info: inheritance_info.as_ptr(),
             ..Default::default()
         };
-        dt.begin_command_buffer(self.inner, &begin_info).check().unwrap();
+        dt.begin_command_buffer(self.inner, &begin_info)
+            .check()
+            .unwrap();
         self.state = CmdBufferState::Recording;
     }
 
@@ -330,39 +342,23 @@ impl CmdBuffer {
     unsafe fn set_viewport(&mut self, viewport: vk::Viewport) {
         debug_assert!(self.supports_graphics());
         let viewports = [viewport];
-        self.dt().cmd_set_viewport(
-            self.inner,
-            0,
-            viewports.len() as _,
-            viewports.as_ptr(),
-        );
+        self.dt()
+            .cmd_set_viewport(self.inner, 0, viewports.len() as _, viewports.as_ptr());
     }
 
     unsafe fn set_scissor(&mut self, scissor: vk::Rect2D) {
         debug_assert!(self.supports_graphics());
         let scissors = [scissor];
-        self.dt().cmd_set_scissor(
-            self.inner,
-            0,
-            scissors.len() as _,
-            scissors.as_ptr(),
-        );
+        self.dt()
+            .cmd_set_scissor(self.inner, 0, scissors.len() as _, scissors.as_ptr());
     }
 
     /// N.B.: values should be negative as depth buffer is reversed.
     // TODO: Depth clamping (maybe good for first-person rendering)
-    unsafe fn set_depth_bias(
-        &mut self,
-        constant_factor: f32,
-        slope_factor: f32,
-    ) {
+    unsafe fn set_depth_bias(&mut self, constant_factor: f32, slope_factor: f32) {
         debug_assert!(self.supports_graphics());
-        self.dt().cmd_set_depth_bias(
-            self.inner,
-            constant_factor,
-            0.0,
-            slope_factor,
-        );
+        self.dt()
+            .cmd_set_depth_bias(self.inner, constant_factor, 0.0, slope_factor);
     }
 
     unsafe fn reset_dynamic_state(&mut self, framebuffer: &Framebuffer) {
@@ -387,13 +383,19 @@ impl CmdBufferLevel {
     pub fn required_usage_flags(self) -> vk::CommandBufferUsageFlags {
         if self == Self::SubpassContinue {
             vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT
-        } else { Default::default() }
+        } else {
+            Default::default()
+        }
     }
 }
 
 impl From<CmdBufferLevel> for vk::CommandBufferLevel {
     fn from(level: CmdBufferLevel) -> Self {
-        if level.is_secondary() { Self::SECONDARY } else { Self::PRIMARY }
+        if level.is_secondary() {
+            Self::SECONDARY
+        } else {
+            Self::PRIMARY
+        }
     }
 }
 
@@ -470,14 +472,14 @@ impl SubpassCmds {
         let sets = [set.inner()];
         unsafe {
             self.dt().cmd_bind_descriptor_sets(
-                self.raw(),         // commandBuffer
-                bind_point,         // pipelineBindPoint
-                layout.inner(),     // layout
-                index,              // firstSet
-                sets.len() as _,    // descriptorSetCount
-                sets.as_ptr(),      // pDescriptorSets
-                0,                  // dynamicOffsetCount
-                ptr::null(),        // pDynamicOffsets
+                self.raw(),      // commandBuffer
+                bind_point,      // pipelineBindPoint
+                layout.inner(),  // layout
+                index,           // firstSet
+                sets.len() as _, // descriptorSetCount
+                sets.as_ptr(),   // pDescriptorSets
+                0,               // dynamicOffsetCount
+                ptr::null(),     // pDynamicOffsets
             );
         }
     }
@@ -500,25 +502,14 @@ impl SubpassCmds {
         self.gfx_pipe = Some(Arc::clone(pipeline));
     }
 
-    pub fn bind_index_buffer(
-        &mut self,
-        buffer: BufferRange<'_>,
-        ty: IndexType,
-    ) {
+    pub fn bind_index_buffer(&mut self, buffer: BufferRange<'_>, ty: IndexType) {
         unsafe {
-            self.dt().cmd_bind_index_buffer(
-                self.raw(),
-                buffer.raw(),
-                buffer.offset(),
-                ty.into(),
-            );
+            self.dt()
+                .cmd_bind_index_buffer(self.raw(), buffer.raw(), buffer.offset(), ty.into());
         }
     }
 
-    pub fn bind_vertex_buffers<'a>(
-        &mut self,
-        buffers: impl IntoIterator<Item = BufferRange<'a>>,
-    ) {
+    pub fn bind_vertex_buffers<'a>(&mut self, buffers: impl IntoIterator<Item = BufferRange<'a>>) {
         let mut raw: SmallVec<_, 16> = Default::default();
         let mut offsets: SmallVec<_, 16> = Default::default();
         for buffer in buffers {
@@ -560,17 +551,15 @@ impl SubpassCmds {
         self.pre_draw();
         self.dt().cmd_draw(
             self.raw(),
-            vertex_count, instance_count,
-            first_vertex, first_instance,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance,
         );
     }
 
     #[inline]
-    pub unsafe fn draw_indexed(
-        &mut self,
-        vertex_count: u32,
-        instance_count: u32,
-    ) {
+    pub unsafe fn draw_indexed(&mut self, vertex_count: u32, instance_count: u32) {
         self.draw_indexed_offset(vertex_count, instance_count, 0, 0, 0);
     }
 
@@ -588,7 +577,10 @@ impl SubpassCmds {
                 "instance_count: {}, first_index: {}, vertex_offset: {}, ",
                 "first_instance: {})",
             ),
-            vertex_count, instance_count, first_index, vertex_offset,
+            vertex_count,
+            instance_count,
+            first_index,
+            vertex_offset,
             first_instance,
         );
         self.pre_draw();
@@ -633,12 +625,10 @@ impl SubpassCmds {
     }
 
     #[inline]
-    pub fn set_depth_bias(
-        &mut self,
-        constant_factor: f32,
-        slope_factor: f32,
-    ) {
-        unsafe { self.inner.set_depth_bias(constant_factor, slope_factor); }
+    pub fn set_depth_bias(&mut self, constant_factor: f32, slope_factor: f32) {
+        unsafe {
+            self.inner.set_depth_bias(constant_factor, slope_factor);
+        }
     }
 }
 
@@ -659,7 +649,9 @@ impl RenderPassCmds {
         };
         // TODO: should be able to use an already begun command buffer
         // if requisites are met
-        unsafe { cmds.begin(clear_values, contents); }
+        unsafe {
+            cmds.begin(clear_values, contents);
+        }
         cmds
     }
 
@@ -700,11 +692,7 @@ impl RenderPassCmds {
         }
     }
 
-    unsafe fn begin(
-        &mut self,
-        clear_values: &[vk::ClearValue],
-        contents: SubpassContents,
-    ) {
+    unsafe fn begin(&mut self, clear_values: &[vk::ClearValue], contents: SubpassContents) {
         assert!(self.cur_subpass < 0);
         self.cur_subpass = 0;
         self.cur_contents = contents;
@@ -726,11 +714,8 @@ impl RenderPassCmds {
             p_clear_values: clear_values.as_ptr(),
             ..Default::default()
         };
-        self.dt().cmd_begin_render_pass(
-            self.raw(),
-            &begin_info,
-            contents.into(),
-        );
+        self.dt()
+            .cmd_begin_render_pass(self.raw(), &begin_info, contents.into());
     }
 
     fn ensure_recording(&self) {
@@ -756,21 +741,22 @@ impl RenderPassCmds {
         self.cur_subpass += 1;
         self.cur_contents = contents;
         self.check_state();
-        unsafe { self.dt().cmd_next_subpass(self.raw(), contents.into()); }
+        unsafe {
+            self.dt().cmd_next_subpass(self.raw(), contents.into());
+        }
     }
 
     pub unsafe fn execute_cmds(&mut self, cmds: &[vk::CommandBuffer]) {
         assert_eq!(self.level(), CmdBufferLevel::Primary);
         assert_eq!(self.cur_contents, SubpassContents::Secondary);
-        self.dt().cmd_execute_commands(
-            self.raw(),
-            cmds.len() as _,
-            cmds.as_ptr(),
-        );
+        self.dt()
+            .cmd_execute_commands(self.raw(), cmds.len() as _, cmds.as_ptr());
     }
 
     pub fn end(self) -> CmdBuffer {
-        unsafe { self.dt().cmd_end_render_pass(self.raw()); }
+        unsafe {
+            self.dt().cmd_end_render_pass(self.raw());
+        }
         self.inner
     }
 }
@@ -779,7 +765,9 @@ impl XferCmds {
     pub fn new(mut cmds: CmdBuffer) -> Self {
         assert!(cmds.supports_xfer());
         assert_ne!(cmds.level, CmdBufferLevel::SubpassContinue);
-        unsafe { cmds.begin(None); }
+        unsafe {
+            cmds.begin(None);
+        }
         Self { inner: cmds }
     }
 
@@ -801,16 +789,23 @@ impl XferCmds {
         buffer_barriers: &[vk::BufferMemoryBarrier],
         image_barriers: &[vk::ImageMemoryBarrier],
     ) {
-        trace!(concat!(
-            "XferCmds::pipeline_barrier(",
-            "src_stage_mask: {:?}, ",
-            "dst_stage_mask: {:?}, ",
-            "dependency_flags: {:?}, ",
-            "global_barriers: {:?}, ",
-            "buffer_barriers: {:?}, ",
-            "image_barriers: {:?})",
-        ), src_stage_mask, dst_stage_mask, dependency_flags, global_barriers,
-            buffer_barriers, image_barriers);
+        trace!(
+            concat!(
+                "XferCmds::pipeline_barrier(",
+                "src_stage_mask: {:?}, ",
+                "dst_stage_mask: {:?}, ",
+                "dependency_flags: {:?}, ",
+                "global_barriers: {:?}, ",
+                "buffer_barriers: {:?}, ",
+                "image_barriers: {:?})",
+            ),
+            src_stage_mask,
+            dst_stage_mask,
+            dependency_flags,
+            global_barriers,
+            buffer_barriers,
+            image_barriers
+        );
         self.dt().cmd_pipeline_barrier(
             self.raw(),
             src_stage_mask,
@@ -834,8 +829,10 @@ impl XferCmds {
     ) {
         // This check is good for catching unnecessary copies on UMA.
         // However, there are use cases that may need to be allowed.
-        assert!(!Arc::ptr_eq(src, dst),
-            "copy to same buffer (likely unintended)");
+        assert!(
+            !Arc::ptr_eq(src, dst),
+            "copy to same buffer (likely unintended)"
+        );
         for region in regions.iter() {
             assert!(region.src_offset + region.size <= src.size());
             assert!(region.dst_offset + region.size <= dst.size());
@@ -856,10 +853,16 @@ impl XferCmds {
         layout: vk::ImageLayout,
         regions: &[vk::BufferImageCopy],
     ) {
-        trace!(concat!(
-            "XferCmds::copy_buffer_to_image(src: {:?}, dst: {:?}, ",
-            "layout: {:?}, regions: {:?})",
-        ), fmt_named(&*src), fmt_named(&**dst), layout, regions);
+        trace!(
+            concat!(
+                "XferCmds::copy_buffer_to_image(src: {:?}, dst: {:?}, ",
+                "layout: {:?}, regions: {:?})",
+            ),
+            fmt_named(&*src),
+            fmt_named(&**dst),
+            layout,
+            regions
+        );
         validate_buffer_image_copy(src, dst, layout, regions);
         self.dt().cmd_copy_buffer_to_image(
             self.raw(),
@@ -895,7 +898,8 @@ fn validate_buffer_image_copy(
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         vk::ImageLayout::GENERAL,
         vk::ImageLayout::SHARED_PRESENT_KHR,
-    ].contains(&layout));
+    ]
+    .contains(&layout));
     for region in regions.iter() {
         let (x, y, z) = region.image_offset.into();
         let off = Ivector3::new(x, y, z);
@@ -905,10 +909,14 @@ fn validate_buffer_image_copy(
         let texel_size = dst.format().size();
         let row_length = if region.buffer_row_length == 0 {
             region.buffer_row_length
-        } else { region.image_extent.width } as usize;
+        } else {
+            region.image_extent.width
+        } as usize;
         let image_height = if region.buffer_image_height == 0 {
             region.buffer_image_height
-        } else { region.image_extent.height } as usize;
+        } else {
+            region.image_extent.height
+        } as usize;
         let layer_texels = row_length * image_height;
         let layer_count = region.image_subresource.layer_count as usize;
         let size = (layer_count * layer_texels * texel_size) as vk::DeviceSize;
@@ -927,13 +935,19 @@ fn validate_buffer_image_copy(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use crate::*;
     use crate::testing::*;
+    use crate::*;
+    use std::sync::Arc;
 
-    unsafe fn test_common(vars: &testing::TestVars) -> (
-        TestResources, PipelineCache, TrivialRenderer, TrivialPass,
-        Vec<Arc<Framebuffer>>, Box<CmdPool>,
+    unsafe fn test_common(
+        vars: &testing::TestVars,
+    ) -> (
+        TestResources,
+        PipelineCache,
+        TrivialRenderer,
+        TrivialPass,
+        Vec<Arc<Framebuffer>>,
+        Box<CmdPool>,
     ) {
         let device = vars.device();
         let resources = TestResources::new(device);
@@ -949,24 +963,23 @@ mod tests {
     }
 
     unsafe fn record_subpass(vars: testing::TestVars) {
-        let (_res, pipelines, trivial, pass, framebuffers, pool) =
-            test_common(&vars);
-        let mut cmds = SubpassCmds::secondary(
-            Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
+        let (_res, pipelines, trivial, pass, framebuffers, pool) = test_common(&vars);
+        let mut cmds =
+            SubpassCmds::secondary(Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
         trivial.render(&pipelines, &mut cmds);
         let (_, _) = cmds.end_secondary();
     }
 
     unsafe fn record_render_pass(vars: testing::TestVars) {
         // TODO: Test next_subpass()
-        let (_res, pipelines, trivial, _, framebuffers, pool) =
-            test_common(&vars);
+        let (_res, pipelines, trivial, _, framebuffers, pool) = test_common(&vars);
         let mut cmds = RenderPassCmds::new(
             CmdBuffer::new(pool, CmdBufferLevel::Primary),
             Arc::clone(&framebuffers[0]),
             &[],
             SubpassContents::Inline,
-        ).enter_subpass();
+        )
+        .enter_subpass();
         trivial.render(&pipelines, &mut cmds);
         let (_, _) = cmds.exit_subpass().end().end();
     }
@@ -1004,9 +1017,7 @@ mod tests {
         cmds.execute_cmds(&[vk::null()]);
     }
 
-    unsafe fn copy_common(vars: &testing::TestVars) ->
-        (TestResources, XferCmds)
-    {
+    unsafe fn copy_common(vars: &testing::TestVars) -> (TestResources, XferCmds) {
         let resources = TestResources::new(vars.device());
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
@@ -1030,18 +1041,22 @@ mod tests {
             MemoryMapping::DeviceLocal,
             1024,
         );
-        cmds.copy_buffer(src.buffer(), dst.buffer(), &[
-            vk::BufferCopy {
-                src_offset: 0,
-                dst_offset: 0,
-                size: 512,
-            },
-            vk::BufferCopy {
-                src_offset: 512,
-                dst_offset: 768,
-                size: 256,
-            },
-        ]);
+        cmds.copy_buffer(
+            src.buffer(),
+            dst.buffer(),
+            &[
+                vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: 512,
+                },
+                vk::BufferCopy {
+                    src_offset: 512,
+                    dst_offset: 768,
+                    size: 256,
+                },
+            ],
+        );
         cmds.end_xfer().end();
     }
 
@@ -1053,18 +1068,22 @@ mod tests {
             MemoryMapping::Mapped,
             1024,
         );
-        cmds.copy_buffer(buf.buffer(), buf.buffer(), &[
-            vk::BufferCopy {
-                src_offset: 0,
-                dst_offset: 1536,
-                size: 512,
-            },
-            vk::BufferCopy {
-                src_offset: 512,
-                dst_offset: 1024,
-                size: 512,
-            },
-        ]);
+        cmds.copy_buffer(
+            buf.buffer(),
+            buf.buffer(),
+            &[
+                vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 1536,
+                    size: 512,
+                },
+                vk::BufferCopy {
+                    src_offset: 512,
+                    dst_offset: 1024,
+                    size: 512,
+                },
+            ],
+        );
         cmds.end_xfer().end();
     }
 
@@ -1092,25 +1111,11 @@ mod tests {
             &dst,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             &[vk::BufferImageCopy {
-                image_subresource: dst.all_layers_for_mip_level(0)
-                    .to_mip_layers(0),
+                image_subresource: dst.all_layers_for_mip_level(0).to_mip_layers(0),
                 image_extent: dst.extent().into(),
                 ..Default::default()
             }],
         );
         cmds.end_xfer().end();
     }
-
-    unit::declare_tests![
-        record_subpass,
-        record_render_pass,
-        (#[should_err] subpass_out_of_bounds),
-        (#[should_err] inline_in_secondary_subpass),
-        (#[should_err] exec_in_inline_subpass),
-        copy_buffer,
-        (#[should_err] copy_intra_buffer),
-        copy_image,
-    ];
 }
-
-unit::collect_tests![tests];

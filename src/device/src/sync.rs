@@ -66,7 +66,9 @@ impl SemaphoreInner {
     fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.raw, name); }
+        unsafe {
+            self.device().set_name(self.raw, name);
+        }
     }
 }
 
@@ -83,13 +85,16 @@ impl BinarySemaphore {
         let mut sem = vk::null();
         unsafe {
             dt.create_semaphore(&create_info, ptr::null(), &mut sem)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
-        Self { inner: SemaphoreInner {
-            device,
-            raw: sem,
-            name: None,
-        } }
+        Self {
+            inner: SemaphoreInner {
+                device,
+                raw: sem,
+                name: None,
+            },
+        }
     }
 
     #[inline]
@@ -134,13 +139,16 @@ impl TimelineSemaphore {
         let mut sem = vk::null();
         unsafe {
             dt.create_semaphore(&create_info, ptr::null(), &mut sem)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
-        Self { inner: SemaphoreInner {
-            device,
-            raw: sem,
-            name: None,
-        } }
+        Self {
+            inner: SemaphoreInner {
+                device,
+                raw: sem,
+                name: None,
+            },
+        }
     }
 
     #[inline]
@@ -163,8 +171,11 @@ impl TimelineSemaphore {
     }
 
     pub unsafe fn signal(&self, value: u64) {
-        trace!("TimelineSemaphore::signal(self: {:?}, value: {})",
-            fmt_named(self), value);
+        trace!(
+            "TimelineSemaphore::signal(self: {:?}, value: {})",
+            fmt_named(self),
+            value
+        );
         self.dt().signal_semaphore(&vk::SemaphoreSignalInfo {
             semaphore: self.raw(),
             value,
@@ -173,23 +184,35 @@ impl TimelineSemaphore {
     }
 
     pub fn wait(&self, value: u64, timeout: u64) -> WaitResult {
-        trace!("TimelineSemaphore::wait(self: {:?}, value: {}, timeout: {})",
-            fmt_named(self), value, timeout);
+        trace!(
+            "TimelineSemaphore::wait(self: {:?}, value: {}, timeout: {})",
+            fmt_named(self),
+            value,
+            timeout
+        );
         unsafe {
-            self.dt().wait_semaphores(&vk::SemaphoreWaitInfo {
-                semaphore_count: 1,
-                p_semaphores: &self.raw(),
-                p_values: &value,
-                ..Default::default()
-            }, timeout).try_into().unwrap()
+            self.dt()
+                .wait_semaphores(
+                    &vk::SemaphoreWaitInfo {
+                        semaphore_count: 1,
+                        p_semaphores: &self.raw(),
+                        p_values: &value,
+                        ..Default::default()
+                    },
+                    timeout,
+                )
+                .try_into()
+                .unwrap()
         }
     }
 
     pub fn get_value(&self) -> u64 {
         let mut value = 0;
         unsafe {
-            self.dt().get_semaphore_counter_value(self.raw(), &mut value)
-                .check().unwrap();
+            self.dt()
+                .get_semaphore_counter_value(self.raw(), &mut value)
+                .check()
+                .unwrap();
         }
         value
     }
@@ -207,9 +230,9 @@ impl Named for TimelineSemaphore {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use crate::*;
     use super::*;
+    use crate::*;
+    use std::sync::Arc;
 
     unsafe fn timeline_semaphore_host_ops(vars: testing::TestVars) {
         let device = Arc::clone(vars.device());
@@ -237,10 +260,8 @@ mod tests {
         let queue = vars.gfx_queue();
         let pool = Box::new(CmdPool::new_transient(queue.family()));
 
-        let make_cmds = |pool|
-            XferCmds::new(CmdBuffer::new_primary(pool)).end();
-        let mut semaphore = TimelineSemaphore::new(
-            Arc::clone(vars.device()), 0);
+        let make_cmds = |pool| XferCmds::new(CmdBuffer::new_primary(pool)).end();
+        let mut semaphore = TimelineSemaphore::new(Arc::clone(vars.device()), 0);
 
         // Test wait
         let (cmds, pool) = make_cmds(pool);
@@ -272,11 +293,4 @@ mod tests {
 
         queue.device().wait_idle();
     }
-
-    unit::declare_tests![
-        timeline_semaphore_host_ops,
-        timeline_semaphore_queue_signal,
-    ];
 }
-
-unit::collect_tests![tests];

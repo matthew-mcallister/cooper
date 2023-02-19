@@ -10,18 +10,20 @@ macro_rules! impl_conversion {
                 tmp.into()
             }
         }
-    }
+    };
 }
 
-#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
-    MulAssign, PartialEq)]
+#[derive(
+    Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul, MulAssign, PartialEq,
+)]
 pub struct Extent2D {
     pub width: u32,
     pub height: u32,
 }
 
-#[derive(Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul,
-    MulAssign, PartialEq)]
+#[derive(
+    Clone, Constructor, Copy, Debug, Default, Eq, From, Hash, Into, Mul, MulAssign, PartialEq,
+)]
 pub struct Extent3D {
     pub width: u32,
     pub height: u32,
@@ -53,12 +55,22 @@ impl From<Extent2D> for [u32; 2] {
 
 impl From<[u32; 3]> for Extent3D {
     fn from([width, height, depth]: [u32; 3]) -> Self {
-        Self { width, height, depth }
+        Self {
+            width,
+            height,
+            depth,
+        }
     }
 }
 
 impl From<Extent3D> for [u32; 3] {
-    fn from(Extent3D { width, height, depth }: Extent3D) -> Self {
+    fn from(
+        Extent3D {
+            width,
+            height,
+            depth,
+        }: Extent3D,
+    ) -> Self {
         [width, height, depth]
     }
 }
@@ -118,22 +130,19 @@ impl Extent3D {
     }
 
     #[inline]
-    pub fn contains_extent(&self, offset: Ivector3, extent: Self) -> bool
-    {
+    pub fn contains_extent(&self, offset: Ivector3, extent: Self) -> bool {
         fn check_range_overflow(offs: i32, len: u32, max: u32) -> bool {
-            (offs >= 0)
-                & (len <= max)
-                & ((offs as u32) <= max.wrapping_sub(len))
+            (offs >= 0) & (len <= max) & ((offs as u32) <= max.wrapping_sub(len))
         }
-        self.iter().zip(offset.iter()).zip(extent.iter())
+        self.iter()
+            .zip(offset.iter())
+            .zip(extent.iter())
             .all(|((&max, &offs), &len)| check_range_overflow(offs, len, max))
     }
 
     #[inline]
     pub fn texel_count(&self) -> vk::DeviceSize {
-        self.width as vk::DeviceSize
-            * self.height as vk::DeviceSize
-            * self.depth as vk::DeviceSize
+        self.width as vk::DeviceSize * self.height as vk::DeviceSize * self.depth as vk::DeviceSize
     }
 
     #[inline]
@@ -150,9 +159,9 @@ impl Extent3D {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::testing;
     use math::ivec3;
-    use super::*;
 
     unsafe fn contains(_: testing::TestVars) {
         let ex = Extent3D::new;
@@ -188,8 +197,4 @@ mod tests {
         assert_eq!(odd.texel_count(), 35 * 3 * 11);
         assert_eq!(odd.mip_level(1).texel_count(), 17 * 1 * 5);
     }
-
-    unit::declare_tests![contains, mip_levels];
 }
-
-unit::collect_tests![tests];

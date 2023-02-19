@@ -8,23 +8,25 @@ use parking_lot::Mutex;
 use prelude::tryopt;
 use vk::traits::*;
 
-use crate::*;
 use super::*;
+use crate::*;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct DescriptorSet {
     #[derivative(Debug(format_with = "write_named::<DescriptorSetLayout>"))]
-    crate layout: Arc<DescriptorSetLayout>,
-    crate pool: Weak<Mutex<DescriptorPool>>,
-    crate inner: vk::DescriptorSet,
-    crate name: Option<String>,
+    pub(crate) layout: Arc<DescriptorSetLayout>,
+    pub(crate) pool: Weak<Mutex<DescriptorPool>>,
+    pub(crate) inner: vk::DescriptorSet,
+    pub(crate) name: Option<String>,
 }
 
 impl Drop for Set {
     fn drop(&mut self) {
         if let Some(pool) = Weak::upgrade(&self.pool) {
-            unsafe { pool.lock().free(self); }
+            unsafe {
+                pool.lock().free(self);
+            }
         }
     }
 }
@@ -46,23 +48,14 @@ impl Set {
     }
 
     #[inline]
-    pub fn write_buffer(
-        &mut self,
-        binding: u32,
-        buffer: BufferRange<'_>,
-    ) {
+    pub fn write_buffer(&mut self, binding: u32, buffer: BufferRange<'_>) {
         self.write_buffers(binding, 0, std::slice::from_ref(&buffer));
     }
 
     /// Writes uniform or storage buffers. Doesn't work with texel
     /// buffers as they require a buffer view object.
     // N.B. direct writes scale poorly compared to update templates.
-    pub fn write_buffers(
-        &mut self,
-        binding: u32,
-        first_element: u32,
-        buffers: &[BufferRange<'_>],
-    ) {
+    pub fn write_buffers(&mut self, binding: u32, first_element: u32, buffers: &[BufferRange<'_>]) {
         let dt = &self.layout.device().table;
         assert_ne!(buffers.len(), 0);
 
@@ -84,7 +77,8 @@ impl Set {
             }
         }
 
-        let info: Vec<_> = buffers.iter()
+        let info: Vec<_> = buffers
+            .iter()
             .map(|buffer| buffer.descriptor_info())
             .collect();
         let writes = [vk::WriteDescriptorSet {
@@ -97,8 +91,7 @@ impl Set {
             ..Default::default()
         }];
         unsafe {
-            dt.update_descriptor_sets
-                (writes.len() as _, writes.as_ptr(), 0, ptr::null());
+            dt.update_descriptor_sets(writes.len() as _, writes.as_ptr(), 0, ptr::null());
         }
     }
 
@@ -150,11 +143,16 @@ impl Set {
                 "DescriptorSet::write_image_element(self: {:?}, binding: {}, ",
                 "element: {}, view: {:?}, layout: {:?}, sampler: {:?})",
             ),
-            fmt_named(&*self), binding, element, view, layout, sampler,
+            fmt_named(&*self),
+            binding,
+            element,
+            view,
+            layout,
+            sampler,
         );
 
-        use DescriptorType as Dt;
         use vk::ImageLayout as Il;
+        use DescriptorType as Dt;
 
         let dt = &self.layout.device().table;
         let layout_binding = &self.layout.bindings()[binding as usize];
@@ -167,24 +165,22 @@ impl Set {
             assert_lt!(element, layout_binding.count);
             let flags = view.image().flags();
             match ty {
-                Dt::CombinedImageSampler | Dt::SampledImage =>
-                    assert!(!flags.contains(ImageFlags::NO_SAMPLE)),
-                Dt::StorageImage =>
-                    assert!(flags.contains(ImageFlags::STORAGE)),
-                Dt::InputAttachment =>
-                    assert!(flags.contains(ImageFlags::INPUT_ATTACHMENT)),
+                Dt::CombinedImageSampler | Dt::SampledImage => {
+                    assert!(!flags.contains(ImageFlags::NO_SAMPLE))
+                }
+                Dt::StorageImage => assert!(flags.contains(ImageFlags::STORAGE)),
+                Dt::InputAttachment => assert!(flags.contains(ImageFlags::INPUT_ATTACHMENT)),
                 _ => unreachable!(),
             }
             match ty {
-                Dt::CombinedImageSampler | Dt::SampledImage =>
-                    assert_eq!(layout, Il::SHADER_READ_ONLY_OPTIMAL),
+                Dt::CombinedImageSampler | Dt::SampledImage => {
+                    assert_eq!(layout, Il::SHADER_READ_ONLY_OPTIMAL)
+                }
                 Dt::StorageImage => assert_eq!(layout, Il::GENERAL),
-                _ => {},
+                _ => {}
             }
-            if ty == Dt::CombinedImageSampler
-                && layout_binding.samplers.is_none()
-            {
-                    assert!(!sampler.is_null());
+            if ty == Dt::CombinedImageSampler && layout_binding.samplers.is_none() {
+                assert!(!sampler.is_null());
             }
         }
 
@@ -202,8 +198,7 @@ impl Set {
             p_image_info: info.as_ptr(),
             ..Default::default()
         }];
-        dt.update_descriptor_sets
-            (writes.len() as _, writes.as_ptr(), 0, ptr::null());
+        dt.update_descriptor_sets(writes.len() as _, writes.as_ptr(), 0, ptr::null());
     }
 
     pub unsafe fn write_samplers(
@@ -218,7 +213,9 @@ impl Set {
     pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.inner(), name); }
+        unsafe {
+            self.device().set_name(self.inner(), name);
+        }
     }
 }
 

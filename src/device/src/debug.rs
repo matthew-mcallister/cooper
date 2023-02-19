@@ -1,8 +1,8 @@
-use std::ffi::{CStr, c_void};
+use std::ffi::{c_void, CStr};
 use std::fmt;
 use std::ptr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use derive_more::*;
 use itertools::Itertools;
@@ -22,9 +22,7 @@ pub trait Named: fmt::Debug {
     fn name(&self) -> Option<&str>;
 }
 
-pub fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) ->
-    fmt::Result
-{
+pub fn write_named<N: Named>(named: &N, f: &mut fmt::Formatter) -> fmt::Result {
     if let Some(name) = named.name() {
         // TODO: Would prefer to include the type name
         write!(f, "<{}>", name)
@@ -123,7 +121,7 @@ pub unsafe fn set_name<T: DebugHandle>(
     device.set_debug_utils_object_name_ext(&info);
 }
 
-crate trait DebugMessageHandler: fmt::Debug + Send + Sync {
+pub(crate) trait DebugMessageHandler: fmt::Debug + Send + Sync {
     fn handle(
         &self,
         severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
@@ -133,7 +131,7 @@ crate trait DebugMessageHandler: fmt::Debug + Send + Sync {
 }
 
 #[derive(Debug)]
-crate struct DebugMessenger {
+pub(crate) struct DebugMessenger {
     inner: vk::DebugUtilsMessengerEXT,
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     types: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -158,8 +156,9 @@ impl DebugMessenger {
             ..Default::default()
         };
         let mut inner = vk::null();
-        it.create_debug_utils_messenger_ext
-            (&create_info, ptr::null(), &mut inner).check().unwrap();
+        it.create_debug_utils_messenger_ext(&create_info, ptr::null(), &mut inner)
+            .check()
+            .unwrap();
         Self {
             inner,
             severity,
@@ -186,15 +185,17 @@ unsafe extern "C" fn debug_message_handler(
 
 #[derive(Debug, Display)]
 #[display(fmt = "{}", name)]
-crate struct Label {
-    crate name: String,
-    crate color: [f32; 4],
+pub(crate) struct Label {
+    pub(crate) name: String,
+    pub(crate) color: [f32; 4],
 }
 
 impl Label {
     unsafe fn from_vk(label: &vk::DebugUtilsLabelEXT) -> Self {
         let name = CStr::from_ptr(label.p_label_name)
-            .to_str().unwrap().to_owned();
+            .to_str()
+            .unwrap()
+            .to_owned();
         Self {
             name,
             color: label.color,
@@ -203,10 +204,10 @@ impl Label {
 }
 
 #[derive(Debug)]
-crate struct ObjectInfo {
-    crate ty: vk::ObjectType,
-    crate handle: u64,
-    crate name: Option<String>,
+pub(crate) struct ObjectInfo {
+    pub(crate) ty: vk::ObjectType,
+    pub(crate) handle: u64,
+    pub(crate) name: Option<String>,
 }
 
 impl ObjectInfo {
@@ -214,7 +215,9 @@ impl ObjectInfo {
         let name = info.p_object_name;
         let name = if !name.is_null() {
             Some(CStr::from_ptr(name).to_str().unwrap().to_owned())
-        } else { None };
+        } else {
+            None
+        };
         Self {
             ty: info.object_type,
             handle: info.object_handle,
@@ -240,15 +243,15 @@ impl fmt::Display for ObjectInfo {
 }
 
 #[derive(Debug)]
-crate struct DebugMessagePayload {
-    crate message_severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
-    crate message_types: vk::DebugUtilsMessageTypeFlagsEXT,
-    crate message_id_name: String,
-    crate message_id: i32,
-    crate message: String,
-    crate queue_labels: Vec<Label>,
-    crate cmd_buf_labels: Vec<Label>,
-    crate objects: Vec<ObjectInfo>,
+pub(crate) struct DebugMessagePayload {
+    pub(crate) message_severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
+    pub(crate) message_types: vk::DebugUtilsMessageTypeFlagsEXT,
+    pub(crate) message_id_name: String,
+    pub(crate) message_id: i32,
+    pub(crate) message: String,
+    pub(crate) queue_labels: Vec<Label>,
+    pub(crate) cmd_buf_labels: Vec<Label>,
+    pub(crate) objects: Vec<ObjectInfo>,
 }
 
 impl DebugMessagePayload {
@@ -258,21 +261,24 @@ impl DebugMessagePayload {
         data: &vk::DebugUtilsMessengerCallbackDataEXT,
     ) -> Self {
         let message_id_name = CStr::from_ptr(data.p_message_id_name)
-            .to_str().unwrap().to_owned();
-        let message = CStr::from_ptr(data.p_message)
-            .to_str().unwrap().to_owned();
-        let queue_labels = std::slice::from_raw_parts(
-            data.p_queue_labels,
-            data.queue_label_count as _,
-        ).iter().map(|x| Label::from_vk(x)).collect();
-        let cmd_buf_labels = std::slice::from_raw_parts(
-            data.p_cmd_buf_labels,
-            data.cmd_buf_label_count as _,
-        ).iter().map(|x| Label::from_vk(x)).collect();
-        let objects = std::slice::from_raw_parts(
-            data.p_objects,
-            data.object_count as _,
-        ).iter().map(|x| ObjectInfo::from_vk(x)).collect();
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let message = CStr::from_ptr(data.p_message).to_str().unwrap().to_owned();
+        let queue_labels =
+            std::slice::from_raw_parts(data.p_queue_labels, data.queue_label_count as _)
+                .iter()
+                .map(|x| Label::from_vk(x))
+                .collect();
+        let cmd_buf_labels =
+            std::slice::from_raw_parts(data.p_cmd_buf_labels, data.cmd_buf_label_count as _)
+                .iter()
+                .map(|x| Label::from_vk(x))
+                .collect();
+        let objects = std::slice::from_raw_parts(data.p_objects, data.object_count as _)
+            .iter()
+            .map(|x| ObjectInfo::from_vk(x))
+            .collect();
         Self {
             message_severity,
             message_types,
@@ -292,13 +298,17 @@ struct Severity(vk::DebugUtilsMessageSeverityFlagsEXT);
 impl fmt::Display for Severity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use vk::DebugUtilsMessageSeverityFlagsEXT as Flags;
-        write!(f, "{}", match self.0 {
-            Flags::VERBOSE_BIT_EXT => "VERBOSE",
-            Flags::INFO_BIT_EXT => "INFO",
-            Flags::WARNING_BIT_EXT => "WARNING",
-            Flags::ERROR_BIT_EXT => "ERROR",
-            _ => "unknown severity",
-        })
+        write!(
+            f,
+            "{}",
+            match self.0 {
+                Flags::VERBOSE_BIT_EXT => "VERBOSE",
+                Flags::INFO_BIT_EXT => "INFO",
+                Flags::WARNING_BIT_EXT => "WARNING",
+                Flags::ERROR_BIT_EXT => "ERROR",
+                _ => "unknown severity",
+            }
+        )
     }
 }
 
@@ -320,7 +330,8 @@ impl fmt::Display for Type {
             return write!(f, "unknown type");
         }
 
-        let fmt = pairs.iter()
+        let fmt = pairs
+            .iter()
             .filter_map(|&(k, v)| ty.contains(k).then_some(v))
             .format(" | ");
         write!(f, "{}", fmt)
@@ -345,9 +356,7 @@ impl fmt::Display for DebugMessagePayload {
             }
         }
 
-        fn write_labels(f: &mut fmt::Formatter, prefix: &str, labels: &[Label])
-            -> fmt::Result
-        {
+        fn write_labels(f: &mut fmt::Formatter, prefix: &str, labels: &[Label]) -> fmt::Result {
             if !labels.is_empty() {
                 writeln!(f, "  {}:", prefix)?;
             }
@@ -365,12 +374,12 @@ impl fmt::Display for DebugMessagePayload {
 }
 
 #[derive(Debug, Default)]
-crate struct DefaultDebugMessageHandler {
+pub(crate) struct DefaultDebugMessageHandler {
     count: AtomicU32,
 }
 
 impl DefaultDebugMessageHandler {
-    crate fn message_count(&self) -> u32 {
+    pub(crate) fn message_count(&self) -> u32 {
         self.count.load(Ordering::Relaxed)
     }
 }
@@ -382,9 +391,7 @@ impl DebugMessageHandler for DefaultDebugMessageHandler {
         types: vk::DebugUtilsMessageTypeFlagsEXT,
         data: &vk::DebugUtilsMessengerCallbackDataEXT,
     ) {
-        let payload = unsafe {
-            DebugMessagePayload::from_vk(severity, types, data)
-        };
+        let payload = unsafe { DebugMessagePayload::from_vk(severity, types, data) };
         eprintln!("{}", payload);
         self.count.fetch_add(1, Ordering::Relaxed);
     }

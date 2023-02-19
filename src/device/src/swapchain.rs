@@ -1,6 +1,6 @@
 use std::ptr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use derivative::Derivative;
 use log::{debug, trace};
@@ -10,19 +10,19 @@ use crate::*;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Surface {
-    crate window: Arc<window::Window>,
+    pub(crate) window: Arc<window::Window>,
     #[derivative(Debug = "ignore")]
-    crate instance: Arc<Instance>,
-    crate inner: vk::SurfaceKHR,
+    pub(crate) instance: Arc<Instance>,
+    pub(crate) inner: vk::SurfaceKHR,
 }
 
 #[derive(Debug)]
 pub struct Swapchain {
-    crate surface: Arc<Surface>,
-    crate device: Arc<Device>,
-    crate inner: vk::SwapchainKHR,
-    crate extent: Extent2D,
-    crate images: Vec<vk::Image>,
+    pub(crate) surface: Arc<Surface>,
+    pub(crate) device: Arc<Device>,
+    pub(crate) inner: vk::SwapchainKHR,
+    pub(crate) extent: Extent2D,
+    pub(crate) images: Vec<vk::Image>,
     token: Token,
     name: Option<String>,
 }
@@ -46,16 +46,16 @@ struct Token {
 impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
-            self.instance.table.destroy_surface_khr(self.inner, ptr::null());
+            self.instance
+                .table
+                .destroy_surface_khr(self.inner, ptr::null());
         }
     }
 }
 
 impl Surface {
     #[inline]
-    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) ->
-        DeviceResult<Self>
-    {
+    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) -> DeviceResult<Self> {
         let inner = window.create_surface(instance.table.instance)?;
         Ok(Surface {
             window,
@@ -72,14 +72,14 @@ impl Surface {
 
 impl Drop for Swapchain {
     fn drop(&mut self) {
-        unsafe { self.destroy(); }
+        unsafe {
+            self.destroy();
+        }
     }
 }
 
 impl Swapchain {
-    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) ->
-        DeviceResult<Self>
-    {
+    pub unsafe fn new(surface: Arc<Surface>, device: Arc<Device>) -> DeviceResult<Self> {
         let mut result = Swapchain {
             surface,
             device,
@@ -137,7 +137,9 @@ impl Swapchain {
     }
 
     unsafe fn destroy(&self) {
-        self.device.table.destroy_swapchain_khr(self.inner, ptr::null());
+        self.device
+            .table
+            .destroy_swapchain_khr(self.inner, ptr::null());
     }
 
     pub unsafe fn recreate(&mut self) -> DeviceResult<()> {
@@ -146,15 +148,15 @@ impl Swapchain {
         let pdev = self.device.pdev;
 
         let mut caps: vk::SurfaceCapabilitiesKHR = Default::default();
-        it.get_physical_device_surface_capabilities_khr
-            (pdev, self.surface.inner, &mut caps)
+        it.get_physical_device_surface_capabilities_khr(pdev, self.surface.inner, &mut caps)
             .check()?;
 
-        let max_image_count =
-            if caps.max_image_count == 0 { u32::max_value() }
-            else { caps.max_image_count };
-        let min_image_count =
-            std::cmp::min(caps.min_image_count + 1, max_image_count);
+        let max_image_count = if caps.max_image_count == 0 {
+            u32::max_value()
+        } else {
+            caps.max_image_count
+        };
+        let min_image_count = std::cmp::min(caps.min_image_count + 1, max_image_count);
 
         // TODO: Is this a compatibility concern?
         let format = vk::Format::B8G8R8A8_SRGB;
@@ -165,15 +167,16 @@ impl Swapchain {
             pdev,
             self.surface.inner,
         )?;
-        if !formats.iter().any(|fmt| fmt.format == format &&
-            fmt.color_space == color_space)
+        if !formats
+            .iter()
+            .any(|fmt| fmt.format == format && fmt.color_space == color_space)
         {
             Err(err_msg!("surface format not supported"))?;
         }
 
         // FIXME: On Wayland, the surface extent is defined by the
-        // application, so we need to pull window dimensions from config
-        // rather than the surface object.
+        // application, so we need the caller to pass us the window
+        // extent.
         assert_ne!(caps.current_extent, (0xffff_ffff, 0xffff_ffff).into());
 
         // This can happen when a window is minimized, so don't try to
@@ -183,14 +186,15 @@ impl Swapchain {
         self.extent = caps.current_extent.into();
 
         let composite_alpha = vk::CompositeAlphaFlagsKHR::OPAQUE_BIT_KHR;
-        if !caps.supported_composite_alpha.intersects(composite_alpha)
-            { Err(err_msg!("swapchain composite alpha mode not available"))?; }
+        if !caps.supported_composite_alpha.intersects(composite_alpha) {
+            Err(err_msg!("swapchain composite alpha mode not available"))?;
+        }
 
-        let image_usage
-            = vk::ImageUsageFlags::COLOR_ATTACHMENT_BIT
-            | vk::ImageUsageFlags::TRANSFER_DST_BIT;
-        if !caps.supported_usage_flags.contains(image_usage)
-            { Err(err_msg!("swapchain image usage not supported"))?; }
+        let image_usage =
+            vk::ImageUsageFlags::COLOR_ATTACHMENT_BIT | vk::ImageUsageFlags::TRANSFER_DST_BIT;
+        if !caps.supported_usage_flags.contains(image_usage) {
+            Err(err_msg!("swapchain image usage not supported"))?;
+        }
 
         let create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
@@ -213,12 +217,12 @@ impl Swapchain {
             old_swapchain: self.inner,
         };
         let mut new = vk::null();
-        dt.create_swapchain_khr(&create_info, ptr::null(), &mut new).check()?;
+        dt.create_swapchain_khr(&create_info, ptr::null(), &mut new)
+            .check()?;
 
         self.destroy();
         self.inner = new;
-        self.images = vk::enumerate2!
-            (dt, get_swapchain_images_khr, self.inner)?;
+        self.images = vk::enumerate2!(dt, get_swapchain_images_khr, self.inner)?;
 
         Ok(())
     }
@@ -238,9 +242,7 @@ impl Swapchain {
     /// Note: A suboptimal swapchain will just return an error with no
     /// swapchain index.
     #[inline]
-    pub fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) ->
-        Result<u32, vk::Result>
-    {
+    pub fn acquire_next_image(&mut self, sem: &mut BinarySemaphore) -> Result<u32, vk::Result> {
         self.acquire_next_image_with_timeout(sem, u64::max_value())
     }
 
@@ -249,18 +251,15 @@ impl Swapchain {
         sem: &mut BinarySemaphore,
         timeout: u64,
     ) -> Result<u32, vk::Result> {
-        trace!("Swapchain::acquire_next_image_with_timeout(timeout: {})",
-            timeout);
+        trace!(
+            "Swapchain::acquire_next_image_with_timeout(timeout: {})",
+            timeout
+        );
         let dt = &*self.device.table;
         let mut idx = 0;
         unsafe {
-            dt.acquire_next_image_khr(
-                self.inner,
-                timeout,
-                sem.raw(),
-                vk::null(),
-                &mut idx,
-            ).check()?;
+            dt.acquire_next_image_khr(self.inner, timeout, sem.raw(), vk::null(), &mut idx)
+                .check()?;
         };
         debug!("acquired swapchain image {}", idx);
         Ok(idx)
@@ -269,7 +268,9 @@ impl Swapchain {
     pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.inner(), name); }
+        unsafe {
+            self.device().set_name(self.inner(), name);
+        }
     }
 }
 
@@ -308,7 +309,8 @@ impl SwapchainView {
         let mut view = vk::null();
         unsafe {
             dt.create_image_view(&create_info, ptr::null(), &mut view)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
 
         SwapchainView {
@@ -355,13 +357,13 @@ impl Token {
 
 impl Default for Token {
     fn default() -> Self {
-        Self { inner: Arc::new(AtomicBool::new(true)) }
+        Self {
+            inner: Arc::new(AtomicBool::new(true)),
+        }
     }
 }
 
-pub unsafe fn device_for_surface(surface: &Surface) ->
-    DeviceResult<vk::PhysicalDevice>
-{
+pub unsafe fn device_for_surface(surface: &Surface) -> DeviceResult<vk::PhysicalDevice> {
     let instance = &*surface.instance;
     let surface = surface.inner;
 
@@ -372,12 +374,18 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
         let required_bits = vk::QueueFlags::GRAPHICS_BIT
             | vk::QueueFlags::COMPUTE_BIT
             | vk::QueueFlags::TRANSFER_BIT;
-        if !props.queue_flags.contains(required_bits) { continue; }
+        if !props.queue_flags.contains(required_bits) {
+            continue;
+        }
 
         let mut surface_supp = 0;
-        instance.table.get_physical_device_surface_support_khr
-            (pd, qf, surface, &mut surface_supp).check()?;
-        if surface_supp != vk::TRUE { continue; }
+        instance
+            .table
+            .get_physical_device_surface_support_khr(pd, qf, surface, &mut surface_supp)
+            .check()?;
+        if surface_supp != vk::TRUE {
+            continue;
+        }
 
         return Ok(pd);
     }
@@ -385,13 +393,13 @@ pub unsafe fn device_for_surface(surface: &Surface) ->
     Err(err_msg!("no presentable graphics device"))
 }
 
-pub unsafe fn init_swapchain(
-    app_info: AppInfo,
-    window: Arc<window::Window>
+/// Helper function which creates a logical device capable of rendering
+/// to a window.
+pub unsafe fn init_device_and_swapchain(
+    instance: Arc<Instance>,
+    window: &dyn Window,
 ) -> DeviceResult<(Swapchain, Vec<Vec<Arc<Queue>>>)> {
-    let vk_platform = window.vk_platform().clone();
-    let instance = Arc::new(Instance::new(vk_platform, app_info)?);
-    let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
+    let surface = Arc::new(Surface::new(instance, window)?);
     let pdev = device_for_surface(&surface).unwrap();
     let (device, queues) = Device::new(instance, pdev)?;
     Ok((device.create_swapchain(surface)?, queues))
@@ -404,8 +412,4 @@ mod tests {
     unsafe fn view_test(vars: testing::TestVars) {
         let _attchs = vars.swapchain.create_views();
     }
-
-    unit::declare_tests![view_test];
 }
-
-unit::collect_tests![tests];

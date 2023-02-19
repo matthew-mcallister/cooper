@@ -5,8 +5,8 @@ mod system;
 
 use scheduler::*;
 use staging::*;
-crate use state::*;
-crate use system::*;
+pub(crate) use state::*;
+pub(crate) use system::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResourceState {
@@ -16,7 +16,7 @@ pub enum ResourceState {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-crate enum SchedulerStatus {
+pub(crate) enum SchedulerStatus {
     Busy,
     Idle,
 }
@@ -29,7 +29,4 @@ pub struct BufferDef {
     pub size: vk::DeviceSize,
 }
 
-unit::collect_tests![
-    staging,
-    system,
-];
+unit::collect_tests![staging, system,];

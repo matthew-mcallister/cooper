@@ -86,7 +86,7 @@ impl Framebuffer {
 }
 
 impl AttachmentImage {
-        #[inline]
+    #[inline]
     pub fn view(&self) -> vk::ImageView {
         match &self {
             Self::Image(view) => view.inner(),
@@ -122,7 +122,9 @@ impl AttachmentImage {
     pub fn is_valid(&self) -> bool {
         if let Self::Swapchain(sw) = self {
             sw.is_valid()
-        } else { true }
+        } else {
+            true
+        }
     }
 }
 
@@ -147,7 +149,8 @@ unsafe fn create_framebuffer(
     };
     let mut inner = vk::null();
     dt.create_framebuffer(&create_info, ptr::null(), &mut inner)
-        .check().unwrap();
+        .check()
+        .unwrap();
 
     let framebuffer = Framebuffer {
         pass: render_pass,
@@ -158,17 +161,12 @@ unsafe fn create_framebuffer(
     framebuffer
 }
 
-fn validate_framebuffer_creation(
-    render_pass: &RenderPass,
-    attachments: &[AttachmentImage],
-) {
+fn validate_framebuffer_creation(render_pass: &RenderPass, attachments: &[AttachmentImage]) {
     assert!(!attachments.is_empty());
     assert_eq!(attachments.len(), render_pass.attachments().len());
 
     let extent = attachments[0].extent();
-    for (attch, desc) in attachments.iter()
-        .zip(render_pass.attachments().iter())
-    {
+    for (attch, desc) in attachments.iter().zip(render_pass.attachments().iter()) {
         assert_eq!(attch.format(), desc.format);
         assert_eq!(attch.samples(), desc.samples);
 
@@ -191,7 +189,9 @@ pub fn create_render_target(
 ) -> Arc<ImageView> {
     let attch = &render_pass.attachments()[index];
     let mut flags = Default::default();
-    if sampled { flags |= ImageFlags::NO_SAMPLE };
+    if sampled {
+        flags |= ImageFlags::NO_SAMPLE
+    };
     if attch.format.is_depth_stencil() {
         flags |= ImageFlags::DEPTH_STENCIL_ATTACHMENT;
     } else {
@@ -209,7 +209,8 @@ pub fn create_render_target(
         extent.into(),
         1,
         1,
-    )).create_full_view()
+    ))
+    .create_full_view()
 }
 
 #[cfg(test)]
@@ -228,25 +229,24 @@ pub unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
     let views = swapchain.create_views();
     let back = Arc::clone(&views[0]);
 
-    let _fb = Framebuffer::new(pass, vec![
-        back.into(),
-        hdr.into(),
-        depth.into(),
-        normal.into(),
-        albedo.into(),
-    ]);
+    let _fb = Framebuffer::new(
+        pass,
+        vec![
+            back.into(),
+            hdr.into(),
+            depth.into(),
+            normal.into(),
+            albedo.into(),
+        ],
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
+    use crate::*;
 
     unsafe fn create(vars: testing::TestVars) {
         let _fb = create_test_framebuffer(vars.swapchain());
     }
-
-    unit::declare_tests![create];
 }
-
-unit::collect_tests![tests];

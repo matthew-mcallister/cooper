@@ -62,10 +62,7 @@ impl<'dev> QueueFamily<'dev> {
     #[inline]
     pub fn new(device: &'dev Arc<Device>, index: u32) -> QueueFamily<'dev> {
         assert_lt!(index as usize, device.queue_families.len());
-        QueueFamily {
-            device,
-            index,
-        }
+        QueueFamily { device, index }
     }
 
     #[inline]
@@ -144,7 +141,8 @@ impl Queue {
     pub unsafe fn submit(&self, submissions: &[SubmitInfo<'_>]) {
         trace!(
             "Queue::submit(self: {:?}, submissions: {:?}",
-            fmt_named(self), submissions,
+            fmt_named(self),
+            submissions,
         );
 
         let _lock = self.mutex.lock();
@@ -155,12 +153,11 @@ impl Queue {
         type VecSem<T> = SmallVec<T, MAX_SEMS>;
         type VecSubmit<T> = SmallVec<T, MAX_SUBMITS>;
 
-        let wait_count: usize = submissions.iter()
+        let wait_count: usize = submissions
+            .iter()
             .map(|submit| submit.wait_sems.len())
             .sum();
-        let sig_count: usize = submissions.iter()
-            .map(|submit| submit.sig_sems.len())
-            .sum();
+        let sig_count: usize = submissions.iter().map(|submit| submit.sig_sems.len()).sum();
 
         let mut wait_sems = VecSem::with_capacity(wait_count);
         let mut wait_values = VecSem::with_capacity(wait_count);
@@ -211,12 +208,11 @@ impl Queue {
             infos.push(info);
         }
 
-        self.device.table.queue_submit(
-            self.inner,
-            infos.len() as _,
-            infos.as_ptr(),
-            vk::null(),
-        ).check().unwrap();
+        self.device
+            .table
+            .queue_submit(self.inner, infos.len() as _, infos.as_ptr(), vk::null())
+            .check()
+            .unwrap();
     }
 
     pub unsafe fn present(
@@ -232,12 +228,12 @@ impl Queue {
             ),
             fmt_named(self),
             DebugIter::new(wait_sems.iter().map(|sem| fmt_named(&**sem))),
-            fmt_named(swapchain), image,
+            fmt_named(swapchain),
+            image,
         );
 
         let _lock = self.mutex.lock();
-        let wait_sems: SmallVec<_, 8> = wait_sems.iter().map(|sem| sem.raw())
-            .collect();
+        let wait_sems: SmallVec<_, 8> = wait_sems.iter().map(|sem| sem.raw()).collect();
         let swapchains = [swapchain.inner];
         let images = [image];
         let present_info = vk::PresentInfoKHR {
@@ -248,12 +244,12 @@ impl Queue {
             p_image_indices: images.as_ptr(),
             ..Default::default()
         };
-        self.device.table.queue_present_khr(self.inner, &present_info)
+        self.device
+            .table
+            .queue_present_khr(self.inner, &present_info)
     }
 
-    pub(super) unsafe fn get_device_queues(device: &Arc<Device>) ->
-        Vec<Vec<Arc<Queue>>>
-    {
+    pub(super) unsafe fn get_device_queues(device: &Arc<Device>) -> Vec<Vec<Arc<Queue>>> {
         let mut inner = vk::null();
         device.table().get_device_queue(0, 0, &mut inner);
 
@@ -272,7 +268,9 @@ impl Queue {
     pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.inner(), name); }
+        unsafe {
+            self.device().set_name(self.inner(), name);
+        }
     }
 }
 

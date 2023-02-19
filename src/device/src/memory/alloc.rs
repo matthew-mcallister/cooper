@@ -14,8 +14,7 @@ pub(super) trait Allocator: Default {
     fn used(&self) -> vk::DeviceSize;
     fn capacity(&self) -> vk::DeviceSize;
     fn add_chunk(&mut self, size: vk::DeviceSize);
-    fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) ->
-        Option<Block>;
+    fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) -> Option<Block>;
     fn free(&mut self, block: Block);
     fn clear(&mut self);
 }
@@ -35,23 +34,20 @@ impl FreeListAllocator {
         Default::default()
     }
 
-    pub(super) fn carve_block(
-        &mut self,
-        index: usize,
-        range: Range<vk::DeviceSize>,
-    ) {
+    pub(super) fn carve_block(&mut self, index: usize, range: Range<vk::DeviceSize>) {
         self.used += range.end - range.start;
 
         let old_block = self.free[index];
-        debug_assert!(old_block.start <= range.start &&
-            range.end <= old_block.end);
+        debug_assert!(old_block.start <= range.start && range.end <= old_block.end);
         debug_assert!(range.start < range.end);
 
         // Resize/cull old block
         let mut block = &mut self.free[index];
         block.start = range.end;
         // TODO: Reverse free list order to prefer removal near end
-        if block.is_empty() { self.free.remove(index); }
+        if block.is_empty() {
+            self.free.remove(index);
+        }
 
         // Insert padding block if necessary
         let chunk_idx = old_block.chunk;
@@ -73,7 +69,9 @@ impl FreeListAllocator {
     ) -> Option<Block> {
         let block = &self.free[block_idx];
         let offset = align(alignment, block.start);
-        if offset + size > block.end { return None; }
+        if offset + size > block.end {
+            return None;
+        }
         let chunk = block.chunk;
         self.carve_block(block_idx, offset..offset + size);
         Some(Block {
@@ -109,24 +107,27 @@ impl FreeListAllocator {
             assert!(left.chunk <= chunk);
             assert!((left.chunk < chunk) | (left.end <= start));
             (left.chunk == chunk) & (left.end == start)
-        } else { false };
+        } else {
+            false
+        };
         let merge_right = if idx < self.free.len() {
             let right = self.free[idx];
             assert!(chunk <= right.chunk);
             assert!((chunk < right.chunk) | (end <= right.start));
             (right.chunk == chunk) & (end == right.start)
-        } else { false };
+        } else {
+            false
+        };
 
         // Perform the insertion
         match (merge_left, merge_right) {
-            (false, false) =>
-                self.free.insert(idx, Block { chunk, start, end }),
+            (false, false) => self.free.insert(idx, Block { chunk, start, end }),
             (true, false) => self.free[idx - 1].end = end,
             (false, true) => self.free[idx].start = start,
             (true, true) => {
                 self.free[idx - 1].end = self.free[idx].end;
                 self.free.remove(idx);
-            },
+            }
         }
     }
 }
@@ -149,14 +150,10 @@ impl Allocator for FreeListAllocator {
         });
     }
 
-    fn alloc(
-        &mut self,
-        size: vk::DeviceSize,
-        alignment: vk::DeviceSize,
-    ) -> Option<Block> {
+    fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) -> Option<Block> {
         let aligned_size = align(alignment, size);
-        let block = (0..self.free.len())
-            .find_map(|block| self.alloc_in(block, aligned_size, alignment))?;
+        let block =
+            (0..self.free.len()).find_map(|block| self.alloc_in(block, aligned_size, alignment))?;
         Some(block)
     }
 
@@ -195,11 +192,7 @@ impl LinearAllocator {
         Default::default()
     }
 
-    fn alloc_in(
-        &mut self,
-        size: vk::DeviceSize,
-        alignment: vk::DeviceSize,
-    ) -> Option<Block> {
+    fn alloc_in(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) -> Option<Block> {
         let start = align(alignment, self.offset);
         let end = self.offset + align(alignment, size);
         (end <= *self.chunks.get(self.chunk)?).then(|| {
@@ -222,8 +215,7 @@ impl LinearAllocator {
 
 impl Allocator for LinearAllocator {
     fn used(&self) -> vk::DeviceSize {
-        // TODO: Why doesn't the LHS type resolve?
-        self.chunks[..self.chunk].iter().sum(): vk::DeviceSize + self.offset
+        self.chunks[..self.chunk].iter().sum() + self.offset
     }
 
     fn capacity(&self) -> vk::DeviceSize {
@@ -234,11 +226,7 @@ impl Allocator for LinearAllocator {
         self.chunks.push(size);
     }
 
-    fn alloc(
-        &mut self,
-        size: vk::DeviceSize,
-        alignment: vk::DeviceSize,
-    ) -> Option<Block> {
+    fn alloc(&mut self, size: vk::DeviceSize, alignment: vk::DeviceSize) -> Option<Block> {
         self.alloc_in(size, alignment).or_else(|| {
             // TODO: possibly refine strategy for very large requests
             self.next_chunk()?;
@@ -256,43 +244,59 @@ impl Allocator for LinearAllocator {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
+    use crate::*;
 
     fn linear_inner(alloc: &mut LinearAllocator) {
         assert_eq!(alloc.used(), 0);
         assert_eq!(alloc.capacity(), 2048);
 
         // Alignment
-        assert_eq!(alloc.alloc(4, 8), Some(Block {
-            chunk: 0,
-            start: 0,
-            end: 8,
-        }));
-        assert_eq!(alloc.alloc(4, 8), Some(Block {
-            chunk: 0,
-            start: 8,
-            end: 16,
-        }));
+        assert_eq!(
+            alloc.alloc(4, 8),
+            Some(Block {
+                chunk: 0,
+                start: 0,
+                end: 8,
+            })
+        );
+        assert_eq!(
+            alloc.alloc(4, 8),
+            Some(Block {
+                chunk: 0,
+                start: 8,
+                end: 16,
+            })
+        );
         assert_eq!(alloc.used(), 16);
         assert_eq!(alloc.capacity(), 2048);
 
         // Free is no-op
-        alloc.free(Block { chunk: 0, start: 0, end: 16, });
+        alloc.free(Block {
+            chunk: 0,
+            start: 0,
+            end: 16,
+        });
         assert_eq!(alloc.used(), 16);
         assert_eq!(alloc.capacity(), 2048);
 
         // Spill over to next chunk
-        assert_eq!(alloc.alloc(1000, 8), Some(Block {
-            chunk: 0,
-            start: 16,
-            end: 1016,
-        }));
-        assert_eq!(alloc.alloc(64, 8), Some(Block {
-            chunk: 1,
-            start: 0,
-            end: 64,
-        }));
+        assert_eq!(
+            alloc.alloc(1000, 8),
+            Some(Block {
+                chunk: 0,
+                start: 16,
+                end: 1016,
+            })
+        );
+        assert_eq!(
+            alloc.alloc(64, 8),
+            Some(Block {
+                chunk: 1,
+                start: 0,
+                end: 64,
+            })
+        );
         assert_eq!(alloc.used(), 1088);
         assert_eq!(alloc.capacity(), 2048);
 
@@ -302,11 +306,14 @@ mod tests {
         assert_eq!(alloc.capacity(), 2048);
 
         // Can alloc to end of chunk
-        assert_eq!(alloc.alloc(960, 8), Some(Block {
-            chunk: 1,
-            start: 64,
-            end: 1024,
-        }));
+        assert_eq!(
+            alloc.alloc(960, 8),
+            Some(Block {
+                chunk: 1,
+                start: 64,
+                end: 1024,
+            })
+        );
         assert_eq!(alloc.used(), alloc.capacity());
 
         assert_eq!(alloc.alloc(8, 8), None);
@@ -323,8 +330,4 @@ mod tests {
         alloc.clear();
         linear_inner(&mut alloc);
     }
-
-    unit::declare_tests![linear];
 }
-
-unit::collect_tests![tests];

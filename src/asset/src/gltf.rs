@@ -1,19 +1,19 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use base::{PartialEnumMap, partial_map};
-use device::*;
+use base::{partial_map, PartialEnumMap};
 use derive_more::Constructor;
+use device::*;
 use fehler::{throw, throws};
 use gfx::*;
 use gltf::{accessor, mesh};
 use log::trace;
-use math::{BBox3, vec};
+use math::{vec, BBox3};
 use prelude::tryopt;
 
-use crate::{Error, Result, create_monochrome_image, vec_to_bytes};
 use crate::asset::*;
 use crate::scene::*;
+use crate::{create_monochrome_image, vec_to_bytes, Error, Result};
 
 #[derive(Debug)]
 struct Bundle {
@@ -43,13 +43,19 @@ struct SharedSlice {
 
 impl Bundle {
     #[throws]
-    crate fn import(path: impl Into<String>) -> (Self, Option<Vec<u8>>) {
+    pub(crate) fn import(path: impl Into<String>) -> (Self, Option<Vec<u8>>) {
         let source = path.into();
         let file = std::fs::File::open(&source)?;
-        let gltf::Gltf { document, blob } =
-            gltf::Gltf::from_reader_without_validation(file)?;
+        let gltf::Gltf { document, blob } = gltf::Gltf::from_reader_without_validation(file)?;
         let base = Path::new(&source).parent()?.into();
-        (Self { base, source, document }, blob)
+        (
+            Self {
+                base,
+                source,
+                document,
+            },
+            blob,
+        )
     }
 
     fn resolve_uri(&self, uri: &str) -> String {
@@ -66,9 +72,7 @@ impl Bundle {
 
 impl<'st, 'dat> Loader<'st, 'dat> {
     #[throws]
-    fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) ->
-        (&'dat Arc<Vec<u8>>, usize)
-    {
+    fn accessor_view_data(&self, accessor: &gltf::Accessor<'_>) -> (&'dat Arc<Vec<u8>>, usize) {
         let view = accessor.view().ok_or("sparse accessor")?;
         // TODO: remove all potential panics on slices
         (&self.buffers[view.buffer().index()], view.offset())
@@ -76,9 +80,7 @@ impl<'st, 'dat> Loader<'st, 'dat> {
 
     // TODO: prevent creating redundant copies in VRAM
     #[throws]
-    fn read_attr_accessor(&self, accessor: &gltf::Accessor<'_>) ->
-        (Format, SharedSlice)
-    {
+    fn read_attr_accessor(&self, accessor: &gltf::Accessor<'_>) -> (Format, SharedSlice) {
         let format = accessor_format(accessor)?;
         let (data, offset) = self.accessor_view_data(accessor)?;
         let len = accessor.count() * format.size();
@@ -87,9 +89,7 @@ impl<'st, 'dat> Loader<'st, 'dat> {
 
     // TODO: redundant copies
     #[throws]
-    fn read_index_accessor(&self, accessor: &gltf::Accessor<'_>) ->
-        (IndexType, SharedSlice)
-    {
+    fn read_index_accessor(&self, accessor: &gltf::Accessor<'_>) -> (IndexType, SharedSlice) {
         use gltf::accessor::DataType;
         let (data, offset) = self.accessor_view_data(accessor)?;
         let acc_ty = accessor.data_type();
@@ -103,7 +103,7 @@ impl<'st, 'dat> Loader<'st, 'dat> {
                 let new_len = new_data.len();
                 let shared = SharedSlice::new(Arc::new(new_data), 0, new_len);
                 return (IndexType::U16, shared);
-            },
+            }
             DataType::U16 => IndexType::U16,
             DataType::U32 => IndexType::U32,
             _ => throw!(format!("unsupported index type: {:?}", acc_ty)),
@@ -119,12 +119,14 @@ impl<'st, 'dat> Loader<'st, 'dat> {
     }
 
     fn into_resources(self) -> SceneResources {
-        SceneResources { meshes: self.meshes }
+        SceneResources {
+            meshes: self.meshes,
+        }
     }
 }
 
 #[throws]
-crate fn load_gltf(
+pub(crate) fn load_gltf(
     rloop: &mut RenderLoop,
     assets: &mut AssetCache,
     path: impl Into<String>,
@@ -133,13 +135,22 @@ crate fn load_gltf(
     let buffers = load_buffers(&bundle, blob)?;
     let resources = load_resources(rloop, assets, &bundle, &buffers)?;
     let nodes = load_nodes(bundle.document.nodes())?;
-    let scenes = bundle.document.scenes()
+    let scenes = bundle
+        .document
+        .scenes()
         .map(load_scene)
         .collect::<Result<Vec<_>>>()?;
     tassert!(!scenes.is_empty(), "no scenes in document");
-    let default_scene_idx = bundle.document.default_scene()
+    let default_scene_idx = bundle
+        .document
+        .default_scene()
         .map_or(0, |scene| scene.index());
-    SceneCollection { resources, nodes, scenes, default_scene_idx }
+    SceneCollection {
+        resources,
+        nodes,
+        scenes,
+        default_scene_idx,
+    }
 }
 
 #[throws]
@@ -158,10 +169,16 @@ fn load_resources(
         meshes: Vec::new(),
     };
 
-    loader.images = loader.bundle.document.images()
+    loader.images = loader
+        .bundle
+        .document
+        .images()
         .map(|image| load_image(&mut loader, image))
         .collect::<Result<_>>()?;
-    loader.meshes = loader.bundle.document.meshes()
+    loader.meshes = loader
+        .bundle
+        .document
+        .meshes()
         .map(|mesh| load_mesh(&mut loader, mesh))
         .collect::<Result<_>>()?;
 
@@ -172,19 +189,29 @@ fn load_resources(
 fn load_buffers(bundle: &Bundle, blob: Option<Vec<u8>>) -> Vec<Buffer> {
     use gltf::buffer::Source;
     let blob = tryopt!(Arc::new(blob?));
-    bundle.document.buffers().map(|buf| Ok(match buf.source() {
-        Source::Bin => Arc::clone(blob.as_ref()?),
-        Source::Uri(uri) => if let Some(data) = read_data_uri(uri)? {
-            Arc::new(data)
-        } else {
-            Arc::new(bundle.read_file(uri)?)
-        },
-    })).collect::<Result<_>>()?
+    bundle
+        .document
+        .buffers()
+        .map(|buf| {
+            Ok(match buf.source() {
+                Source::Bin => Arc::clone(blob.as_ref()?),
+                Source::Uri(uri) => {
+                    if let Some(data) = read_data_uri(uri)? {
+                        Arc::new(data)
+                    } else {
+                        Arc::new(bundle.read_file(uri)?)
+                    }
+                }
+            })
+        })
+        .collect::<Result<_>>()?
 }
 
 #[throws]
 fn read_data_uri(uri: &str) -> Option<Vec<u8>> {
-    if !uri.starts_with("data:") { return None; }
+    if !uri.starts_with("data:") {
+        return None;
+    }
     let data = uri.splitn(2, ',').nth(1).ok_or("invalid data URI")?;
     Some(base64::decode(data)?)
 }
@@ -203,14 +230,15 @@ fn load_image<'st, 'dat>(
         Source::View { view, mime_type } => {
             let data = loader.get_view(&view)?;
             load_data_image(loader, &data, index, Some(mime_type))?
-        },
-        Source::Uri { uri, mime_type } =>
+        }
+        Source::Uri { uri, mime_type } => {
             if let Some(data) = read_data_uri(uri)? {
                 load_data_image(loader, &data, index, mime_type)?
             } else {
                 let src = &loader.bundle.resolve_uri(uri);
                 Arc::clone(loader.assets.get_or_load_image(loader.rloop, src)?)
-            },
+            }
+        }
     }
 }
 
@@ -228,11 +256,9 @@ fn load_data_image(
 }
 
 #[throws]
-fn load_mesh<'a, 'st, 'dat>(
-    loader: &'a mut Loader<'st, 'dat>,
-    mesh: gltf::Mesh<'dat>,
-) -> Mesh {
-    let primitives = mesh.primitives()
+fn load_mesh<'a, 'st, 'dat>(loader: &'a mut Loader<'st, 'dat>, mesh: gltf::Mesh<'dat>) -> Mesh {
+    let primitives = mesh
+        .primitives()
         .map(|primitive| load_primitive(loader, primitive))
         .collect::<Result<Vec<_>>>()?;
     Mesh { primitives }
@@ -261,8 +287,11 @@ fn load_primitive_mesh<'dat>(
     loader: &mut Loader<'_, 'dat>,
     prim: &gltf::Primitive<'dat>,
 ) -> Arc<RenderMesh> {
-    tassert!(prim.mode() == mesh::Mode::Triangles,
-        "unsupported primitive topology: {:?}", prim.mode());
+    tassert!(
+        prim.mode() == mesh::Mode::Triangles,
+        "unsupported primitive topology: {:?}",
+        prim.mode()
+    );
     tassert!(!prim.attributes().is_empty(), "no attribute data");
 
     let mut attrs: PartialEnumMap<_, _> = Default::default();
@@ -271,8 +300,7 @@ fn load_primitive_mesh<'dat>(
         let (format, slice) = loader.read_attr_accessor(&accessor)?;
         attrs.insert(attr, (format, slice));
     }
-    let index = tryopt!(loader.read_index_accessor(&prim.indices()?))
-        .transpose()?;
+    let index = tryopt!(loader.read_index_accessor(&prim.indices()?)).transpose()?;
 
     let mut builder = RenderMeshBuilder::from_loop(loader.rloop);
     builder.lifetime(Lifetime::Static);
@@ -327,8 +355,7 @@ fn load_material<'a, 'st, 'dat>(
     mesh: &Arc<RenderMesh>,
     material: gltf::Material<'dat>,
 ) -> MaterialDesc {
-    let vertex_shader = if mesh.bindings().contains_key(VertexAttr::Texcoord0)
-    {
+    let vertex_shader = if mesh.bindings().contains_key(VertexAttr::Texcoord0) {
         Arc::clone(&loader.rloop.shaders().static_vert)
     } else {
         Arc::clone(&loader.rloop.shaders().minimal_vert)
@@ -337,7 +364,8 @@ fn load_material<'a, 'st, 'dat>(
 
     let frag_shader = Arc::clone(&loader.rloop.specs().albedo_frag);
 
-    let vertex_layout = mesh.vertex_layout()
+    let vertex_layout = mesh
+        .vertex_layout()
         .input_layout_for_shader(vertex_shader.shader());
     let image_bindings = load_material_images(loader, &material)?;
 
@@ -379,8 +407,10 @@ fn load_material_images<'a, 'st, 'dat>(
     loader: &'a mut Loader<'st, 'dat>,
     material: &gltf::Material<'dat>,
 ) -> MaterialImageBindings {
-    tassert!(material.alpha_mode() == gltf::material::AlphaMode::Opaque,
-        "transparency not supported");
+    tassert!(
+        material.alpha_mode() == gltf::material::AlphaMode::Opaque,
+        "transparency not supported"
+    );
 
     if let Some(binding) = material.normal_texture() {
         tassert!(binding.scale() == 1.0, "normal texture scale != 1");
@@ -393,25 +423,23 @@ fn load_material_images<'a, 'st, 'dat>(
         } else { None }
     });
 
-    let normal = try_load_texture!(material.normal_texture())
-        .unwrap_or_else(|| ImageBindingDesc {
-            image: Arc::clone(loader.assets.default_normal_map()),
-            sampler_state: default_sampler(),
-        });
+    let normal = try_load_texture!(material.normal_texture()).unwrap_or_else(|| ImageBindingDesc {
+        image: Arc::clone(loader.assets.default_normal_map()),
+        sampler_state: default_sampler(),
+    });
 
     let pbr = material.pbr_metallic_roughness();
 
     let base = sfloat4_to_unorm4(pbr.base_color_factor());
-    let albedo = try_load_texture!(pbr.base_color_texture())
-        .unwrap_or_else(|| ImageBindingDesc {
-            image: create_monochrome_image(&mut loader.rloop, base),
-            sampler_state: default_sampler(),
-        });
+    let albedo = try_load_texture!(pbr.base_color_texture()).unwrap_or_else(|| ImageBindingDesc {
+        image: create_monochrome_image(&mut loader.rloop, base),
+        sampler_state: default_sampler(),
+    });
 
     let (m, r) = (pbr.metallic_factor(), pbr.roughness_factor());
     let base = sfloat4_to_unorm4([m, r, 0.0, 0.0]);
-    let metal_rough = try_load_texture!(pbr.metallic_roughness_texture())
-        .unwrap_or_else(|| ImageBindingDesc {
+    let metal_rough =
+        try_load_texture!(pbr.metallic_roughness_texture()).unwrap_or_else(|| ImageBindingDesc {
             image: create_monochrome_image(&mut loader.rloop, base),
             sampler_state: default_sampler(),
         });
@@ -437,8 +465,7 @@ fn load_texture<'a, 'st, 'dat>(
 }
 
 fn load_sampler(sampler: gltf::texture::Sampler<'_>) -> SamplerDesc {
-    let mag_filter = tryopt!(mag_filter(sampler.mag_filter()?))
-        .unwrap_or(Filter::Linear);
+    let mag_filter = tryopt!(mag_filter(sampler.mag_filter()?)).unwrap_or(Filter::Linear);
     let (min_filter, mipmap_mode) = tryopt!(min_filter(sampler.min_filter()?))
         .unwrap_or((Filter::Linear, SamplerMipmapMode::Linear));
     let address_mode_u = wrapping_mode(sampler.wrap_s());
@@ -462,24 +489,21 @@ fn mag_filter(filter: gltf::texture::MagFilter) -> Filter {
     }
 }
 
-fn min_filter(filter: gltf::texture::MinFilter) -> (Filter, SamplerMipmapMode)
-{
+fn min_filter(filter: gltf::texture::MinFilter) -> (Filter, SamplerMipmapMode) {
     use gltf::texture::MinFilter;
     match filter {
-        MinFilter::Nearest | MinFilter::NearestMipmapNearest =>
-            (Filter::Nearest, SamplerMipmapMode::Nearest),
-        MinFilter::LinearMipmapNearest =>
-            (Filter::Linear, SamplerMipmapMode::Nearest),
-        MinFilter::NearestMipmapLinear =>
-            (Filter::Nearest, SamplerMipmapMode::Linear),
-        MinFilter::Linear | MinFilter::LinearMipmapLinear =>
-            (Filter::Linear, SamplerMipmapMode::Linear),
+        MinFilter::Nearest | MinFilter::NearestMipmapNearest => {
+            (Filter::Nearest, SamplerMipmapMode::Nearest)
+        }
+        MinFilter::LinearMipmapNearest => (Filter::Linear, SamplerMipmapMode::Nearest),
+        MinFilter::NearestMipmapLinear => (Filter::Nearest, SamplerMipmapMode::Linear),
+        MinFilter::Linear | MinFilter::LinearMipmapLinear => {
+            (Filter::Linear, SamplerMipmapMode::Linear)
+        }
     }
 }
 
-fn wrapping_mode(wrapping_mode: gltf::texture::WrappingMode) ->
-    SamplerAddressMode
-{
+fn wrapping_mode(wrapping_mode: gltf::texture::WrappingMode) -> SamplerAddressMode {
     use gltf::texture::WrappingMode;
     match wrapping_mode {
         WrappingMode::ClampToEdge => SamplerAddressMode::ClampToEdge,
@@ -490,7 +514,8 @@ fn wrapping_mode(wrapping_mode: gltf::texture::WrappingMode) ->
 
 #[throws]
 fn load_nodes(node_list: gltf::iter::Nodes<'_>) -> Vec<Node> {
-    let mut nodes = node_list.clone()
+    let mut nodes = node_list
+        .clone()
         .map(load_node)
         .collect::<Result<Vec<_>>>()?;
     assign_parents(node_list, &mut nodes[..])?;
@@ -501,23 +526,24 @@ fn load_nodes(node_list: gltf::iter::Nodes<'_>) -> Vec<Node> {
 fn load_node(node: gltf::Node<'_>) -> Node {
     let transform = node.transform().into();
     let data = NodeData::from_node(&node);
-    Node { transform, data, ..Default::default() }
+    Node {
+        transform,
+        data,
+        ..Default::default()
+    }
 }
 
 #[throws]
 fn assign_parents(src: gltf::iter::Nodes<'_>, dst: &mut [Node]) {
     for node in src {
         for child in node.children() {
-            dst.get_mut(child.index() as usize)?.parent =
-                Some(node.index() as u32);
+            dst.get_mut(child.index() as usize)?.parent = Some(node.index() as u32);
         }
     }
 }
 
 #[throws]
 fn load_scene(scene: gltf::Scene<'_>) -> Scene {
-    let nodes = scene.nodes()
-        .map(|node| node.index() as u32)
-        .collect();
+    let nodes = scene.nodes().map(|node| node.index() as u32).collect();
     Scene { nodes }
 }

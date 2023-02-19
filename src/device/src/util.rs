@@ -6,25 +6,27 @@ use std::os::raw::c_char;
 use derive_more::{Constructor, From};
 use prelude::*;
 
-crate type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
+pub(crate) type SmallVec<T, const N: usize> = smallvec::SmallVec<[T; N]>;
 
 macro_rules! bit {
     ($bit:expr) => {
         (1 << $bit)
-    }
+    };
 }
 
 #[inline]
-crate fn bool32(b: bool) -> vk::Bool32 {
-    if b { vk::TRUE } else { vk::FALSE }
+pub(crate) fn bool32(b: bool) -> vk::Bool32 {
+    if b {
+        vk::TRUE
+    } else {
+        vk::FALSE
+    }
 }
 
 #[inline]
 pub fn clear_color(color: [f32; 4]) -> vk::ClearValue {
     vk::ClearValue {
-        color: vk::ClearColorValue {
-            float_32: color,
-        },
+        color: vk::ClearColorValue { float_32: color },
     }
 }
 
@@ -44,7 +46,7 @@ pub fn clear_depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
 /// (including at the end), or this function loses all meaning.
 // TODO: comparing byte arrays is maybe slower than comparing primitives
 #[inline]
-crate fn byte_eq<T>(this: &T, other: &T) -> bool {
+pub(crate) fn byte_eq<T>(this: &T, other: &T) -> bool {
     let this = std::slice::from_ref(this).as_bytes();
     let other = std::slice::from_ref(other).as_bytes();
     this == other
@@ -53,17 +55,17 @@ crate fn byte_eq<T>(this: &T, other: &T) -> bool {
 /// If `T` is an aggregate type, it must have *no padding bytes*
 /// (including at the end), or this function loses all meaning.
 #[inline]
-crate fn byte_hash<T, H: Hasher>(this: &T, state: &mut H) {
+pub(crate) fn byte_hash<T, H: Hasher>(this: &T, state: &mut H) {
     std::slice::from_ref(this).as_bytes().hash(state)
 }
 
 #[inline]
-crate fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
+pub(crate) fn as_uninit_slice<T>(src: &[T]) -> &[MaybeUninit<T>] {
     unsafe { &*(src as *const _ as *const _) }
 }
 
 #[derive(Constructor, From)]
-crate struct DebugIter<I> {
+pub(crate) struct DebugIter<I> {
     inner: I,
 }
 
@@ -77,9 +79,7 @@ where
     }
 }
 
-crate unsafe fn debug_cstrs<'a>(ptrs: &'a [*const c_char]) ->
-    impl std::fmt::Debug + 'a
-{
+pub(crate) unsafe fn debug_cstrs<'a>(ptrs: &'a [*const c_char]) -> impl std::fmt::Debug + 'a {
     DebugIter::new(ptrs.iter().map(|&p| CStr::from_ptr(p)))
 }
 
@@ -204,7 +204,7 @@ macro_rules! add_to_pnext {
     ($pnext:expr, $struct:expr) => {
         $struct.p_next = $pnext;
         $pnext = &$struct as *const _ as _;
-    }
+    };
 }
 
 macro_rules! set_name {
@@ -233,5 +233,5 @@ macro_rules! impl_device_derived {
         }
 
         impl Eq for $name {}
-    }
+    };
 }

@@ -92,49 +92,54 @@ wrap_vk_enum! {
 impl Drop for Sampler {
     fn drop(&mut self) {
         let dt = &*self.device.table;
-        unsafe { dt.destroy_sampler(self.inner, ptr::null()); }
+        unsafe {
+            dt.destroy_sampler(self.inner, ptr::null());
+        }
     }
 }
 
 impl_device_derived!(Sampler);
 
 impl Sampler {
-    pub fn new(device: Arc<Device>, desc: SamplerDesc) -> Self { unsafe {
-        let dt = &*device.table;
+    pub fn new(device: Arc<Device>, desc: SamplerDesc) -> Self {
+        unsafe {
+            let dt = &*device.table;
 
-        assert!((0.0 <= desc.mip_lod_bias) & (desc.mip_lod_bias <= 15.0));
-        debug_assert_eq!(device.features().sampler_anisotropy, vk::TRUE);
-        assert!(device.limits().max_sampler_lod_bias >= 15.0);
-        assert!(device.limits().max_sampler_anisotropy >= 16.0);
+            assert!((0.0 <= desc.mip_lod_bias) & (desc.mip_lod_bias <= 15.0));
+            debug_assert_eq!(device.features().sampler_anisotropy, vk::TRUE);
+            assert!(device.limits().max_sampler_lod_bias >= 15.0);
+            assert!(device.limits().max_sampler_anisotropy >= 16.0);
 
-        let create_info = vk::SamplerCreateInfo {
-            mag_filter: desc.mag_filter.into(),
-            min_filter: desc.min_filter.into(),
-            mipmap_mode: desc.mipmap_mode.into(),
-            address_mode_u: desc.address_mode_u.into(),
-            address_mode_v: desc.address_mode_v.into(),
-            address_mode_w: desc.address_mode_w.into(),
-            mip_lod_bias: desc.mip_lod_bias,
-            anisotropy_enable: bool32(desc.anisotropy_level.is_anisotropic()),
-            max_anisotropy: desc.anisotropy_level.into(),
-            // TODO: Not really sure when you'd want to change these
-            // limits. Maybe for sparse textures with missing mips?
-            min_lod: 0.0,
-            max_lod: 1024.0,
-            border_color: desc.border_color.into(),
-            unnormalized_coordinates: bool32(desc.unnormalized_coordinates),
-            ..Default::default()
-        };
-        let mut sampler = vk::null();
-        dt.create_sampler(&create_info, ptr::null(), &mut sampler)
-            .check().unwrap();
+            let create_info = vk::SamplerCreateInfo {
+                mag_filter: desc.mag_filter.into(),
+                min_filter: desc.min_filter.into(),
+                mipmap_mode: desc.mipmap_mode.into(),
+                address_mode_u: desc.address_mode_u.into(),
+                address_mode_v: desc.address_mode_v.into(),
+                address_mode_w: desc.address_mode_w.into(),
+                mip_lod_bias: desc.mip_lod_bias,
+                anisotropy_enable: bool32(desc.anisotropy_level.is_anisotropic()),
+                max_anisotropy: desc.anisotropy_level.into(),
+                // TODO: Not really sure when you'd want to change these
+                // limits. Maybe for sparse textures with missing mips?
+                min_lod: 0.0,
+                max_lod: 1024.0,
+                border_color: desc.border_color.into(),
+                unnormalized_coordinates: bool32(desc.unnormalized_coordinates),
+                ..Default::default()
+            };
+            let mut sampler = vk::null();
+            dt.create_sampler(&create_info, ptr::null(), &mut sampler)
+                .check()
+                .unwrap();
 
-        Self {
-            device,
-            desc,
-            inner: sampler,
+            Self {
+                device,
+                desc,
+                inner: sampler,
+            }
         }
-    } }
+    }
 
     #[inline]
     pub fn inner(&self) -> vk::Sampler {
@@ -185,34 +190,28 @@ impl SamplerCache {
         self.inner.commit();
     }
 
-    pub fn get_committed(&self, desc: &SamplerDesc) ->
-        Option<&Arc<Sampler>>
-    {
+    pub fn get_committed(&self, desc: &SamplerDesc) -> Option<&Arc<Sampler>> {
         self.inner.get_committed(desc)
     }
 
     pub fn get_or_create(&self, desc: &SamplerDesc) -> Cow<Arc<Sampler>> {
-        self.inner.get_or_insert_with(desc, || Arc::new(Sampler::new(
-            Arc::clone(&self.device),
-            *desc,
-        )))
+        self.inner.get_or_insert_with(desc, || {
+            Arc::new(Sampler::new(Arc::clone(&self.device), *desc))
+        })
     }
 
-    pub fn get_or_create_committed(&mut self, desc: &SamplerDesc) ->
-        &Arc<Sampler>
-    {
+    pub fn get_or_create_committed(&mut self, desc: &SamplerDesc) -> &Arc<Sampler> {
         let device = &self.device;
-        self.inner.get_or_insert_committed_with(desc, || Arc::new(Sampler::new(
-            Arc::clone(&device),
-            *desc,
-        )))
+        self.inner.get_or_insert_committed_with(desc, || {
+            Arc::new(Sampler::new(Arc::clone(&device), *desc))
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
+    use crate::*;
 
     fn basic_sampler_desc() -> SamplerDesc {
         SamplerDesc {
@@ -247,8 +246,4 @@ mod tests {
 
         assert!(Arc::ptr_eq(cache.get_committed(&desc).unwrap(), &s1));
     }
-
-    unit::declare_tests![creation_test, cache_test];
 }
-
-unit::collect_tests![tests];

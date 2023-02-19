@@ -1,18 +1,15 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use device::{
-    BufferBinding, BufferBox, DescriptorSet, DescriptorSetLayout,
-    SetLayoutCache,
-};
+use device::{BufferBinding, BufferBox, DescriptorSet, DescriptorSetLayout, SetLayoutCache};
 use math::Matrix4;
 
 use crate::*;
 
 #[derive(Debug)]
 pub struct RenderWorld {
-    crate rloop: Box<RenderLoop>,
-    crate data: RenderWorldData,
+    pub(crate) rloop: Box<RenderLoop>,
+    pub(crate) data: RenderWorldData,
 }
 
 #[derive(Debug, Default)]
@@ -29,9 +26,9 @@ enum Binding {
 }
 
 #[derive(Debug, Default)]
-crate struct RenderWorldData {
-    crate objects: Vec<RenderObject>,
-    crate uniforms: WorldUniforms,
+pub(crate) struct RenderWorldData {
+    pub(crate) objects: Vec<RenderObject>,
+    pub(crate) uniforms: WorldUniforms,
 }
 
 impl RenderWorld {
@@ -87,40 +84,38 @@ impl RenderWorld {
 }
 
 impl WorldUniforms {
-    crate fn create_set_layout(layouts: &SetLayoutCache) ->
-        Cow<Arc<DescriptorSetLayout>>
-    {
-        layouts.get_or_create_named(&device::set_layout_desc![
-            (Binding::ViewUniforms as _, UniformBuffer,
-                VERTEX_BIT | FRAGMENT_BIT),
-            (Binding::XformBuffer as _, StorageBuffer, VERTEX_BIT),
-        ], Some("scene_descriptors_layout"))
+    pub(crate) fn create_set_layout(layouts: &SetLayoutCache) -> Cow<Arc<DescriptorSetLayout>> {
+        layouts.get_or_create_named(
+            &device::set_layout_desc![
+                (
+                    Binding::ViewUniforms as _,
+                    UniformBuffer,
+                    VERTEX_BIT | FRAGMENT_BIT
+                ),
+                (Binding::XformBuffer as _, StorageBuffer, VERTEX_BIT),
+            ],
+            Some("scene_descriptors_layout"),
+        )
     }
 
-    fn write_descriptors(
-        &self,
-        state: &SystemState,
-        desc: &mut DescriptorSet,
-    ) {
+    fn write_descriptors(&self, state: &SystemState, desc: &mut DescriptorSet) {
         let view = SceneViewUniforms::new(&self.view);
-        let view = state.buffers.boxed(
-            BufferBinding::Uniform, Lifetime::Frame, view);
+        let view = state
+            .buffers
+            .boxed(BufferBinding::Uniform, Lifetime::Frame, view);
         let range = BufferBox::range(&view);
         desc.write_buffer(Binding::ViewUniforms as _, range);
 
-        let xforms = state.buffers.box_slice(
-            BufferBinding::Storage, Lifetime::Frame, &self.xforms);
+        let xforms = state
+            .buffers
+            .box_slice(BufferBinding::Storage, Lifetime::Frame, &self.xforms);
         let range = BufferBox::range(&xforms);
         desc.write_buffer(Binding::XformBuffer as _, range);
     }
 
-    crate fn create_descriptor_set(&self, state: &SystemState) -> DescriptorSet
-    {
+    pub(crate) fn create_descriptor_set(&self, state: &SystemState) -> DescriptorSet {
         let layout = Self::create_set_layout(&state.set_layouts);
-        let mut desc = state.descriptors.alloc(
-            Lifetime::Frame,
-            layout.as_ref(),
-        );
+        let mut desc = state.descriptors.alloc(Lifetime::Frame, layout.as_ref());
         desc.set_name("world_uniforms");
         self.write_descriptors(state, &mut desc);
         desc
@@ -129,8 +124,8 @@ impl WorldUniforms {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use super::*;
+    use std::sync::Arc;
 
     unsafe fn render_nothing(vars: crate::testing::TestVars) {
         let window = Arc::clone(&vars.swapchain.window());

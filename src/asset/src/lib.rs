@@ -1,13 +1,12 @@
 #![feature(
     backtrace,
     const_generics,
-    crate_visibility_modifier,
     entry_insert,
     exact_size_is_empty,
     try_blocks,
     try_trait,
     type_ascription,
-    vec_into_raw_parts,
+    vec_into_raw_parts
 )]
 #![allow(incomplete_features)]
 #![allow(clippy::float_cmp)]

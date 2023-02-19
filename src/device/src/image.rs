@@ -126,7 +126,14 @@ impl Image {
         let dt = &*device.table;
 
         let &ImageDef {
-            flags, ty, format, samples, extent, mip_levels, layers, ..
+            flags,
+            ty,
+            format,
+            samples,
+            extent,
+            mip_levels,
+            layers,
+            ..
         } = &*def;
 
         let create_info = vk::ImageCreateInfo {
@@ -144,13 +151,16 @@ impl Image {
         let mut image = vk::null();
         unsafe {
             dt.create_image(&create_info, ptr::null(), &mut image)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
 
         let alloc = unsafe { heap.bind(image) };
 
         if let Some(name) = &def.name {
-            unsafe { device.set_name(image, name); }
+            unsafe {
+                device.set_name(image, name);
+            }
         }
 
         Self {
@@ -173,7 +183,13 @@ impl Image {
         layers: u32,
     ) -> Self {
         let def = Arc::new(ImageDef::new(
-            heap.device(), flags, ty, format, samples, extent, mip_levels,
+            heap.device(),
+            flags,
+            ty,
+            format,
+            samples,
+            extent,
+            mip_levels,
             layers,
         ));
         Self::new(heap, def)
@@ -235,8 +251,7 @@ impl Image {
     }
 
     #[inline]
-    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
-    {
+    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize {
         self.def.subresource_size(sub)
     }
 
@@ -246,15 +261,11 @@ impl Image {
     }
 
     #[inline]
-    pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
-        ImageSubresources
-    {
+    pub fn all_layers_for_mip_level(&self, mip_level: u32) -> ImageSubresources {
         self.def.all_layers_for_mip_level(mip_level)
     }
 
-    pub fn create_view(self: &Arc<Self>, subresources: ImageSubresources) ->
-        Arc<ImageView>
-    {
+    pub fn create_view(self: &Arc<Self>, subresources: ImageSubresources) -> Arc<ImageView> {
         let mut flags = ImageViewFlags::empty();
         let min_array_layers;
         if self.ty() == ImageType::Cube {
@@ -289,7 +300,7 @@ impl Named for Image {
 }
 
 impl ImageDef {
-        #[inline]
+    #[inline]
     pub fn new(
         device: &Arc<Device>,
         flags: ImageFlags,
@@ -300,10 +311,18 @@ impl ImageDef {
         mip_levels: u32,
         layers: u32,
     ) -> Self {
-        validate_image_creation(&device, flags, ty, format, samples, extent,
-            mip_levels, layers);
+        validate_image_creation(
+            &device, flags, ty, format, samples, extent, mip_levels, layers,
+        );
         Self {
-            flags, ty, format, samples, extent, mip_levels, layers, name: None,
+            flags,
+            ty,
+            format,
+            samples,
+            extent,
+            mip_levels,
+            layers,
+            name: None,
         }
     }
 
@@ -352,13 +371,11 @@ impl ImageDef {
         assert_lt!(sub.layers[0], sub.layers[1]);
     }
 
-    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize
-    {
+    pub fn subresource_size(&self, sub: &ImageSubresources) -> vk::DeviceSize {
         let lvl_size = |lvl| self.extent().mip_level(lvl).texel_count();
         let texels: vk::DeviceSize = sub.mip_level_range().map(lvl_size).sum();
         let layers = sub.layer_count();
-        texels * self.format.size() as vk::DeviceSize
-            * layers as vk::DeviceSize
+        texels * self.format.size() as vk::DeviceSize * layers as vk::DeviceSize
     }
 
     #[inline]
@@ -371,9 +388,7 @@ impl ImageDef {
     }
 
     #[inline]
-    pub fn all_layers_for_mip_level(&self, mip_level: u32) ->
-        ImageSubresources
-    {
+    pub fn all_layers_for_mip_level(&self, mip_level: u32) -> ImageSubresources {
         ImageSubresources {
             aspects: self.format.aspects(),
             mip_levels: [mip_level, mip_level + 1],
@@ -423,8 +438,7 @@ impl ImageView {
     ) -> Self {
         let dt = &*image.device.table;
 
-        validate_image_view_creation(image.def(), flags, format, components,
-            &subresources);
+        validate_image_view_creation(image.def(), flags, format, components, &subresources);
 
         let view_type = image.ty().view_type(flags);
         let create_info = vk::ImageViewCreateInfo {
@@ -437,7 +451,8 @@ impl ImageView {
         };
         let mut view = vk::null();
         dt.create_image_view(&create_info, ptr::null(), &mut view)
-            .check().unwrap();
+            .check()
+            .unwrap();
 
         ImageView {
             image,
@@ -499,16 +514,15 @@ impl ImageView {
 impl ImageFlags {
     #[inline]
     pub fn is_render_target(self) -> bool {
-        self.intersects(Self::COLOR_ATTACHMENT
-            | Self::DEPTH_STENCIL_ATTACHMENT)
+        self.intersects(Self::COLOR_ATTACHMENT | Self::DEPTH_STENCIL_ATTACHMENT)
     }
 
     // XXX: Is every input attachment also a color or depth attachment?
     #[inline]
     pub fn is_attachment(self) -> bool {
-        self.intersects(Self::COLOR_ATTACHMENT
-            | Self::DEPTH_STENCIL_ATTACHMENT
-            | Self::INPUT_ATTACHMENT)
+        self.intersects(
+            Self::COLOR_ATTACHMENT | Self::DEPTH_STENCIL_ATTACHMENT | Self::INPUT_ATTACHMENT,
+        )
     }
 
     pub fn usage(self) -> vk::ImageUsageFlags {
@@ -517,10 +531,15 @@ impl ImageFlags {
         let pairs = [
             (Self::STORAGE, F::STORAGE_BIT),
             (Self::COLOR_ATTACHMENT, F::COLOR_ATTACHMENT_BIT),
-            (Self::DEPTH_STENCIL_ATTACHMENT, F::DEPTH_STENCIL_ATTACHMENT_BIT),
+            (
+                Self::DEPTH_STENCIL_ATTACHMENT,
+                F::DEPTH_STENCIL_ATTACHMENT_BIT,
+            ),
             (Self::INPUT_ATTACHMENT, F::INPUT_ATTACHMENT_BIT),
         ];
-        let mut usage = pairs.iter().cloned()
+        let mut usage = pairs
+            .iter()
+            .cloned()
             .filter_map(|(fl, vkfl)| self.contains(fl).then_some(vkfl))
             .fold(Default::default(), |acc, flag| acc | flag);
 
@@ -555,10 +574,8 @@ impl ImageType {
             match (self, array) {
                 (ImageType::Dim1, false) => vk::ImageViewType::_1D,
                 (ImageType::Dim1, true) => vk::ImageViewType::_1D_ARRAY,
-                (ImageType::Dim2 | ImageType::Cube, false) =>
-                    vk::ImageViewType::_2D,
-                (ImageType::Dim2 | ImageType::Cube, true) =>
-                    vk::ImageViewType::_2D_ARRAY,
+                (ImageType::Dim2 | ImageType::Cube, false) => vk::ImageViewType::_2D,
+                (ImageType::Dim2 | ImageType::Cube, true) => vk::ImageViewType::_2D_ARRAY,
                 (ImageType::Dim3, _) => vk::ImageViewType::_3D,
             }
         }
@@ -600,8 +617,7 @@ impl From<ImageSubresources> for vk::ImageSubresourceRange {
 
 impl ImageSubresources {
     #[inline]
-    pub fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers
-    {
+    pub fn to_mip_layers(&self, mip_level: u32) -> vk::ImageSubresourceLayers {
         vk::ImageSubresourceLayers {
             aspect_mask: self.aspects,
             mip_level,
@@ -675,8 +691,7 @@ fn validate_image_creation(
 
     let dim: vk::ImageType = ty.into();
     match dim {
-        vk::ImageType::_1D =>
-            assert_eq!((extent.height, extent.depth), (1, 1)),
+        vk::ImageType::_1D => assert_eq!((extent.height, extent.depth), (1, 1)),
         vk::ImageType::_2D => assert_eq!(extent.depth, 1),
         vk::ImageType::_3D => assert_eq!(layers, 1),
         _ => unreachable!(),
@@ -740,7 +755,8 @@ mod tests {
             extent,
             1,
             1,
-        )).create_full_view();
+        ))
+        .create_full_view();
         let _depth_view = Arc::new(Image::with(
             heap,
             Flags::NO_SAMPLE | Flags::DEPTH_STENCIL_ATTACHMENT,
@@ -750,7 +766,8 @@ mod tests {
             extent,
             1,
             1,
-        )).create_full_view();
+        ))
+        .create_full_view();
 
         // HDR cube texture
         let _env_view = Arc::new(Image::with(
@@ -762,7 +779,8 @@ mod tests {
             Extent3D::new(256, 256, 1),
             1,
             6,
-        )).create_full_view();
+        ))
+        .create_full_view();
     }
 
     unsafe fn subresource_size(vars: testing::TestVars) {
@@ -796,13 +814,8 @@ mod tests {
             img.subresource_size(&Sub::new(aspect, [0, 1], [1, 4])),
             128 * 128 * tx_size * 3,
         );
-        let tx_count = 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4
-            + 2 * 2 + 1 * 1;
+        let tx_count = 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2 + 1 * 1;
         let sub = Sub::new(aspect, [0, extent.mip_levels()], [0, 6]);
         assert_eq!(img.subresource_size(&sub), tx_count * tx_size * 6);
     }
-
-    unit::declare_tests![creation, subresource_size];
 }
-
-unit::collect_tests![tests];

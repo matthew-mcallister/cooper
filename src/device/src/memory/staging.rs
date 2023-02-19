@@ -19,10 +19,7 @@ impl StagingBuffer {
         buffer.set_name("staging_buffer");
         let mut allocator = LinearAllocator::default();
         allocator.add_chunk(capacity as _);
-        Self {
-            buffer,
-            allocator,
-        }
+        Self { buffer, allocator }
     }
 
     #[inline]
@@ -63,8 +60,8 @@ impl StagingBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::*;
+    use crate::*;
 
     fn staging_inner(staging: &mut StagingBuffer) {
         assert_eq!(staging.used(), 0);
@@ -101,11 +98,9 @@ mod tests {
 
         // Run test, clear, and run it again
         staging_inner(&mut staging);
-        unsafe { staging.clear(); }
+        unsafe {
+            staging.clear();
+        }
         staging_inner(&mut staging);
     }
-
-    unit::declare_tests![staging];
 }
-
-unit::collect_tests![tests];

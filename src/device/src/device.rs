@@ -8,14 +8,14 @@ use crate::*;
 
 // TODO: Give a debug name to this
 pub struct Device {
-    crate table: Arc<vkl::DeviceTable>,
-    crate instance: Arc<Instance>,
-    crate app_info: Arc<AppInfo>,
-    crate pdev: vk::PhysicalDevice,
-    crate props: vk::PhysicalDeviceProperties,
-    crate queue_families: Vec<vk::QueueFamilyProperties>,
-    crate mem_props: vk::PhysicalDeviceMemoryProperties,
-    crate features: vk::PhysicalDeviceFeatures,
+    pub(crate) table: Arc<vkl::DeviceTable>,
+    pub(crate) instance: Arc<Instance>,
+    pub(crate) app_info: Arc<AppInfo>,
+    pub(crate) pdev: vk::PhysicalDevice,
+    pub(crate) props: vk::PhysicalDeviceProperties,
+    pub(crate) queue_families: Vec<vk::QueueFamilyProperties>,
+    pub(crate) mem_props: vk::PhysicalDeviceMemoryProperties,
+    pub(crate) features: vk::PhysicalDeviceFeatures,
 }
 
 impl Drop for Device {
@@ -45,25 +45,22 @@ impl Eq for Device {}
 
 impl std::fmt::Debug for Device {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Device")
-            .field("pdev", &self.pdev)
-            .finish()
+        f.debug_struct("Device").field("pdev", &self.pdev).finish()
     }
 }
 
 impl Device {
-    pub unsafe fn new(instance: Arc<Instance>, pdev: vk::PhysicalDevice) ->
-        DeviceResult<(Arc<Self>, Vec<Vec<Arc<Queue>>>)>
-    {
+    pub unsafe fn new(
+        instance: Arc<Instance>,
+        pdev: vk::PhysicalDevice,
+    ) -> DeviceResult<(Arc<Self>, Vec<Vec<Arc<Queue>>>)> {
         let it = &instance.table;
         let app_info = Arc::clone(&instance.app_info);
 
         let mut p_next = ptr::null_mut();
 
         // TODO: check that extensions are actually supported
-        let exts = [
-            vk::KHR_SWAPCHAIN_EXTENSION_NAME,
-        ];
+        let exts = [vk::KHR_SWAPCHAIN_EXTENSION_NAME];
 
         let features = vk::PhysicalDeviceFeatures {
             image_cube_array: vk::TRUE, // Currently only used in tests
@@ -96,11 +93,9 @@ impl Device {
         it.create_device(pdev, &create_info, ptr::null(), &mut dev)
             .check()?;
 
-        let get_device_proc_addr = std::mem::transmute({
-            it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr"))
-        });
-        let table =
-            Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
+        let get_device_proc_addr =
+            std::mem::transmute({ it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr")) });
+        let table = Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
         let props = instance.get_properties(pdev);
         let queue_families = instance.get_queue_family_properties(pdev);
@@ -139,10 +134,7 @@ impl Device {
     }
 
     #[inline]
-    pub fn queue_family<'dev>(
-        self: &'dev Arc<Self>,
-        index: u32,
-    ) -> QueueFamily<'dev> {
+    pub fn queue_family<'dev>(self: &'dev Arc<Self>, index: u32) -> QueueFamily<'dev> {
         QueueFamily::new(self, index)
     }
 
@@ -156,26 +148,25 @@ impl Device {
         &self.features
     }
 
-    pub unsafe fn set_name(
-        &self,
-        handle: impl DebugHandle,
-        name: impl Into<String>,
-    ) {
+    pub unsafe fn set_name(&self, handle: impl DebugHandle, name: impl Into<String>) {
         if self.app_info.debug {
             let name = CString::new(name.into()).unwrap();
             set_name(&self.table, handle, &name);
         }
     }
 
-    pub unsafe fn create_swapchain(self: Arc<Self>, surface: Arc<Surface>) ->
-        DeviceResult<Swapchain>
-    {
+    pub unsafe fn create_swapchain(
+        self: Arc<Self>,
+        surface: Arc<Surface>,
+    ) -> DeviceResult<Swapchain> {
         let mut swapchain = Swapchain::new(surface, self)?;
         set_name!(swapchain);
         Ok(swapchain)
     }
 
     pub fn wait_idle(&self) {
-        unsafe { self.table.device_wait_idle(); }
+        unsafe {
+            self.table.device_wait_idle();
+        }
     }
 }

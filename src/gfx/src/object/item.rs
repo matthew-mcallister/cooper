@@ -5,39 +5,39 @@ use log::debug;
 use more_asserts::assert_gt;
 use prelude::*;
 
-use crate::{ResourceUnavailable, SystemState};
+use super::*;
 use crate::material::MaterialStateTable;
 use crate::mesh::{AttrBuffer, IndexBuffer, RenderMesh};
 use crate::resource::ResourceSystem;
 use crate::util::SmallVec;
-use super::*;
+use crate::{ResourceUnavailable, SystemState};
 
 #[derive(Debug)]
-crate struct RenderItem {
-    crate mesh: MeshData,
-    crate pipeline: Arc<GraphicsPipeline>,
-    crate descriptors: Arc<DescriptorSet>,
-    crate instance: u32,
+pub(crate) struct RenderItem {
+    pub(crate) mesh: MeshData,
+    pub(crate) pipeline: Arc<GraphicsPipeline>,
+    pub(crate) descriptors: Arc<DescriptorSet>,
+    pub(crate) instance: u32,
 }
 
 #[derive(Debug)]
-crate struct MeshData {
-    crate vertex_count: u32,
-    crate index: Option<IndexBuffer<BufferAlloc>>,
-    crate attrs: SmallVec<AttrBuffer<BufferAlloc>, 6>,
+pub(crate) struct MeshData {
+    pub(crate) vertex_count: u32,
+    pub(crate) index: Option<IndexBuffer<BufferAlloc>>,
+    pub(crate) attrs: SmallVec<AttrBuffer<BufferAlloc>, 6>,
 }
 
 #[allow(dead_code)]
 impl MeshData {
-    crate fn vertex_count(&self) -> u32 {
+    pub(crate) fn vertex_count(&self) -> u32 {
         self.vertex_count
     }
 
-    crate fn index(&self) -> Option<&IndexBuffer<BufferAlloc>> {
+    pub(crate) fn index(&self) -> Option<&IndexBuffer<BufferAlloc>> {
         self.index.as_ref()
     }
 
-    crate fn attrs(&self) -> &[AttrBuffer<BufferAlloc>] {
+    pub(crate) fn attrs(&self) -> &[AttrBuffer<BufferAlloc>] {
         &self.attrs
     }
 }
@@ -50,8 +50,11 @@ struct LowerCtx<'ctx> {
 }
 
 trait Lower {
-    fn lower<'ctx>(self, instance: u32, ctx: &mut LowerCtx<'ctx>) ->
-        Result<RenderItem, ResourceUnavailable>;
+    fn lower<'ctx>(
+        self,
+        instance: u32,
+        ctx: &mut LowerCtx<'ctx>,
+    ) -> Result<RenderItem, ResourceUnavailable>;
 }
 
 impl<'ctx> LowerCtx<'ctx> {
@@ -62,18 +65,21 @@ impl<'ctx> LowerCtx<'ctx> {
         object_count: usize,
     ) -> Self {
         assert_gt!(object_count, 0);
-        Self { state, resources, materials }
+        Self {
+            state,
+            resources,
+            materials,
+        }
     }
 }
 
-crate fn lower_objects<'a>(
+pub(crate) fn lower_objects<'a>(
     state: &'a SystemState,
     resources: &'a ResourceSystem,
     materials: &'a MaterialStateTable,
     objects: impl ExactSizeIterator<Item = RenderObject> + 'a,
 ) -> impl Iterator<Item = RenderItem> + 'a {
-    let mut ctx = LowerCtx::new(
-        state, resources, materials, objects.len());
+    let mut ctx = LowerCtx::new(state, resources, materials, objects.len());
     // TODO: Allow overriding the action to take when lowering fails
     objects.into_iter().enumerate().filter_map(move |(i, obj)| {
         obj.lower(i as _, &mut ctx)
@@ -83,9 +89,11 @@ crate fn lower_objects<'a>(
 }
 
 impl Lower for RenderObject {
-    fn lower(self, instance: u32, ctx: &mut LowerCtx<'_>) ->
-        Result<RenderItem, ResourceUnavailable>
-    {
+    fn lower(
+        self,
+        instance: u32,
+        ctx: &mut LowerCtx<'_>,
+    ) -> Result<RenderItem, ResourceUnavailable> {
         match self {
             RenderObject::MeshInstance(mesh) => mesh.lower(instance, ctx),
         }
@@ -93,15 +101,16 @@ impl Lower for RenderObject {
 }
 
 impl Lower for MeshInstance {
-    fn lower(self, _instance: u32, ctx: &mut LowerCtx<'_>) ->
-        Result<RenderItem, ResourceUnavailable>
-    {
+    fn lower(
+        self,
+        _instance: u32,
+        ctx: &mut LowerCtx<'_>,
+    ) -> Result<RenderItem, ResourceUnavailable> {
         let state = ctx.materials.get(&self.material);
         let pipeline = Arc::clone(state.pipeline()?);
         let descriptors = Arc::clone(state.desc()?);
 
-        let mesh = resolve_mesh(
-            &self.mesh, ctx.resources, pipeline.vertex_layout())?;
+        let mesh = resolve_mesh(&self.mesh, ctx.resources, pipeline.vertex_layout())?;
 
         Ok(RenderItem {
             mesh,
@@ -112,7 +121,7 @@ impl Lower for MeshInstance {
     }
 }
 
-crate fn resolve_mesh(
+pub(crate) fn resolve_mesh(
     mesh: &RenderMesh,
     resources: &ResourceSystem,
     layout: &VertexInputLayout,
@@ -123,12 +132,23 @@ crate fn resolve_mesh(
         IndexBuffer { ty: index.ty, buffer }
     };
 
-    let attrs = layout.attributes.iter().map(move |binding| {
-        let attr = &mesh.bindings()[binding.attribute];
-        assert_eq!(attr.format, binding.format);
-        let buffer = Arc::clone(resources.get_buffer(&attr.buffer)?);
-        Some(AttrBuffer { format: attr.format, buffer })
-    }).collect::<Option<_>>()?;
+    let attrs = layout
+        .attributes
+        .iter()
+        .map(move |binding| {
+            let attr = &mesh.bindings()[binding.attribute];
+            assert_eq!(attr.format, binding.format);
+            let buffer = Arc::clone(resources.get_buffer(&attr.buffer)?);
+            Some(AttrBuffer {
+                format: attr.format,
+                buffer,
+            })
+        })
+        .collect::<Option<_>>()?;
 
-    Some(MeshData { vertex_count: mesh.vertex_count(), index, attrs })
+    Some(MeshData {
+        vertex_count: mesh.vertex_count(),
+        index,
+        attrs,
+    })
 }

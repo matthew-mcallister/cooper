@@ -89,15 +89,15 @@ impl IndexType {
 }
 
 impl VertexStreamLayout {
-    pub fn input_layout_for_shader(&self, shader: &Shader) ->
-        VertexInputLayout
-    {
+    pub fn input_layout_for_shader(&self, shader: &Shader) -> VertexInputLayout {
         assert_eq!(shader.stage(), ShaderStage::Vertex);
         let mut attrs = SmallVec::with_capacity(shader.inputs().len());
         for &location in shader.inputs().iter() {
             let name: VertexAttr = location.try_into().unwrap();
-            let attr = *self.attributes.get(name).unwrap_or_else(||
-                panic!("missing attribute: {:?}", name));
+            let attr = *self
+                .attributes
+                .get(name)
+                .unwrap_or_else(|| panic!("missing attribute: {:?}", name));
             attrs.push(VertexAttributeBinding {
                 location,
                 attribute: name,
@@ -112,9 +112,9 @@ impl VertexStreamLayout {
 }
 
 impl VertexInputLayout {
-    pub(super) fn vk_bindings(&self) -> Vec<vk::VertexInputBindingDescription>
-    {
-        self.attributes.iter()
+    pub(super) fn vk_bindings(&self) -> Vec<vk::VertexInputBindingDescription> {
+        self.attributes
+            .iter()
             .enumerate()
             .map(|(i, attr)| vk::VertexInputBindingDescription {
                 binding: i as _,
@@ -125,7 +125,8 @@ impl VertexInputLayout {
     }
 
     pub(super) fn vk_attrs(&self) -> Vec<vk::VertexInputAttributeDescription> {
-        self.attributes.iter()
+        self.attributes
+            .iter()
             .enumerate()
             .map(|(i, attr)| vk::VertexInputAttributeDescription {
                 location: attr.location,
@@ -139,10 +140,10 @@ impl VertexInputLayout {
 
 #[cfg(test)]
 mod tests {
-    use base::partial_map;
-    use crate::*;
-    use crate::testing::*;
     use super::*;
+    use crate::testing::*;
+    use crate::*;
+    use base::partial_map;
 
     unsafe fn smoke_test(vars: testing::TestVars) {
         use VertexAttr as Attr;
@@ -163,10 +164,4 @@ mod tests {
         let shaders = TestShaders::new(vars.device());
         let _input = layout.input_layout_for_shader(&shaders.static_vert);
     }
-
-    unit::declare_tests![
-        smoke_test,
-    ];
 }
-
-unit::collect_tests![tests];

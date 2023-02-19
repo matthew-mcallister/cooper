@@ -46,7 +46,7 @@ impl BufferHeap {
         macro_rules! entry {
             ($dev:expr, $lt:expr) => {
                 (|binding| BufferHeapEntry::new($dev, binding, $lt)).into()
-            }
+            };
         }
         let heap = Arc::new(Self {
             inner: Mutex::new(BufferHeapInner {
@@ -94,24 +94,26 @@ impl BufferHeap {
         mapping: MemoryMapping,
         size: vk::DeviceSize,
     ) -> BufferAlloc {
-        trace!("BufferHeap::alloc({:?}, {:?}, {:?}, {:?})",
-            binding, lifetime, mapping, size);
+        trace!(
+            "BufferHeap::alloc({:?}, {:?}, {:?}, {:?})",
+            binding,
+            lifetime,
+            mapping,
+            size
+        );
         match lifetime {
-            Lifetime::Static => self.inner.lock()
-                .static_pools[binding]
-                .alloc(mapping, size),
-            Lifetime::Frame => self.inner.lock()
-                .frame_pools[binding]
-                .alloc(mapping, size),
+            Lifetime::Static => self.inner.lock().static_pools[binding].alloc(mapping, size),
+            Lifetime::Frame => self.inner.lock().frame_pools[binding].alloc(mapping, size),
         }
     }
 
     pub(super) unsafe fn free(&self, alloc: &BufferAlloc) {
         trace!("BufferHeap::free({:?})", alloc);
         let buffer = &alloc.buffer;
-        if buffer.lifetime() != Lifetime::Static { return; }
-        self.inner.lock().static_pools[alloc.buffer.binding.unwrap()]
-            .free(alloc);
+        if buffer.lifetime() != Lifetime::Static {
+            return;
+        }
+        self.inner.lock().static_pools[alloc.buffer.binding.unwrap()].free(alloc);
     }
 
     #[inline]
@@ -122,8 +124,7 @@ impl BufferHeap {
         val: T,
     ) -> BufferBox<T> {
         let size = std::mem::size_of::<T>();
-        let alloc = self.alloc(
-            binding, lifetime, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::from_val(alloc, val)
     }
 
@@ -135,8 +136,7 @@ impl BufferHeap {
         iter: impl Iterator<Item = T> + ExactSizeIterator,
     ) -> BufferBox<[T]> {
         let size = std::mem::size_of::<T>() * iter.len();
-        let alloc = self.alloc(
-            binding, lifetime, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::from_iter(alloc, iter)
     }
 
@@ -148,8 +148,7 @@ impl BufferHeap {
         src: &[T],
     ) -> BufferBox<[T]> {
         let size = std::mem::size_of::<T>() * src.len();
-        let alloc = self.alloc(
-            binding, lifetime, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::copy_from_slice(alloc, src)
     }
 
@@ -161,8 +160,7 @@ impl BufferHeap {
         len: usize,
     ) -> BufferBox<[MaybeUninit<T>]> {
         let size = std::mem::size_of::<T>() * len;
-        let alloc = self.alloc(
-            binding, lifetime, MemoryMapping::Mapped, size as _);
+        let alloc = self.alloc(binding, lifetime, MemoryMapping::Mapped, size as _);
         BufferBox::new_slice(alloc, len)
     }
 
@@ -175,11 +173,7 @@ impl BufferHeap {
 }
 
 impl<A: Allocator> BufferHeapEntry<A> {
-    fn new(
-        device: &Arc<Device>,
-        binding: BufferBinding,
-        lifetime: Lifetime,
-    ) -> Self {
+    fn new(device: &Arc<Device>, binding: BufferBinding, lifetime: Lifetime) -> Self {
         let mut mapped_pool = BufferPool::new(
             Arc::clone(&device),
             binding,
@@ -194,13 +188,14 @@ impl<A: Allocator> BufferHeapEntry<A> {
         mapped_pool.add_chunk(1);
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
         let device_local = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;
-        let unmapped_pool = (!flags.contains(device_local))
-            .then(|| BufferPool::new(
+        let unmapped_pool = (!flags.contains(device_local)).then(|| {
+            BufferPool::new(
                 Arc::clone(&device),
                 binding,
                 lifetime,
                 MemoryMapping::DeviceLocal,
-            ));
+            )
+        });
 
         BufferHeapEntry {
             binding,
@@ -218,9 +213,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
         &mut self.mapped_pool
     }
 
-    fn alloc(&mut self, mapping: MemoryMapping, size: vk::DeviceSize) ->
-        BufferAlloc
-    {
+    fn alloc(&mut self, mapping: MemoryMapping, size: vk::DeviceSize) -> BufferAlloc {
         self.pick_pool(mapping).alloc(size)
     }
 
@@ -246,14 +239,20 @@ impl<A: Allocator> BufferHeapEntry<A> {
 
 impl<A: Allocator> Drop for BufferPool<A> {
     fn drop(&mut self) {
-        if std::thread::panicking() { return; }
+        if std::thread::panicking() {
+            return;
+        }
         for chunk in self.chunks.iter() {
-            assert_eq!(Arc::strong_count(chunk), 1,
+            assert_eq!(
+                Arc::strong_count(chunk),
+                1,
                 concat!(
                     "allocator destroyed while chunk in use: {:?};\n",
                     "make sure all resources are destroyed before the\n",
                     "render loop is destroyed",
-                ), fmt_named(&**chunk));
+                ),
+                fmt_named(&**chunk)
+            );
         }
     }
 }
@@ -301,8 +300,7 @@ impl<A: Allocator> BufferPool<A> {
         match self.binding {
             Storage => limits.min_storage_buffer_offset_alignment,
             Uniform => limits.min_uniform_buffer_offset_alignment,
-            StorageTexel | UniformTexel =>
-                limits.min_texel_buffer_offset_alignment,
+            StorageTexel | UniformTexel => limits.min_texel_buffer_offset_alignment,
             Vertex | Index => 1,
         }
     }
@@ -337,10 +335,7 @@ impl<A: Allocator> BufferPool<A> {
 
         buffer.set_name(format!(
             "{:?}|{:?}|{:?}[{}]",
-            self.binding,
-            self.lifetime,
-            self.mapping,
-            chunk,
+            self.binding, self.lifetime, self.mapping, chunk,
         ));
 
         self.chunks.push(Arc::new(buffer));
@@ -355,14 +350,14 @@ impl<A: Allocator> BufferPool<A> {
 
         let limits = self.device.limits();
         match self.binding {
-            BufferBinding::Uniform =>
-                assert!(size < limits.max_uniform_buffer_range as _),
-            BufferBinding::Storage =>
-                assert!(size < limits.max_storage_buffer_range as _),
+            BufferBinding::Uniform => assert!(size < limits.max_uniform_buffer_range as _),
+            BufferBinding::Storage => assert!(size < limits.max_storage_buffer_range as _),
             _ => (),
         }
 
-        let block = self.allocator.alloc(size, alignment)
+        let block = self
+            .allocator
+            .alloc(size, alignment)
             .or_else(|| {
                 self.add_chunk(size);
                 self.allocator.alloc(size, alignment)
@@ -382,7 +377,8 @@ impl<A: Allocator> BufferPool<A> {
         assert!(
             Arc::ptr_eq(&alloc.buffer, chunk),
             "alloc: {:?},\nself.chunks[alloc.chunk]: {:?}",
-            alloc, chunk,
+            alloc,
+            chunk,
         );
 
         let alignment = self.alignment();
@@ -394,8 +390,12 @@ impl<A: Allocator> BufferPool<A> {
 
     unsafe fn clear(&mut self) {
         for chunk in self.chunks.iter() {
-            assert_eq!(Arc::strong_count(chunk), 1,
-                "chunk cleared while in use: {:?}", chunk);
+            assert_eq!(
+                Arc::strong_count(chunk),
+                1,
+                "chunk cleared while in use: {:?}",
+                chunk
+            );
         }
         self.allocator.clear()
     }
@@ -403,9 +403,9 @@ impl<A: Allocator> BufferPool<A> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use more_asserts::assert_ge;
     use vk::traits::*;
-    use super::*;
 
     unsafe fn create_buffer(vars: testing::TestVars) {
         DeviceBuffer::new(
@@ -439,7 +439,7 @@ mod tests {
             BufferBinding::Uniform,
             Lifetime::Static,
             MemoryMapping::Mapped,
-            (2 * device.limits().max_uniform_buffer_range) as _
+            (2 * device.limits().max_uniform_buffer_range) as _,
         );
     }
 
@@ -483,15 +483,4 @@ mod tests {
         let alloc = heap.alloc(Uniform, Static, Mapped, 32);
         assert_eq!(alloc.offset(), 0);
     }
-
-    unit::declare_tests![
-        create_buffer,
-        heap_alloc,
-        (#[should_err] oversized_alloc),
-        alloc_size_is_exact,
-        non_overlapping,
-        free,
-    ];
 }
-
-unit::collect_tests![tests];

@@ -1,49 +1,35 @@
 #![feature(
     arbitrary_self_types,
-    bool_to_option,
-    const_fn,
-    const_generics,
-    const_panic,
-    const_raw_ptr_deref,
-    const_raw_ptr_to_usize_cast,
-    const_slice_from_raw_parts,
     cow_is_borrowed,
-    crate_visibility_modifier,
     entry_insert,
     hash_raw_entry,
-    maybe_uninit_extra,
-    maybe_uninit_ref,
     maybe_uninit_slice,
     nonnull_slice_from_raw_parts,
-    or_patterns,
     trait_alias,
     try_blocks,
-    try_trait,
-    type_ascription,
+    type_ascription
 )]
-
-#![allow(
-    incomplete_features,
-    path_statements,
-)]
+#![allow(incomplete_features, path_statements)]
 #![allow(
     clippy::missing_safety_doc,
     clippy::module_inception,
     clippy::or_fun_call,
     clippy::too_many_arguments,
     clippy::try_err,
-    clippy::type_complexity,
+    clippy::type_complexity
 )]
 
 #[cfg(test)]
 macro_rules! test_type {
-    () => { crate::testing::Test }
+    () => {
+        crate::testing::Test
+    };
 }
 
 macro_rules! err_msg {
     ($msg:literal) => {
         crate::Error(anyhow::anyhow!($msg))
-    }
+    };
 }
 
 #[macro_use]
@@ -68,6 +54,7 @@ mod staged_cache;
 mod swapchain;
 mod sync;
 mod vertex;
+mod window;
 
 pub use commands::*;
 pub use debug::*;
@@ -84,11 +71,12 @@ pub use queue::*;
 pub use render_pass::*;
 pub use sampler::*;
 pub use shader::*;
-crate use staged_cache::*;
+pub(crate) use staged_cache::*;
 pub use swapchain::*;
 pub use sync::*;
 pub use util::*;
 pub use vertex::*;
+pub use window::*;
 
 #[cfg(test)]
 mod testing;
@@ -110,12 +98,6 @@ impl From<vk::Result> for Error {
 pub type DeviceResult<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
-fn main() {
-    env_logger::init();
-    window::testing::run_tests::<testing::TestContext, _>(__collect_tests);
-}
-
-#[cfg(test)]
 mod tests {
     use crate::testing::*;
 
@@ -130,30 +112,8 @@ mod tests {
         let mut sem = vk::null();
         unsafe {
             dt.create_semaphore(&create_info, std::ptr::null(), &mut sem)
-                .check().unwrap();
+                .check()
+                .unwrap();
         }
     }
-
-    unit::declare_tests![
-        smoke_test,
-        (#[should_err] validation_error_test),
-    ];
 }
-
-unit::collect_tests![
-    commands,
-    descriptor,
-    extent,
-    format,
-    framebuffer,
-    image,
-    memory,
-    pipeline,
-    render_pass,
-    sampler,
-    staged_cache,
-    sync,
-    swapchain,
-    tests,
-    vertex,
-];

@@ -1,20 +1,17 @@
 use std::sync::Arc;
 
-use device::{
-    BufferAlloc, BufferHeap, Device, Image, ImageDef, ImageHeap, MemoryRegion,
-    Queue,
-};
+use device::{BufferAlloc, BufferHeap, Device, Image, ImageDef, ImageHeap, MemoryRegion, Queue};
 
 use super::*;
 
 #[derive(Debug)]
-crate struct ResourceSystem {
+pub(crate) struct ResourceSystem {
     state: ResourceStateTable,
     sched: UploadScheduler,
 }
 
 impl ResourceSystem {
-    crate fn new(queue: &Arc<Queue>) -> Self {
+    pub(crate) fn new(queue: &Arc<Queue>) -> Self {
         Self {
             state: ResourceStateTable::new(),
             sched: UploadScheduler::new(Arc::clone(queue)),
@@ -22,17 +19,17 @@ impl ResourceSystem {
     }
 
     #[allow(dead_code)]
-    crate fn device(&self) -> &Arc<Device> {
+    pub(crate) fn device(&self) -> &Arc<Device> {
         self.sched.device()
     }
 
-    crate fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
+    pub(crate) fn get_image_state(&self, image: &Arc<ImageDef>) -> ResourceState {
         self.state.get_state(image)
     }
 
     // TODO: For stuff like storage images, it could potentially be
     // useful to be able to do ad-hoc layout transitions with no upload.
-    crate fn upload_image(
+    pub(crate) fn upload_image(
         &mut self,
         image: &Arc<ImageDef>,
         src: Arc<Vec<u8>>,
@@ -49,15 +46,14 @@ impl ResourceSystem {
         });
     }
 
-    crate fn upload_buffer(
+    pub(crate) fn upload_buffer(
         &mut self,
         heap: &Arc<BufferHeap>,
         buffer: &Arc<BufferDef>,
         src: Arc<Vec<u8>>,
         src_offset: usize,
     ) {
-        let alloc = Arc::get_mut(self.state.alloc_buffer(buffer, heap))
-            .unwrap();
+        let alloc = Arc::get_mut(self.state.alloc_buffer(buffer, heap)).unwrap();
         if let Some(slice) = alloc.as_bytes_mut() {
             slice.copy_from_slice(&src[src_offset..][..buffer.size as usize]);
             self.state.make_buffer_available(buffer);
@@ -66,39 +62,39 @@ impl ResourceSystem {
         }
     }
 
-    crate fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>> {
+    pub(crate) fn get_image(&self, image: &Arc<ImageDef>) -> Option<&Arc<Image>> {
         self.state.get_image(image)
     }
 
-    crate fn get_buffer(&self, image: &Arc<BufferDef>) ->
-        Option<&Arc<BufferAlloc>>
-    {
+    pub(crate) fn get_buffer(&self, image: &Arc<BufferDef>) -> Option<&Arc<BufferAlloc>> {
         self.state.get_buffer(image)
     }
 
     #[allow(dead_code)]
-    crate fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
+    pub(crate) fn invalidate_image(&mut self, image: &Arc<ImageDef>) {
         self.state.invalidate_image(image);
     }
 
-    crate fn update_avail(&mut self) {
-        unsafe { self.state.set_avail_batch(self.sched.avail_batch()); }
+    pub(crate) fn update_avail(&mut self) {
+        unsafe {
+            self.state.set_avail_batch(self.sched.avail_batch());
+        }
     }
 
-    crate fn query_status(&mut self) -> SchedulerStatus {
+    pub(crate) fn query_status(&mut self) -> SchedulerStatus {
         let status = self.sched.query_tasks();
         self.update_avail();
         status
     }
 
-    crate fn schedule(&mut self, heap: &ImageHeap) {
+    pub(crate) fn schedule(&mut self, heap: &ImageHeap) {
         if self.query_status() == SchedulerStatus::Idle {
             self.sched.schedule(&mut self.state, heap);
         }
     }
 
     #[allow(dead_code)]
-    crate fn flush(&mut self, heap: &ImageHeap) {
+    pub(crate) fn flush(&mut self, heap: &ImageHeap) {
         self.sched.flush(&mut self.state, heap);
         self.update_avail();
     }
@@ -106,23 +102,24 @@ impl ResourceSystem {
 
 #[cfg(test)]
 mod tests {
-    use device::*;
     use super::*;
+    use device::*;
 
-    unsafe fn test_image(device: &Arc<Device>, width: u32, height: u32) ->
-        Arc<ImageDef>
-    {
+    unsafe fn test_image(device: &Arc<Device>, width: u32, height: u32) -> Arc<ImageDef> {
         let extent = Extent3D::new(width, height, 1);
-        Arc::new(ImageDef::new(
-            device,
-            Default::default(),
-            ImageType::Dim2,
-            Format::RGBA8,
-            SampleCount::One,
-            extent,
-            1,
-            1,
-        ).with_name(format!("{}x{}", width, height)))
+        Arc::new(
+            ImageDef::new(
+                device,
+                Default::default(),
+                ImageType::Dim2,
+                Format::RGBA8,
+                SampleCount::One,
+                extent,
+                1,
+                1,
+            )
+            .with_name(format!("{}x{}", width, height)),
+        )
     }
 
     unsafe fn upload(vars: crate::testing::TestVars) {
@@ -132,28 +129,22 @@ mod tests {
         let heap = &ImageHeap::new(Arc::clone(&device));
         let mut resources = ResourceSystem::new(queue);
 
-        let images: Vec<_> = (0..7)
-            .map(|n| test_image(device, 2 << n, 2 << n))
-            .collect();
+        let images: Vec<_> = (0..7).map(|n| test_image(device, 2 << n, 2 << n)).collect();
         for image in images.iter() {
-            assert_eq!(
-                resources.get_image_state(image),
-                ResourceState::Unavailable,
-            );
+            assert_eq!(resources.get_image_state(image), ResourceState::Unavailable,);
         }
 
         let mut data = Vec::new();
         data.resize(0x2_0000, 0u8);
         let data = Arc::new(data);
 
-        macro_rules! check_available { () => {
-            for image in images.iter() {
-                assert_eq!(
-                    resources.get_image_state(image),
-                    ResourceState::Available,
-                );
-            }
-        } };
+        macro_rules! check_available {
+            () => {
+                for image in images.iter() {
+                    assert_eq!(resources.get_image_state(image), ResourceState::Available,);
+                }
+            };
+        };
 
         // Upload images one at a time
         for image in images.iter() {
@@ -166,10 +157,7 @@ mod tests {
         // Upload several images at once
         for image in images.iter() {
             resources.invalidate_image(image);
-            assert_eq!(
-                resources.get_image_state(image),
-                ResourceState::Unavailable,
-            );
+            assert_eq!(resources.get_image_state(image), ResourceState::Unavailable,);
 
             resources.upload_image(image, Arc::clone(&data), 0x1000);
         }

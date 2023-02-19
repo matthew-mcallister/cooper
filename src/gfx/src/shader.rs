@@ -43,7 +43,7 @@ pub enum GeomVisMode {
 mod shader_sources {
     macro_rules! include_shaders {
         ($($ident:ident = $name:expr;)*) => {
-            $(crate mod $ident {
+            $(pub(crate) mod $ident {
                 macro_rules! name {
                     () => {
                         concat!(
@@ -52,8 +52,8 @@ mod shader_sources {
                         )
                     }
                 }
-                crate const NAME: &str = name!();
-                crate static CODE: &[u32] = include_u32!(name!());
+                pub(crate) const NAME: &str = name!();
+                pub(crate) static CODE: &[u32] = include_u32!(name!());
             })*
         }
     }
@@ -69,7 +69,7 @@ mod shader_sources {
 }
 
 impl GlobalShaders {
-    crate unsafe fn new(device: &Arc<Device>) -> Self {
+    pub(crate) unsafe fn new(device: &Arc<Device>) -> Self {
         macro_rules! build {
             ($($name:ident,)*) => {
                 Self {
@@ -94,7 +94,7 @@ impl GlobalShaders {
 }
 
 impl GlobalShaderSpecs {
-    crate fn new(shaders: &GlobalShaders) -> Self {
+    pub(crate) fn new(shaders: &GlobalShaders) -> Self {
         let spec_geom = |mode: GeomVisMode| {
             let mut spec = ShaderSpec::new(Arc::clone(&shaders.geom_vis_frag));
             spec.set(ShaderConst::GeomVisMode as _, &(mode as u32));
