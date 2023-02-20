@@ -3,6 +3,7 @@ use fnv::FnvHashMap as HashMap;
 use rspirv::dr::ModuleHeader;
 use spirv_headers as spv;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Module {
     pub(crate) header: ModuleHeader,

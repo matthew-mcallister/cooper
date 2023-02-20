@@ -13,6 +13,7 @@ pub struct BufferHeap {
     inner: Mutex<BufferHeapInner>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct BufferHeapInner {
     device: Arc<Device>,
@@ -20,6 +21,7 @@ pub struct BufferHeapInner {
     frame_pools: EnumMap<BufferBinding, BufferHeapEntry<LinearAllocator>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct BufferHeapEntry<A: Allocator> {
     binding: BufferBinding,

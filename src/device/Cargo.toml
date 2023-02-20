@@ -27,13 +27,14 @@ smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
 spv = { path = "../spirv", package = "cooper-spirv" }
 anyhow = "1.0.33"
 winit = "0.27.5"
+libloading = "0.7.4"
 
 [dependencies.vk]
-git = "https://gitlab.com/matthew-mcallister/vk-ffi"
+git = "https://github.com/matthew-mcallister/vk-ffi"
 package = "vulkan-headers"
 
 [dependencies.vkl]
-git = "https://gitlab.com/matthew-mcallister/vk-ffi"
+git = "https://github.com/matthew-mcallister/vk-ffi"
 package = "vulkan-loader"
 
 [dev-dependencies]

@@ -1,5 +1,5 @@
 // TODO: User-friendly errors
-use std::ffi::CString;
+use std::ffi::{c_char, CString};
 use std::ptr;
 use std::sync::Arc;
 
@@ -10,10 +10,10 @@ use prelude::*;
 
 use crate::*;
 
+#[allow(dead_code)]
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Instance {
-    pub(crate) vk: window::VulkanPlatform,
     #[derivative(Debug = "ignore")]
     pub(crate) entry: Arc<vkl::Entry>,
     #[derivative(Debug = "ignore")]
@@ -50,12 +50,14 @@ impl Drop for Instance {
 }
 
 impl Instance {
-    pub unsafe fn new(vk: window::VulkanPlatform, app_info: AppInfo) -> DeviceResult<Self> {
-        if !vk.supported() {
-            Err(err_msg!("vulkan not available"))?;
-        }
-
-        let get_instance_proc_addr = vk.pfn_get_instance_proc_addr();
+    /// Creates a new instance. get_instance_proc_addr should be obtained
+    /// by loading the system Vulkan loader DLL. required_extensions
+    /// should be obtained from the window system.
+    pub unsafe fn new(
+        get_instance_proc_addr: vk::pfn::GetInstanceProcAddr,
+        app_info: AppInfo,
+        required_extensions: &[&'static str],
+    ) -> DeviceResult<Self> {
         let entry = Arc::new(vkl::Entry::load(get_instance_proc_addr));
 
         let mut version = 0;
@@ -80,8 +82,13 @@ impl Instance {
 
         // TODO: Detect if required layers/extensions are unavailable
         let mut layers = Vec::new();
-        let mut extensions = Vec::new();
-        extensions.extend(vk.required_instance_extensions());
+        let mut extensions: Vec<*const c_char> = Vec::new();
+
+        let required_extensions: Vec<_> = required_extensions
+            .iter()
+            .map(|&ext| CString::new(ext).unwrap())
+            .collect();
+        extensions.extend(required_extensions.iter().map(|ext| ext.as_ptr()));
 
         if app_info.debug {
             layers.push(c_str!("VK_LAYER_KHRONOS_validation"));
@@ -111,7 +118,6 @@ impl Instance {
 
         let app_info = Arc::new(app_info);
         let mut instance = Instance {
-            vk,
             entry,
             table,
             app_info,
@@ -166,12 +172,9 @@ impl Instance {
 
     pub unsafe fn create_surface(
         self: &Arc<Self>,
-        window: &Arc<window::Window>,
+        window: &impl Window,
     ) -> DeviceResult<Arc<Surface>> {
-        Ok(Arc::new(Surface::new(
-            Arc::clone(self),
-            Arc::clone(window),
-        )?))
+        Ok(Arc::new(Surface::new(Arc::clone(self), window)?))
     }
 
     pub(crate) unsafe fn register_debug_messenger(

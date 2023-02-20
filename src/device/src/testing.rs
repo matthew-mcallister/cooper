@@ -44,7 +44,6 @@ impl TestContext {
     unsafe fn create_swapchain(&self) -> DeviceResult<TestVars> {
         let window = self.create_window()?;
         let app_info = app_info();
-        let vk_platform = window.vk_platform().clone();
         let instance = Arc::new(Instance::new(vk_platform, app_info)?);
         let surface = instance.create_surface(&window)?;
         let pdev = device_for_surface(&surface)?;

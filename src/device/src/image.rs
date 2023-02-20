@@ -98,6 +98,7 @@ pub struct ImageDef {
     name: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ImageView {
     image: Arc<Image>,

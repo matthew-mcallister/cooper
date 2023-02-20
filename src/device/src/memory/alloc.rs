@@ -215,7 +215,7 @@ impl LinearAllocator {
 
 impl Allocator for LinearAllocator {
     fn used(&self) -> vk::DeviceSize {
-        self.chunks[..self.chunk].iter().sum() + self.offset
+        self.chunks[..self.chunk].iter().sum(): vk::DeviceSize + self.offset
     }
 
     fn capacity(&self) -> vk::DeviceSize {

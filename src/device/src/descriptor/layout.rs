@@ -217,6 +217,6 @@ impl SetLayoutCache {
 
     #[inline]
     pub fn get_or_create(&self, desc: &SetLayoutDesc) -> Cow<Arc<SetLayout>> {
-        self.get_or_create_named(desc, None)
+        self.get_or_create_named(desc, None: Option<&str>)
     }
 }

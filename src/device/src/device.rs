@@ -94,7 +94,7 @@ impl Device {
             .check()?;
 
         let get_device_proc_addr =
-            std::mem::transmute({ it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr")) });
+            std::mem::transmute(it.get_instance_proc_addr(c_str!("vkGetDeviceProcAddr")));
         let table = Arc::new(vkl::DeviceTable::load(dev, get_device_proc_addr));
 
         let props = instance.get_properties(pdev);

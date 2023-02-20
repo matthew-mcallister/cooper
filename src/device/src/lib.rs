@@ -19,13 +19,6 @@
     clippy::type_complexity
 )]
 
-#[cfg(test)]
-macro_rules! test_type {
-    () => {
-        crate::testing::Test
-    };
-}
-
 macro_rules! err_msg {
     ($msg:literal) => {
         crate::Error(anyhow::anyhow!($msg))
@@ -44,6 +37,7 @@ mod format;
 mod framebuffer;
 mod image;
 mod instance;
+mod loader;
 mod memory;
 mod pipeline;
 mod queue;
@@ -65,6 +59,7 @@ pub use format::*;
 pub use framebuffer::*;
 pub use image::*;
 pub use instance::*;
+pub use loader::*;
 pub use memory::*;
 pub use pipeline::*;
 pub use queue::*;
@@ -85,6 +80,12 @@ use derive_more::Display;
 
 #[derive(Debug, Display)]
 #[display(fmt = "{}", _0)]
+struct StringError(String);
+
+impl std::error::Error for StringError {}
+
+#[derive(Debug, Display)]
+#[display(fmt = "{}", _0)]
 pub struct Error(anyhow::Error);
 
 impl std::error::Error for Error {}
@@ -92,6 +93,18 @@ impl std::error::Error for Error {}
 impl From<vk::Result> for Error {
     fn from(res: vk::Result) -> Self {
         Self(res.into())
+    }
+}
+
+impl From<String> for Error {
+    fn from(msg: String) -> Self {
+        Self(anyhow::Error::new(StringError(msg)))
+    }
+}
+
+impl<'a> From<&'a str> for Error {
+    fn from(msg: &'a str) -> Self {
+        msg.to_owned().into()
     }
 }
 

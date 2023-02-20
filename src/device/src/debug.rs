@@ -130,6 +130,7 @@ pub(crate) trait DebugMessageHandler: fmt::Debug + Send + Sync {
     );
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct DebugMessenger {
     inner: vk::DebugUtilsMessengerEXT,
@@ -242,6 +243,7 @@ impl fmt::Display for ObjectInfo {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct DebugMessagePayload {
     pub(crate) message_severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,

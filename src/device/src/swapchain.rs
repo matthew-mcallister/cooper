@@ -10,7 +10,8 @@ use crate::*;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Surface {
-    pub(crate) window: Arc<window::Window>,
+    // TODO: Technically requires ownership/Arc of window. Maybe make
+    // a generic type?
     #[derivative(Debug = "ignore")]
     pub(crate) instance: Arc<Instance>,
     pub(crate) inner: vk::SurfaceKHR,
@@ -28,6 +29,7 @@ pub struct Swapchain {
 }
 
 /// Specialized image view for the swapchain.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct SwapchainView {
     token: Token,
@@ -55,18 +57,9 @@ impl Drop for Surface {
 
 impl Surface {
     #[inline]
-    pub unsafe fn new(instance: Arc<Instance>, window: Arc<window::Window>) -> DeviceResult<Self> {
-        let inner = window.create_surface(instance.table.instance)?;
-        Ok(Surface {
-            window,
-            instance,
-            inner,
-        })
-    }
-
-    #[inline]
-    pub fn window(&self) -> &Arc<window::Window> {
-        &self.window
+    pub unsafe fn new(instance: Arc<Instance>, window: &impl Window) -> DeviceResult<Self> {
+        let inner = window.create_surface(&instance)?;
+        Ok(Surface { instance, inner })
     }
 }
 
@@ -107,11 +100,6 @@ impl Swapchain {
     #[inline]
     pub fn surface(&self) -> &Arc<Surface> {
         &self.surface
-    }
-
-    #[inline]
-    pub fn window(&self) -> &Arc<window::Window> {
-        self.surface.window()
     }
 
     #[inline]
@@ -175,8 +163,8 @@ impl Swapchain {
         }
 
         // FIXME: On Wayland, the surface extent is defined by the
-        // application, so we need the caller to pass us the window
-        // extent.
+        // application, so caller needs to pass us the window extent.
+        // (Should be obtained from winit or whatever lib is used.)
         assert_ne!(caps.current_extent, (0xffff_ffff, 0xffff_ffff).into());
 
         // This can happen when a window is minimized, so don't try to
@@ -396,10 +384,16 @@ pub unsafe fn device_for_surface(surface: &Surface) -> DeviceResult<vk::Physical
 /// Helper function which creates a logical device capable of rendering
 /// to a window.
 pub unsafe fn init_device_and_swapchain(
-    instance: Arc<Instance>,
-    window: &dyn Window,
+    app_info: AppInfo,
+    window: &impl Window,
 ) -> DeviceResult<(Swapchain, Vec<Vec<Arc<Queue>>>)> {
-    let surface = Arc::new(Surface::new(instance, window)?);
+    let entrypoint = crate::loader::load_vulkan().map_err(|_| "Failed to load libvulkan")?;
+    let instance = Arc::new(Instance::new(
+        entrypoint,
+        app_info,
+        window.required_extensions(),
+    )?);
+    let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
     let pdev = device_for_surface(&surface).unwrap();
     let (device, queues) = Device::new(instance, pdev)?;
     Ok((device.create_swapchain(surface)?, queues))
