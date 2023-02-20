@@ -293,9 +293,12 @@ mod tests {
             memory_type_bits: !0,
         };
         unsafe {
-            let _alloc0 = heap.alloc(reqs);
-            let _alloc1 = heap.alloc(reqs);
-            assert_ne!(_alloc0.as_raw(), 0 as _);
+            let alloc0 = heap.alloc(reqs);
+            let alloc1 = heap.alloc(reqs);
+            // Should not be mapped since ImageHeap is device-local
+            assert_eq!(alloc0.as_raw(), 0 as _);
+            assert_ne!(alloc0.offset, alloc1.offset);
+            assert_eq!(alloc1.offset % 256, 0);
         }
     }
 }

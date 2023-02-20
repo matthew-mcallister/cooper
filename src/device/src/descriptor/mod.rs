@@ -140,6 +140,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn layout_zero_count() {
         let vars = TestVars::new();
         SetLayout::new(
@@ -149,6 +150,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn layout_duplicate_binding() {
         let vars = TestVars::new();
         SetLayout::new(
@@ -158,6 +160,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn layout_unordered_bindings() {
         let vars = TestVars::new();
         SetLayout::new(

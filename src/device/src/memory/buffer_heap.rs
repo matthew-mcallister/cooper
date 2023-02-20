@@ -441,6 +441,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn oversized_alloc() {
         let vars = TestVars::new();
         let device = Arc::clone(vars.device());

@@ -993,6 +993,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn subpass_out_of_bounds() {
         unsafe {
             let vars = TestVars::new();
@@ -1008,6 +1009,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn inline_in_secondary_subpass() {
         unsafe {
             let vars = TestVars::new();
@@ -1023,6 +1025,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn exec_in_inline_subpass() {
         unsafe {
             let vars = TestVars::new();
@@ -1085,6 +1088,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn copy_intra_buffer() {
         unsafe {
             let vars = TestVars::new();

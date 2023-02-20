@@ -121,6 +121,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn validation_error_test() {
         let vars = TestVars::new();
         // Leak a semaphore

@@ -40,6 +40,8 @@ fn create_window_inner(event_loop: &winit::event_loop::EventLoop<()>) -> Window 
 }
 
 lazy_static::lazy_static! {
+    // Yes, we seriously have to do this all because winit relies on
+    // thread-local mutable state, *even on Linux*!
     static ref CHANNEL: Mutex<(Sender<()>, Receiver<Window>)> = {
         use winit::platform::x11::EventLoopBuilderExtX11;
         let (send, foreign_recv) = std::sync::mpsc::channel::<()>();
@@ -63,8 +65,11 @@ fn create_window() -> Window {
     channel.1.recv().unwrap()
 }
 
+static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
+
 impl TestVars {
     pub(crate) fn new() -> Self {
+        INIT_LOGGING.call_once(env_logger::init);
         let window = create_window();
         let (swapchain, queues) = init_device_and_swapchain(app_info(), &window).unwrap();
         TestVars {
