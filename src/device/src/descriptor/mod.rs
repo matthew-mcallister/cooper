@@ -64,7 +64,9 @@ mod tests {
     use std::sync::Arc;
     use vk::traits::*;
 
-    unsafe fn alloc(vars: TestVars) {
+    #[test]
+    fn alloc() {
+        let vars = TestVars::new();
         let device = vars.device();
 
         let (max_sets, descriptor_counts) = frame_descriptor_counts();
@@ -97,13 +99,17 @@ mod tests {
         assert_ne!(sets[1].inner(), sets[2].inner());
         assert_ne!(sets[2].inner(), sets[0].inner());
 
-        pool.free(&set0);
+        unsafe {
+            pool.free(&set0);
+        }
         let used = pool.used_descriptors();
         assert_eq!(pool.used_sets(), 3);
         assert_eq!(used[DescriptorType::StorageBuffer], 0);
     }
 
-    unsafe fn write(vars: TestVars) {
+    #[test]
+    fn write() {
+        let vars = TestVars::new();
         let device = Arc::clone(vars.device());
         let resources = TestResources::new(&device);
         let descriptors = &resources.descriptors;
@@ -120,39 +126,49 @@ mod tests {
         let mut desc = descriptors.alloc(Lifetime::Static, &layout);
         let buffers = vec![resources.empty_uniform_buffer.range(); 2];
         let layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-        desc.write_buffers(0, 0, &buffers);
-        desc.write_image(1, &resources.empty_image_2d, layout, None);
-        desc.write_images(
-            2,
-            0,
-            &vec![&resources.empty_image_2d; 2],
-            layout,
-            Some(&vec![&resources.empty_sampler; 2]),
-        );
+        unsafe {
+            desc.write_buffers(0, 0, &buffers);
+            desc.write_image(1, &resources.empty_image_2d, layout, None);
+            desc.write_images(
+                2,
+                0,
+                &vec![&resources.empty_image_2d; 2],
+                layout,
+                Some(&vec![&resources.empty_sampler; 2]),
+            );
+        }
     }
 
-    fn layout_zero_count(vars: TestVars) {
+    #[test]
+    fn layout_zero_count() {
+        let vars = TestVars::new();
         SetLayout::new(
             Arc::clone(vars.device()),
             set_layout_desc![(0, UniformBuffer[0]),],
         );
     }
 
-    fn layout_duplicate_binding(vars: TestVars) {
+    #[test]
+    fn layout_duplicate_binding() {
+        let vars = TestVars::new();
         SetLayout::new(
             Arc::clone(vars.device()),
             set_layout_desc![(0, UniformBuffer), (0, UniformBuffer),],
         );
     }
 
-    fn layout_unordered_bindings(vars: TestVars) {
+    #[test]
+    fn layout_unordered_bindings() {
+        let vars = TestVars::new();
         SetLayout::new(
             Arc::clone(vars.device()),
             set_layout_desc![(1, UniformBuffer), (0, UniformBuffer),],
         );
     }
 
-    fn layout_cache(vars: TestVars) {
+    #[test]
+    fn layout_cache() {
+        let vars = TestVars::new();
         let mut cache = SetLayoutCache::new(Arc::clone(vars.device()));
         let desc = set_layout_desc![(0, StorageBuffer, VERTEX_BIT | FRAGMENT_BIT),];
         let layout: Arc<_> = cache.get_or_create(&desc).into_owned();

@@ -61,7 +61,7 @@ impl StagingBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::testing::*;
 
     fn staging_inner(staging: &mut StagingBuffer) {
         assert_eq!(staging.used(), 0);
@@ -93,7 +93,9 @@ mod tests {
         assert!(staging.alloc(8).is_none());
     }
 
-    fn staging(vars: testing::TestVars) {
+    #[test]
+    fn staging() {
+        let vars = TestVars::new();
         let mut staging = StagingBuffer::new(Arc::clone(vars.device()), 1024);
 
         // Run test, clear, and run it again

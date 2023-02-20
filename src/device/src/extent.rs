@@ -160,10 +160,10 @@ impl Extent3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing;
     use math::ivec3;
 
-    unsafe fn contains(_: testing::TestVars) {
+    #[test]
+    fn contains() {
         let ex = Extent3D::new;
         let scrn = ex(1920, 1080, 1);
         assert!(scrn.contains_extent(ivec3(0, 0, 0), scrn));
@@ -177,7 +177,8 @@ mod tests {
         assert!(!scrn.contains_extent(ivec3(1920, 1080, 1), ex(0, 0, 1)));
     }
 
-    unsafe fn mip_levels(_: testing::TestVars) {
+    #[test]
+    fn mip_levels() {
         let ex = Extent3D::new;
         let even = ex(32, 32, 2);
         assert_eq!(even.mip_level(0), even);

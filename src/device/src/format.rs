@@ -94,9 +94,9 @@ impl Format {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
 
-    unsafe fn smoke_test(_: testing::TestVars) {
+    #[test]
+    fn smoke_test() {
         use Format::*;
 
         let fmt = RGBA16F;

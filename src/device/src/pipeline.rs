@@ -555,10 +555,11 @@ impl PipelineCache {
 mod tests {
     use super::*;
     use crate::testing::*;
-    use crate::*;
     use std::sync::Arc;
 
-    unsafe fn create(vars: testing::TestVars) {
+    #[test]
+    fn create() {
+        let vars = TestVars::new();
         let device = vars.device();
         let resources = TestResources::new(device);
         let pass = TrivialPass::new(device);
@@ -570,29 +571,35 @@ mod tests {
             Arc::clone(&device),
             desc.layout.clone(),
         ));
-        let _pipeline = create_graphics_pipeline(layout, desc);
+        unsafe {
+            let _pipeline = create_graphics_pipeline(layout, desc);
+        }
     }
 
-    unsafe fn cache(vars: crate::testing::TestVars) {
+    #[test]
+    fn cache() {
+        let vars = TestVars::new();
         let device = vars.device();
         let resources = TestResources::new(device);
         let pass = TrivialPass::new(device);
         let trivial = TrivialRenderer::new(&resources);
         let mut cache = PipelineCache::new(device);
 
-        let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
-        trivial.init_pipe_desc(&mut desc);
-        let _pipe0 = cache.get_or_create_gfx(&desc).into_owned();
+        unsafe {
+            let mut desc = GraphicsPipelineDesc::new(pass.subpass.clone());
+            trivial.init_pipe_desc(&mut desc);
+            let _pipe0 = cache.get_or_create_gfx(&desc).into_owned();
 
-        // FIXME: This causes a segfault WTF?
-        desc.depth_test = true;
-        let pipe1 = cache.get_or_create_gfx(&desc).into_owned();
+            // FIXME: This causes a segfault WTF?
+            desc.depth_test = true;
+            let pipe1 = cache.get_or_create_gfx(&desc).into_owned();
 
-        cache.commit();
+            cache.commit();
 
-        assert!(Arc::ptr_eq(
-            cache.get_or_create_committed_gfx(&desc),
-            &pipe1
-        ));
+            assert!(Arc::ptr_eq(
+                cache.get_or_create_committed_gfx(&desc),
+                &pipe1,
+            ));
+        }
     }
 }

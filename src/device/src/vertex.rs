@@ -142,11 +142,12 @@ impl VertexInputLayout {
 mod tests {
     use super::*;
     use crate::testing::*;
-    use crate::*;
     use base::partial_map;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    #[test]
+    fn smoke_test() {
         use VertexAttr as Attr;
+        let vars = TestVars::new();
 
         let attr = |format| VertexStreamAttr { format };
         let layout = VertexStreamLayout {

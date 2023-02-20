@@ -27,7 +27,8 @@ impl Window for winit::window::Window {
     }
 
     fn create_surface(&self, instance: &Instance) -> Result<vk::SurfaceKHR, vk::Result> {
-        use winit::platform::unix::WindowExtUnix;
+        use winit::platform::x11::WindowExtX11;
+        use winit::platform::wayland::WindowExtWayland;
         let mut handle: vk::SurfaceKHR = vk::null();
         if let Some(surface) = self.wayland_surface() {
             let info = vk::WaylandSurfaceCreateInfoKHR {

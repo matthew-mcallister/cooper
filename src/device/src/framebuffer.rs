@@ -214,39 +214,42 @@ pub fn create_render_target(
 }
 
 #[cfg(test)]
-pub unsafe fn create_test_framebuffer(swapchain: &Swapchain) {
-    let device = Arc::clone(swapchain.device());
-    let heap = ImageHeap::new(device);
-
-    let pass = create_test_pass(swapchain.device());
-
-    let extent = swapchain.extent;
-    let hdr = create_render_target(&heap, &pass, 1, extent, false);
-    let depth = create_render_target(&heap, &pass, 2, extent, false);
-    let normal = create_render_target(&heap, &pass, 3, extent, false);
-    let albedo = create_render_target(&heap, &pass, 4, extent, false);
-
-    let views = swapchain.create_views();
-    let back = Arc::clone(&views[0]);
-
-    let _fb = Framebuffer::new(
-        pass,
-        vec![
-            back.into(),
-            hdr.into(),
-            depth.into(),
-            normal.into(),
-            albedo.into(),
-        ],
-    );
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::testing::*;
 
-    unsafe fn create(vars: testing::TestVars) {
+    fn create_test_framebuffer(swapchain: &Swapchain) {
+        let device = Arc::clone(swapchain.device());
+        let heap = ImageHeap::new(device);
+
+        unsafe {
+            let pass = create_test_pass(swapchain.device());
+
+            let extent = swapchain.extent;
+            let hdr = create_render_target(&heap, &pass, 1, extent, false);
+            let depth = create_render_target(&heap, &pass, 2, extent, false);
+            let normal = create_render_target(&heap, &pass, 3, extent, false);
+            let albedo = create_render_target(&heap, &pass, 4, extent, false);
+
+            let views = swapchain.create_views();
+            let back = Arc::clone(&views[0]);
+
+            let _fb = Framebuffer::new(
+                pass,
+                vec![
+                    back.into(),
+                    hdr.into(),
+                    depth.into(),
+                    normal.into(),
+                    albedo.into(),
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn create() {
+        let vars = TestVars::new();
         let _fb = create_test_framebuffer(vars.swapchain());
     }
 }

@@ -383,27 +383,31 @@ pub unsafe fn device_for_surface(surface: &Surface) -> DeviceResult<vk::Physical
 
 /// Helper function which creates a logical device capable of rendering
 /// to a window.
-pub unsafe fn init_device_and_swapchain(
+pub fn init_device_and_swapchain(
     app_info: AppInfo,
     window: &impl Window,
 ) -> DeviceResult<(Swapchain, Vec<Vec<Arc<Queue>>>)> {
-    let entrypoint = crate::loader::load_vulkan().map_err(|_| "Failed to load libvulkan")?;
-    let instance = Arc::new(Instance::new(
-        entrypoint,
-        app_info,
-        window.required_extensions(),
-    )?);
-    let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
-    let pdev = device_for_surface(&surface).unwrap();
-    let (device, queues) = Device::new(instance, pdev)?;
-    Ok((device.create_swapchain(surface)?, queues))
+    unsafe {
+        let entrypoint = crate::loader::load_vulkan().map_err(|_| "Failed to load libvulkan")?;
+        let instance = Arc::new(Instance::new(
+            entrypoint,
+            app_info,
+            window.required_extensions(),
+        )?);
+        let surface = Arc::new(Surface::new(Arc::clone(&instance), window)?);
+        let pdev = device_for_surface(&surface).unwrap();
+        let (device, queues) = Device::new(instance, pdev)?;
+        Ok((device.create_swapchain(surface)?, queues))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use crate::testing::*;
 
-    unsafe fn view_test(vars: testing::TestVars) {
+    #[test]
+    fn view_test() {
+        let vars = TestVars::new();
         let _attchs = vars.swapchain.create_views();
     }
 }

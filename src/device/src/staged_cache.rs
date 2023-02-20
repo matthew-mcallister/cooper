@@ -83,8 +83,8 @@ mod tests {
     use std::sync::atomic::Ordering::Relaxed;
     use std::sync::Arc;
 
-    // TODO: Doesn't require device
-    unsafe fn cache(_: crate::testing::TestVars) {
+    #[test]
+    fn cache() {
         let new = || Arc::new(AtomicUsize::new(0));
 
         let mut cache = StagedCache::new();

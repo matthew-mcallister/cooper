@@ -739,9 +739,13 @@ fn validate_image_view_creation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::*;
 
-    unsafe fn creation(vars: testing::TestVars) {
+    #[test]
+    fn creation() {
         use ImageFlags as Flags;
+
+        let vars = TestVars::new();
 
         let heap = &ImageHeap::new(Arc::clone(vars.device()));
 
@@ -784,8 +788,11 @@ mod tests {
         .create_full_view();
     }
 
-    unsafe fn subresource_size(vars: testing::TestVars) {
+    #[test]
+    fn subresource_size() {
         use ImageSubresources as Sub;
+
+        let vars = TestVars::new();
 
         let device = vars.device();
 

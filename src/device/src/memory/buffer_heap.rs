@@ -406,10 +406,12 @@ impl<A: Allocator> BufferPool<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::*;
     use more_asserts::assert_ge;
-    use vk::traits::*;
 
-    unsafe fn create_buffer(vars: testing::TestVars) {
+    #[test]
+    fn create_buffer() {
+        let vars = TestVars::new();
         DeviceBuffer::new(
             Arc::clone(vars.device()),
             8 * (2 << 20),
@@ -419,10 +421,12 @@ mod tests {
         );
     }
 
-    unsafe fn heap_alloc(vars: testing::TestVars) {
+    #[test]
+    fn heap_alloc() {
         use BufferBinding::*;
         use Lifetime::*;
         use MemoryMapping::*;
+        let vars = TestVars::new();
 
         let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
 
@@ -430,11 +434,15 @@ mod tests {
         assert_eq!(x[1], 0.5);
 
         heap.alloc(Uniform, Frame, DeviceLocal, 256);
-        heap.clear_frame();
+        unsafe {
+            heap.clear_frame();
+        }
         // TODO: Query used memory
     }
 
-    unsafe fn oversized_alloc(vars: testing::TestVars) {
+    #[test]
+    fn oversized_alloc() {
+        let vars = TestVars::new();
         let device = Arc::clone(vars.device());
         let heap = Arc::new(BufferHeap::new(Arc::clone(&device)));
         let _ = heap.alloc(
@@ -445,11 +453,13 @@ mod tests {
         );
     }
 
-    unsafe fn alloc_size_is_exact(vars: testing::TestVars) {
+    #[test]
+    fn alloc_size_is_exact() {
         use BufferBinding::*;
         use Lifetime::*;
         use MemoryMapping::*;
 
+        let vars = TestVars::new();
         let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
         let alloc = heap.alloc(Uniform, Static, Mapped, 15);
         assert_eq!(alloc.size(), 15);
@@ -459,11 +469,13 @@ mod tests {
         assert_eq!(alloc.size(), 35);
     }
 
-    unsafe fn non_overlapping(vars: testing::TestVars) {
+    #[test]
+    fn non_overlapping() {
         use BufferBinding::*;
         use Lifetime::*;
         use MemoryMapping::*;
 
+        let vars = TestVars::new();
         let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
         let alloc0 = heap.alloc(Uniform, Static, Mapped, 513);
         let alloc1 = heap.alloc(Uniform, Static, Mapped, 1024);
@@ -471,11 +483,13 @@ mod tests {
         assert_ge!(alloc1.offset(), alloc0.size());
     }
 
-    unsafe fn free(vars: testing::TestVars) {
+    #[test]
+    fn free() {
         use BufferBinding::*;
         use Lifetime::*;
         use MemoryMapping::*;
 
+        let vars = TestVars::new();
         let heap = Arc::new(BufferHeap::new(Arc::clone(vars.device())));
         std::mem::drop([
             heap.alloc(Uniform, Static, Mapped, 98),

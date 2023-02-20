@@ -5,9 +5,6 @@ authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
 publish = false
 
-[lib]
-harness = false
-
 [dependencies]
 base = { path = "../base", package = "cooper-base" }
 bitflags = "1.2.1"
@@ -26,7 +23,7 @@ prelude = { path = "../prelude", package = "cooper-prelude" }
 smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
 spv = { path = "../spirv", package = "cooper-spirv" }
 anyhow = "1.0.33"
-winit = "0.27.5"
+winit = "0.28.1"
 libloading = "0.7.4"
 
 [dependencies.vk]
@@ -39,3 +36,4 @@ package = "vulkan-loader"
 
 [dev-dependencies]
 env_logger = "0.7.1"
+lazy_static = "1.4.0"

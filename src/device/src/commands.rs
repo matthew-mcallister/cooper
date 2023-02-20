@@ -940,7 +940,7 @@ mod tests {
     use std::sync::Arc;
 
     unsafe fn test_common(
-        vars: &testing::TestVars,
+        vars: &TestVars,
     ) -> (
         TestResources,
         PipelineCache,
@@ -962,62 +962,82 @@ mod tests {
         (resources, pipelines, trivial, pass, framebuffers, pool)
     }
 
-    unsafe fn record_subpass(vars: testing::TestVars) {
-        let (_res, pipelines, trivial, pass, framebuffers, pool) = test_common(&vars);
-        let mut cmds =
-            SubpassCmds::secondary(Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
-        trivial.render(&pipelines, &mut cmds);
-        let (_, _) = cmds.end_secondary();
+    #[test]
+    fn record_subpass() {
+        unsafe {
+            let vars = TestVars::new();
+            let (_res, pipelines, trivial, pass, framebuffers, pool) = test_common(&vars);
+            let mut cmds =
+                SubpassCmds::secondary(Arc::clone(&framebuffers[0]), pass.subpass.clone(), pool);
+            trivial.render(&pipelines, &mut cmds);
+            let (_, _) = cmds.end_secondary();
+        }
     }
 
-    unsafe fn record_render_pass(vars: testing::TestVars) {
-        // TODO: Test next_subpass()
-        let (_res, pipelines, trivial, _, framebuffers, pool) = test_common(&vars);
-        let mut cmds = RenderPassCmds::new(
-            CmdBuffer::new(pool, CmdBufferLevel::Primary),
-            Arc::clone(&framebuffers[0]),
-            &[],
-            SubpassContents::Inline,
-        )
-        .enter_subpass();
-        trivial.render(&pipelines, &mut cmds);
-        let (_, _) = cmds.exit_subpass().end().end();
+    #[test]
+    fn record_render_pass() {
+        unsafe {
+            let vars = TestVars::new();
+            // TODO: Test next_subpass()
+            let (_res, pipelines, trivial, _, framebuffers, pool) = test_common(&vars);
+            let mut cmds = RenderPassCmds::new(
+                CmdBuffer::new(pool, CmdBufferLevel::Primary),
+                Arc::clone(&framebuffers[0]),
+                &[],
+                SubpassContents::Inline,
+            )
+            .enter_subpass();
+            trivial.render(&pipelines, &mut cmds);
+            let (_, _) = cmds.exit_subpass().end().end();
+        }
     }
 
-    unsafe fn subpass_out_of_bounds(vars: testing::TestVars) {
-        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
-        let mut cmds = RenderPassCmds::new(
-            CmdBuffer::new(pool, CmdBufferLevel::Primary),
-            Arc::clone(&framebuffers[0]),
-            &[],
-            SubpassContents::Inline,
-        );
-        cmds.next_subpass(SubpassContents::Inline);
+    #[test]
+    fn subpass_out_of_bounds() {
+        unsafe {
+            let vars = TestVars::new();
+            let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
+            let mut cmds = RenderPassCmds::new(
+                CmdBuffer::new(pool, CmdBufferLevel::Primary),
+                Arc::clone(&framebuffers[0]),
+                &[],
+                SubpassContents::Inline,
+            );
+            cmds.next_subpass(SubpassContents::Inline);
+        }
     }
 
-    unsafe fn inline_in_secondary_subpass(vars: testing::TestVars) {
-        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
-        let cmds = RenderPassCmds::new(
-            CmdBuffer::new(pool, CmdBufferLevel::Primary),
-            Arc::clone(&framebuffers[0]),
-            &[],
-            SubpassContents::Secondary,
-        );
-        cmds.enter_subpass();
+    #[test]
+    fn inline_in_secondary_subpass() {
+        unsafe {
+            let vars = TestVars::new();
+            let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
+            let cmds = RenderPassCmds::new(
+                CmdBuffer::new(pool, CmdBufferLevel::Primary),
+                Arc::clone(&framebuffers[0]),
+                &[],
+                SubpassContents::Secondary,
+            );
+            cmds.enter_subpass();
+        }
     }
 
-    unsafe fn exec_in_inline_subpass(vars: testing::TestVars) {
-        let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
-        let mut cmds = RenderPassCmds::new(
-            CmdBuffer::new(pool, CmdBufferLevel::Primary),
-            Arc::clone(&framebuffers[0]),
-            &[],
-            SubpassContents::Inline,
-        );
-        cmds.execute_cmds(&[vk::null()]);
+    #[test]
+    fn exec_in_inline_subpass() {
+        unsafe {
+            let vars = TestVars::new();
+            let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
+            let mut cmds = RenderPassCmds::new(
+                CmdBuffer::new(pool, CmdBufferLevel::Primary),
+                Arc::clone(&framebuffers[0]),
+                &[],
+                SubpassContents::Inline,
+            );
+            cmds.execute_cmds(&[vk::null()]);
+        }
     }
 
-    unsafe fn copy_common(vars: &testing::TestVars) -> (TestResources, XferCmds) {
+    fn copy_common(vars: &testing::TestVars) -> (TestResources, XferCmds) {
         let resources = TestResources::new(vars.device());
         let pool = Box::new(CmdPool::new(
             vars.gfx_queue().family(),
@@ -1027,95 +1047,107 @@ mod tests {
         (resources, XferCmds::new(cmds))
     }
 
-    unsafe fn copy_buffer(vars: testing::TestVars) {
-        let (resources, mut cmds) = copy_common(&vars);
-        let src = resources.buffer_heap.alloc(
-            BufferBinding::Storage,
-            Lifetime::Frame,
-            MemoryMapping::Mapped,
-            1024,
-        );
-        let dst = resources.buffer_heap.alloc(
-            BufferBinding::Vertex,
-            Lifetime::Frame,
-            MemoryMapping::DeviceLocal,
-            1024,
-        );
-        cmds.copy_buffer(
-            src.buffer(),
-            dst.buffer(),
-            &[
-                vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
-                    size: 512,
-                },
-                vk::BufferCopy {
-                    src_offset: 512,
-                    dst_offset: 768,
-                    size: 256,
-                },
-            ],
-        );
-        cmds.end_xfer().end();
+    #[test]
+    fn copy_buffer() {
+        unsafe {
+            let vars = TestVars::new();
+            let (resources, mut cmds) = copy_common(&vars);
+            let src = resources.buffer_heap.alloc(
+                BufferBinding::Storage,
+                Lifetime::Frame,
+                MemoryMapping::Mapped,
+                1024,
+            );
+            let dst = resources.buffer_heap.alloc(
+                BufferBinding::Vertex,
+                Lifetime::Frame,
+                MemoryMapping::DeviceLocal,
+                1024,
+            );
+            cmds.copy_buffer(
+                src.buffer(),
+                dst.buffer(),
+                &[
+                    vk::BufferCopy {
+                        src_offset: 0,
+                        dst_offset: 0,
+                        size: 512,
+                    },
+                    vk::BufferCopy {
+                        src_offset: 512,
+                        dst_offset: 768,
+                        size: 256,
+                    },
+                ],
+            );
+            cmds.end_xfer().end();
+        }
     }
 
-    unsafe fn copy_intra_buffer(vars: testing::TestVars) {
-        let (resources, mut cmds) = copy_common(&vars);
-        let buf = resources.buffer_heap.alloc(
-            BufferBinding::Storage,
-            Lifetime::Frame,
-            MemoryMapping::Mapped,
-            1024,
-        );
-        cmds.copy_buffer(
-            buf.buffer(),
-            buf.buffer(),
-            &[
-                vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 1536,
-                    size: 512,
-                },
-                vk::BufferCopy {
-                    src_offset: 512,
-                    dst_offset: 1024,
-                    size: 512,
-                },
-            ],
-        );
-        cmds.end_xfer().end();
+    #[test]
+    fn copy_intra_buffer() {
+        unsafe {
+            let vars = TestVars::new();
+            let (resources, mut cmds) = copy_common(&vars);
+            let buf = resources.buffer_heap.alloc(
+                BufferBinding::Storage,
+                Lifetime::Frame,
+                MemoryMapping::Mapped,
+                1024,
+            );
+            cmds.copy_buffer(
+                buf.buffer(),
+                buf.buffer(),
+                &[
+                    vk::BufferCopy {
+                        src_offset: 0,
+                        dst_offset: 1536,
+                        size: 512,
+                    },
+                    vk::BufferCopy {
+                        src_offset: 512,
+                        dst_offset: 1024,
+                        size: 512,
+                    },
+                ],
+            );
+            cmds.end_xfer().end();
+        }
     }
 
-    unsafe fn copy_image(vars: testing::TestVars) {
-        let (resources, mut cmds) = copy_common(&vars);
-        let format = Format::RGBA8;
-        let src = resources.buffer_heap.alloc(
-            BufferBinding::Storage,
-            Lifetime::Frame,
-            MemoryMapping::Mapped,
-            (64 * 64 * format.size()) as _,
-        );
-        let dst = Arc::new(Image::with(
-            &resources.image_heap,
-            ImageFlags::NO_SAMPLE,
-            ImageType::Dim2,
-            format,
-            SampleCount::One,
-            Extent3D::new(64, 64, 1),
-            1,
-            1,
-        ));
-        cmds.copy_buffer_to_image(
-            src.buffer(),
-            &dst,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[vk::BufferImageCopy {
-                image_subresource: dst.all_layers_for_mip_level(0).to_mip_layers(0),
-                image_extent: dst.extent().into(),
-                ..Default::default()
-            }],
-        );
-        cmds.end_xfer().end();
+    #[test]
+    fn copy_image() {
+        unsafe {
+            let vars = TestVars::new();
+            let (resources, mut cmds) = copy_common(&vars);
+            let format = Format::RGBA8;
+            let src = resources.buffer_heap.alloc(
+                BufferBinding::Storage,
+                Lifetime::Frame,
+                MemoryMapping::Mapped,
+                (64 * 64 * format.size()) as _,
+            );
+            let dst = Arc::new(Image::with(
+                &resources.image_heap,
+                ImageFlags::NO_SAMPLE,
+                ImageType::Dim2,
+                format,
+                SampleCount::One,
+                Extent3D::new(64, 64, 1),
+                1,
+                1,
+            ));
+            cmds.copy_buffer_to_image(
+                src.buffer(),
+                &dst,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[vk::BufferImageCopy {
+                    image_subresource: dst.all_layers_for_mip_level(0).to_mip_layers(0),
+                    image_extent: dst.extent().into(),
+                    ..Default::default()
+                }],
+            );
+            cmds.end_xfer().end();
+        }
     }
 }

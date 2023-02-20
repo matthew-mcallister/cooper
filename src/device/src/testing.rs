@@ -1,18 +1,9 @@
-use std::os::raw::c_int;
-use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
 
-use derive_more::From;
-use prelude::*;
+use winit::window::Window;
 
 use crate::*;
-
-pub(crate) type TestInput = TestVars;
-pub(crate) type TestData = unsafe fn(TestInput);
-
-#[derive(Debug, From)]
-pub struct TestContext {
-    proxy: window::EventLoopProxy,
-}
 
 const WINDOW_NAME: &str = "cooper test";
 const WINDOW_DIMS: (u32, u32) = (1920, 1080);
@@ -27,43 +18,62 @@ fn app_info() -> AppInfo {
     }
 }
 
-impl TestContext {
-    fn create_window(&self) -> DeviceResult<Arc<window::Window>> {
-        let show_window = std::env::var("TESTING_SHOW_WINDOW").map_or(false, |val| val == "1");
-        let info = window::CreateInfo {
-            title: WINDOW_NAME.to_owned(),
-            dims: (WINDOW_DIMS.0 as c_int, WINDOW_DIMS.1 as c_int).into(),
-            hints: window::CreationHints {
-                hidden: !show_window,
-                ..Default::default()
-            },
-        };
-        Ok(Arc::new(self.proxy.create_window(info)?))
-    }
-
-    unsafe fn create_swapchain(&self) -> DeviceResult<TestVars> {
-        let window = self.create_window()?;
-        let app_info = app_info();
-        let instance = Arc::new(Instance::new(vk_platform, app_info)?);
-        let surface = instance.create_surface(&window)?;
-        let pdev = device_for_surface(&surface)?;
-        let (device, queues) = instance.create_device(pdev)?;
-        let swapchain = device.create_swapchain(surface)?;
-        let gfx_queue = Arc::clone(&queues[0][0]);
-        Ok(TestVars {
-            swapchain,
-            gfx_queue,
-        })
-    }
-}
-
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct TestVars {
+    pub(crate) window: Window,
     pub(crate) swapchain: Swapchain,
-    pub(crate) gfx_queue: Arc<Queue>,
+    pub(crate) queues: Vec<Vec<Arc<Queue>>>,
+}
+
+fn create_window_inner(event_loop: &winit::event_loop::EventLoop<()>) -> Window {
+    winit::window::WindowBuilder::new()
+        .with_inner_size(winit::dpi::Size::Physical(winit::dpi::PhysicalSize {
+            width: WINDOW_DIMS.0,
+            height: WINDOW_DIMS.1,
+        }))
+        .with_title(WINDOW_NAME)
+        .with_visible(false)
+        .build(&event_loop)
+        .map_err(|_| "Failed to create window")
+        .unwrap()
+}
+
+lazy_static::lazy_static! {
+    static ref CHANNEL: Mutex<(Sender<()>, Receiver<Window>)> = {
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        let (send, foreign_recv) = std::sync::mpsc::channel::<()>();
+        let (foreign_send, recv) = std::sync::mpsc::channel::<Window>();
+        std::mem::forget(std::thread::spawn(move || {
+            let event_loop = winit::event_loop::EventLoopBuilder::new()
+                .with_any_thread(true)
+                .build();
+            loop {
+                foreign_recv.recv().unwrap();
+                foreign_send.send(create_window_inner(&event_loop)).unwrap();
+            }
+        }));
+        Mutex::new((send, recv))
+    };
+}
+
+fn create_window() -> Window {
+    let channel = CHANNEL.lock().unwrap();
+    channel.0.send(()).unwrap();
+    channel.1.recv().unwrap()
 }
 
 impl TestVars {
+    pub(crate) fn new() -> Self {
+        let window = create_window();
+        let (swapchain, queues) = init_device_and_swapchain(app_info(), &window).unwrap();
+        TestVars {
+            window,
+            swapchain,
+            queues,
+        }
+    }
+
     pub(crate) fn swapchain(&self) -> &Swapchain {
         &self.swapchain
     }
@@ -73,7 +83,7 @@ impl TestVars {
     }
 
     pub(crate) fn gfx_queue(&self) -> &Arc<Queue> {
-        &self.gfx_queue
+        &self.queues[0][0]
     }
 }
 
@@ -81,7 +91,7 @@ macro_rules! test_shaders {
     ($($name:ident,)*) => {
         #[derive(Debug)]
         pub(crate) struct TestShaders {
-            $(crate $name: Arc<Shader>,)*
+            $(pub(crate) $name: Arc<Shader>,)*
         }
 
         impl TestShaders {
@@ -107,6 +117,7 @@ test_shaders! {
     static_vert,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct TestResources {
     // N.B.: Field order is important

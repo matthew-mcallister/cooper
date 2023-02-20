@@ -277,11 +277,13 @@ impl ImageHeap {
 
 #[cfg(test)]
 mod tests {
+    use crate::testing::*;
     use crate::*;
     use std::sync::Arc;
-    use vk::traits::*;
 
-    unsafe fn alloc(vars: testing::TestVars) {
+    #[test]
+    fn alloc() {
+        let vars = TestVars::new();
         let device = Arc::clone(&vars.swapchain.device);
         let heap = ImageHeap::new(Arc::clone(&device));
 
@@ -290,8 +292,10 @@ mod tests {
             alignment: 256,
             memory_type_bits: !0,
         };
-        let _alloc0 = heap.alloc(reqs);
-        let _alloc1 = heap.alloc(reqs);
-        assert_ne!(_alloc0.as_raw(), 0 as _);
+        unsafe {
+            let _alloc0 = heap.alloc(reqs);
+            let _alloc1 = heap.alloc(reqs);
+            assert_ne!(_alloc0.as_raw(), 0 as _);
+        }
     }
 }

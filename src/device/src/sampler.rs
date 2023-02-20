@@ -211,7 +211,7 @@ impl SamplerCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::testing::*;
 
     fn basic_sampler_desc() -> SamplerDesc {
         SamplerDesc {
@@ -224,12 +224,16 @@ mod tests {
         }
     }
 
-    fn creation_test(vars: testing::TestVars) {
+    #[test]
+    fn creation_test() {
+        let vars = TestVars::new();
         let desc = basic_sampler_desc();
         let _sampler = Sampler::new(Arc::clone(vars.device()), desc);
     }
 
-    fn cache_test(vars: testing::TestVars) {
+    #[test]
+    fn cache_test() {
+        let vars = TestVars::new();
         let mut cache = SamplerCache::new(Arc::clone(vars.device()));
 
         let desc = basic_sampler_desc();

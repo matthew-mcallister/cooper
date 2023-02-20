@@ -397,145 +397,150 @@ unsafe fn create_render_pass(
 
 // Simplified render pass with G-buffer.
 #[cfg(test)]
-pub unsafe fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
+pub fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
     use vk::AccessFlags as Af;
     use vk::ImageLayout as Il;
     use vk::PipelineStageFlags as Pf;
 
     // Defining render passes is rather technical and so is done
     // manually rather than via a half-baked algorithm.
-    RenderPass::new(
-        Arc::clone(device),
-        vec![
-            // Screen
-            AttachmentDescription {
-                name: Attachment::Backbuffer,
-                format: Format::BGRA8_SRGB,
-                // TODO: Not sure if it's a better practice to set
-                // initial_layout or not.
-                final_layout: Il::PRESENT_SRC_KHR,
-                ..Default::default()
-            },
-            // HDR lighting buffer
-            AttachmentDescription {
-                name: Attachment::Hdr,
-                format: Format::RGBA16F,
-                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
-                ..Default::default()
-            },
-            // Depth/stencil
-            AttachmentDescription {
-                name: Attachment::DepthStencil,
-                format: Format::D32F_S8,
-                load_op: vk::AttachmentLoadOp::CLEAR,
-                final_layout: Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                ..Default::default()
-            },
-            // Normals
-            AttachmentDescription {
-                name: Attachment::Normal,
-                format: Format::RGBA8,
-                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
-                ..Default::default()
-            },
-            // Albedo
-            AttachmentDescription {
-                name: Attachment::Albedo,
-                format: Format::RGBA8,
-                final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
-                ..Default::default()
-            },
-        ],
-        vec![
-            // G-buffer pass
-            SubpassDesc {
-                layouts: vec![
-                    Il::UNDEFINED,
-                    Il::UNDEFINED,
-                    Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    Il::COLOR_ATTACHMENT_OPTIMAL,
-                    Il::COLOR_ATTACHMENT_OPTIMAL,
-                ],
-                color_attchs: vec![3, 4],
-                depth_stencil_attch: Some(2),
-                ..Default::default()
-            },
-            // Lighting pass
-            SubpassDesc {
-                layouts: vec![
-                    Il::UNDEFINED,
-                    Il::COLOR_ATTACHMENT_OPTIMAL,
-                    Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                    Il::SHADER_READ_ONLY_OPTIMAL,
-                    Il::SHADER_READ_ONLY_OPTIMAL,
-                ],
-                color_attchs: vec![1],
-                input_attchs: vec![2, 3, 4],
-                ..Default::default()
-            },
-            // Tonemapping
-            SubpassDesc {
-                layouts: vec![
-                    Il::COLOR_ATTACHMENT_OPTIMAL,
-                    Il::SHADER_READ_ONLY_OPTIMAL,
-                    Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                    Il::SHADER_READ_ONLY_OPTIMAL,
-                    Il::SHADER_READ_ONLY_OPTIMAL,
-                ],
-                color_attchs: vec![0],
-                input_attchs: vec![1],
-                ..Default::default()
-            },
-        ],
-        vec![
-            // Image layout transition barrier; see Vulkan
-            // synchronization examples webpage
-            vk::SubpassDependency {
-                src_subpass: vk::SUBPASS_EXTERNAL,
-                dst_subpass: 2,
-                src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
-                src_access_mask: Default::default(),
-                dst_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
-                ..Default::default()
-            },
-            vk::SubpassDependency {
-                src_subpass: 0,
-                dst_subpass: 1,
-                src_stage_mask: Pf::EARLY_FRAGMENT_TESTS_BIT
-                    | Pf::LATE_FRAGMENT_TESTS_BIT
-                    | Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
-                src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT
-                    | Af::DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
-                dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
-            },
-            vk::SubpassDependency {
-                src_subpass: 1,
-                dst_subpass: 2,
-                src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
-                src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
-                dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
-                dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
-            },
-            // Post-pass synchronization is implicit.
-        ],
-    )
+    unsafe {
+        RenderPass::new(
+            Arc::clone(device),
+            vec![
+                // Screen
+                AttachmentDescription {
+                    name: Attachment::Backbuffer,
+                    format: Format::BGRA8_SRGB,
+                    // TODO: Not sure if it's a better practice to set
+                    // initial_layout or not.
+                    final_layout: Il::PRESENT_SRC_KHR,
+                    ..Default::default()
+                },
+                // HDR lighting buffer
+                AttachmentDescription {
+                    name: Attachment::Hdr,
+                    format: Format::RGBA16F,
+                    final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
+                    ..Default::default()
+                },
+                // Depth/stencil
+                AttachmentDescription {
+                    name: Attachment::DepthStencil,
+                    format: Format::D32F_S8,
+                    load_op: vk::AttachmentLoadOp::CLEAR,
+                    final_layout: Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                    ..Default::default()
+                },
+                // Normals
+                AttachmentDescription {
+                    name: Attachment::Normal,
+                    format: Format::RGBA8,
+                    final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
+                    ..Default::default()
+                },
+                // Albedo
+                AttachmentDescription {
+                    name: Attachment::Albedo,
+                    format: Format::RGBA8,
+                    final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
+                    ..Default::default()
+                },
+            ],
+            vec![
+                // G-buffer pass
+                SubpassDesc {
+                    layouts: vec![
+                        Il::UNDEFINED,
+                        Il::UNDEFINED,
+                        Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        Il::COLOR_ATTACHMENT_OPTIMAL,
+                        Il::COLOR_ATTACHMENT_OPTIMAL,
+                    ],
+                    color_attchs: vec![3, 4],
+                    depth_stencil_attch: Some(2),
+                    ..Default::default()
+                },
+                // Lighting pass
+                SubpassDesc {
+                    layouts: vec![
+                        Il::UNDEFINED,
+                        Il::COLOR_ATTACHMENT_OPTIMAL,
+                        Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                        Il::SHADER_READ_ONLY_OPTIMAL,
+                        Il::SHADER_READ_ONLY_OPTIMAL,
+                    ],
+                    color_attchs: vec![1],
+                    input_attchs: vec![2, 3, 4],
+                    ..Default::default()
+                },
+                // Tonemapping
+                SubpassDesc {
+                    layouts: vec![
+                        Il::COLOR_ATTACHMENT_OPTIMAL,
+                        Il::SHADER_READ_ONLY_OPTIMAL,
+                        Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                        Il::SHADER_READ_ONLY_OPTIMAL,
+                        Il::SHADER_READ_ONLY_OPTIMAL,
+                    ],
+                    color_attchs: vec![0],
+                    input_attchs: vec![1],
+                    ..Default::default()
+                },
+            ],
+            vec![
+                // Image layout transition barrier; see Vulkan
+                // synchronization examples webpage
+                vk::SubpassDependency {
+                    src_subpass: vk::SUBPASS_EXTERNAL,
+                    dst_subpass: 2,
+                    src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                    dst_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                    src_access_mask: Default::default(),
+                    dst_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
+                    ..Default::default()
+                },
+                vk::SubpassDependency {
+                    src_subpass: 0,
+                    dst_subpass: 1,
+                    src_stage_mask: Pf::EARLY_FRAGMENT_TESTS_BIT
+                        | Pf::LATE_FRAGMENT_TESTS_BIT
+                        | Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                    dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
+                    src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT
+                        | Af::DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
+                    dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
+                },
+                vk::SubpassDependency {
+                    src_subpass: 1,
+                    dst_subpass: 2,
+                    src_stage_mask: Pf::COLOR_ATTACHMENT_OUTPUT_BIT,
+                    dst_stage_mask: Pf::FRAGMENT_SHADER_BIT,
+                    src_access_mask: Af::COLOR_ATTACHMENT_WRITE_BIT,
+                    dst_access_mask: Af::INPUT_ATTACHMENT_READ_BIT,
+                    dependency_flags: vk::DependencyFlags::BY_REGION_BIT,
+                },
+                // Post-pass synchronization is implicit.
+            ],
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::*;
-    use crate::*;
 
-    unsafe fn smoke_test(vars: testing::TestVars) {
+    #[test]
+    fn smoke_test() {
+        let vars = TestVars::new();
         let _trivial_pass = TrivialPass::new(vars.device());
     }
 
-    unsafe fn deferred_test(vars: testing::TestVars) {
+    #[test]
+    fn deferred_test() {
+        let vars = TestVars::new();
         let _pass = create_test_pass(vars.device());
     }
 }

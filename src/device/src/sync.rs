@@ -231,32 +231,38 @@ impl Named for TimelineSemaphore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::testing::*;
     use std::sync::Arc;
 
-    unsafe fn timeline_semaphore_host_ops(vars: testing::TestVars) {
+    #[test]
+    fn timeline_semaphore_host_ops() {
+        let vars = TestVars::new();
         let device = Arc::clone(vars.device());
 
         let sem = Arc::new(TimelineSemaphore::new(device, 42));
         assert_eq!(sem.get_value(), 42);
 
-        sem.signal(43);
-        assert_eq!(sem.get_value(), 43);
-        sem.signal(45);
-        assert_eq!(sem.get_value(), 45);
-        assert_eq!(sem.wait(0, 1), WaitResult::Success);
-        assert_eq!(sem.wait(45, 1), WaitResult::Success);
+        unsafe {
+            sem.signal(43);
+            assert_eq!(sem.get_value(), 43);
+            sem.signal(45);
+            assert_eq!(sem.get_value(), 45);
+            assert_eq!(sem.wait(0, 1), WaitResult::Success);
+            assert_eq!(sem.wait(45, 1), WaitResult::Success);
 
-        let sem2 = Arc::clone(&sem);
-        std::thread::spawn(move || {
-            sem2.signal(80);
-        });
-        assert_eq!(sem.wait(80, 2_000_000), WaitResult::Success);
+            let sem2 = Arc::clone(&sem);
+            std::thread::spawn(move || {
+                sem2.signal(80);
+            });
+            assert_eq!(sem.wait(80, 2_000_000), WaitResult::Success);
+        }
 
         assert_eq!(sem.wait(9999, 1000), WaitResult::Timeout);
     }
 
-    unsafe fn timeline_semaphore_queue_signal(vars: testing::TestVars) {
+    #[test]
+    fn timeline_semaphore_queue_signal() {
+        let vars = TestVars::new();
         let queue = vars.gfx_queue();
         let pool = Box::new(CmdPool::new_transient(queue.family()));
 
@@ -264,31 +270,33 @@ mod tests {
         let mut semaphore = TimelineSemaphore::new(Arc::clone(vars.device()), 0);
 
         // Test wait
-        let (cmds, pool) = make_cmds(pool);
-        let value = 1;
-        queue.submit(&[SubmitInfo {
-            sig_sems: &[SignalInfo {
-                semaphore: semaphore.inner_mut(),
-                value,
-            }],
-            cmds: &[cmds],
-            ..Default::default()
-        }]);
-        let _ = semaphore.wait(value, u64::MAX);
+        unsafe {
+            let (cmds, pool) = make_cmds(pool);
+            let value = 1;
+            queue.submit(&[SubmitInfo {
+                sig_sems: &[SignalInfo {
+                    semaphore: semaphore.inner_mut(),
+                    value,
+                }],
+                cmds: &[cmds],
+                ..Default::default()
+            }]);
+            let _ = semaphore.wait(value, u64::MAX);
 
-        // Test get
-        let (cmds, _pool) = make_cmds(pool);
-        let value = 2;
-        queue.submit(&[SubmitInfo {
-            sig_sems: &[SignalInfo {
-                semaphore: semaphore.inner_mut(),
-                value,
-            }],
-            cmds: &[cmds],
-            ..Default::default()
-        }]);
-        while semaphore.get_value() != value {
-            std::thread::sleep(std::time::Duration::from_micros(100));
+            // Test get
+            let (cmds, _pool) = make_cmds(pool);
+            let value = 2;
+            queue.submit(&[SubmitInfo {
+                sig_sems: &[SignalInfo {
+                    semaphore: semaphore.inner_mut(),
+                    value,
+                }],
+                cmds: &[cmds],
+                ..Default::default()
+            }]);
+            while semaphore.get_value() != value {
+                std::thread::sleep(std::time::Duration::from_micros(100));
+            }
         }
 
         queue.device().wait_idle();

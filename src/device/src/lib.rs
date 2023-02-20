@@ -112,13 +112,17 @@ pub type DeviceResult<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::*;
+    use crate::testing::TestVars;
 
-    fn smoke_test(_vars: TestVars) {
+    #[test]
+    fn smoke_test() {
+        let _ = TestVars::new();
         // Do nothing
     }
 
-    fn validation_error_test(vars: TestVars) {
+    #[test]
+    fn validation_error_test() {
+        let vars = TestVars::new();
         // Leak a semaphore
         let dt = &*vars.device().table;
         let create_info = vk::SemaphoreCreateInfo::default();

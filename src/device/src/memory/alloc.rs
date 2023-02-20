@@ -245,7 +245,6 @@ impl Allocator for LinearAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
 
     fn linear_inner(alloc: &mut LinearAllocator) {
         assert_eq!(alloc.used(), 0);
@@ -319,7 +318,8 @@ mod tests {
         assert_eq!(alloc.alloc(8, 8), None);
     }
 
-    fn linear(_: testing::TestVars) {
+    #[test]
+    fn linear() {
         let mut alloc = LinearAllocator::new();
 
         alloc.add_chunk(1024);
