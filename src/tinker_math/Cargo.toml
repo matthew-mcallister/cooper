@@ -1,0 +1,13 @@
+[package]
+name = "tinker-math"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+base = { path = "../chalice_base", package = "chalice-base" }
+derivative = "2.1.1"
+derive_more = "0.99.9"
+itertools = "0.9.0"
+packed_simd = { package = "packed_simd_2", version = "0.3.8" }

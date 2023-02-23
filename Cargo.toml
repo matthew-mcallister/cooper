@@ -1,11 +1,10 @@
 [workspace]
 members = [
-    "src/base",
-    "src/device",
-    "src/examples",
-    "src/math",
-    "src/prelude",
-    "src/spirv",
+    "src/chalice_base",
+    "src/chalice_device",
+    "src/chalice_examples",
+    "src/chalice_spirv",
+    "src/tinker_math",
 ]
 
 [profile.dev.package."*"]

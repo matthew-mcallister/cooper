@@ -1,0 +1,11 @@
+[package]
+name = "chalice-base"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+derive_more = "0.99.9"
+derivative = "2.1.1"
+enum-map = "0.6"

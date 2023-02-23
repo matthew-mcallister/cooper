@@ -1,0 +1,31 @@
+[package]
+name = "chalice-engine"
+version = "0.1.0"
+authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+harness = false
+
+[dependencies]
+bitflags = "1.2.1"
+derive_more = "0.99.7"
+derivative = "2.1.1"
+device = { path = "../chalice_device", package = "chalice-device" }
+enum-map = "0.6.1"
+fnv = "1.0"
+log = "0.4.8"
+more-asserts = "0.2.1"
+owning_ref = "0.4"
+parking_lot = { version = "0.9", features = ["owning_ref"] }
+smallvec = { version = "1.4.0", features = ["union", "const_generics"] }
+spv = { path = "../chalice_spirv", package = "chalice-spirv" }
+anyhow = "1.0.33"
+
+[dependencies.vk]
+git = "https://github.com/matthew-mcallister/vk-ffi"
+package = "vulkan-headers"
+
+[dev-dependencies]
+env_logger = "0.7.1"

@@ -1,9 +1,0 @@
-[package]
-name = "cooper-prelude"
-version = "0.1.0"
-authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
-edition = "2018"
-publish = false
-
-[dependencies]
-num = { path = "../num", package = "cooper-num" }
