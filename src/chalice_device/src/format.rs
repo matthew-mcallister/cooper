@@ -41,7 +41,7 @@ macro_rules! impl_format {
 
 // TODO: What are good HDR render target formats?
 //       Cf. Unreal r.SceneColorFormat, light accumulation buffer
-// TODO: Use ordunary name conventions, e.g. Rgb32F, Bgra8Srgb
+// TODO: Use ordinary name conventions, e.g. Rgb32F, Bgra8Srgb
 impl_format! {
     R8(R8_UNORM, 1, COLOR_BIT),
     R32F(R32_SFLOAT, 4, COLOR_BIT),
@@ -65,6 +65,15 @@ impl_format! {
     S8(S8_UINT, 1, STENCIL_BIT),
     D16_S8(D16_UNORM_S8_UINT, 3, DEPTH_BIT | STENCIL_BIT),
     D32F_S8(D32_SFLOAT_S8_UINT, 5, DEPTH_BIT | STENCIL_BIT),
+}
+
+impl Default for Format {
+    /// Returns Format::RGBA8. Usually, you wouldn't want to leave the
+    /// format of an image at the default, but having a Default impl
+    /// makes it easier to derive Default for other types.
+    fn default() -> Self {
+        Self::RGBA8
+    }
 }
 
 primitive_enum! {

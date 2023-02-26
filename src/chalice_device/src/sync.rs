@@ -266,7 +266,11 @@ mod tests {
         let queue = vars.gfx_queue();
         let pool = Box::new(CmdPool::new_transient(queue.family()));
 
-        let make_cmds = |pool| XferCmds::new(CmdBuffer::new_primary(pool)).end();
+        let make_cmds = |pool| {
+            let mut cmds = CmdBuffer::new(pool);
+            cmds.begin();
+            cmds.end()
+        };
         let mut semaphore = TimelineSemaphore::new(Arc::clone(vars.device()), 0);
 
         // Test wait

@@ -12,7 +12,7 @@ pub struct Framebuffer {
     inner: vk::Framebuffer,
 }
 
-#[derive(Debug, From)]
+#[derive(Debug, Clone, From)]
 pub enum AttachmentImage {
     Image(Arc<ImageView>),
     Swapchain(Arc<SwapchainView>),
@@ -28,11 +28,7 @@ impl Drop for Framebuffer {
 }
 
 impl Framebuffer {
-    pub unsafe fn new(
-        pass: Arc<RenderPass>,
-        // TODO: Should be EnumMap<Attachment, AttachmentImage>
-        attachments: Vec<AttachmentImage>,
-    ) -> Self {
+    pub unsafe fn new(pass: Arc<RenderPass>, attachments: Vec<AttachmentImage>) -> Self {
         create_framebuffer(pass, attachments)
     }
 
@@ -48,6 +44,11 @@ impl Framebuffer {
 
     #[inline]
     pub fn pass(&self) -> &Arc<RenderPass> {
+        &self.pass
+    }
+
+    #[inline]
+    pub fn render_pass(&self) -> &Arc<RenderPass> {
         &self.pass
     }
 
@@ -87,11 +88,16 @@ impl Framebuffer {
 
 impl AttachmentImage {
     #[inline]
-    pub fn view(&self) -> vk::ImageView {
+    pub fn inner(&self) -> vk::ImageView {
         match &self {
             Self::Image(view) => view.inner(),
             Self::Swapchain(view) => view.inner(),
         }
+    }
+
+    #[inline]
+    pub fn view(&self) -> vk::ImageView {
+        self.inner()
     }
 
     #[inline]
@@ -231,8 +237,7 @@ mod tests {
             let normal = create_render_target(&heap, &pass, 3, extent, false);
             let albedo = create_render_target(&heap, &pass, 4, extent, false);
 
-            let views = swapchain.create_views();
-            let back = Arc::clone(&views[0]);
+            let back = Arc::clone(&swapchain.views()[0]);
 
             let _fb = Framebuffer::new(
                 pass,

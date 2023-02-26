@@ -229,9 +229,14 @@ impl TrivialPass {
     pub(crate) fn create_framebuffers(&self, swapchain: &Swapchain) -> Vec<Arc<Framebuffer>> {
         unsafe {
             swapchain
-                .create_views()
+                .views()
                 .into_iter()
-                .map(|view| Arc::new(Framebuffer::new(Arc::clone(&self.pass), vec![view.into()])))
+                .map(|view| {
+                    Arc::new(Framebuffer::new(
+                        Arc::clone(&self.pass),
+                        vec![Arc::clone(view).into()],
+                    ))
+                })
                 .collect()
         }
     }
@@ -342,8 +347,10 @@ impl TrivialRenderer {
             .insert(ShaderStage::Fragment, Arc::clone(&self.frag_shader));
     }
 
-    pub(crate) fn render(&self, pipelines: &PipelineCache, cmds: &mut SubpassCmds) {
-        let mut desc = GraphicsPipelineDesc::new(cmds.subpass().clone());
+    pub(crate) fn render(&self, pipelines: &PipelineCache, cmds: &mut CmdBuffer) {
+        cmds.begin();
+
+        let mut desc = GraphicsPipelineDesc::new(cmds.subpass().unwrap().clone());
         self.init_pipe_desc(&mut desc);
 
         let pipe = unsafe { pipelines.get_or_create_gfx(&desc) };

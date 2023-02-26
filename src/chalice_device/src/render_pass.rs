@@ -62,8 +62,8 @@ struct SubpassState {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Subpass {
-    pass: Arc<RenderPass>,
-    index: usize,
+    pub(crate) pass: Arc<RenderPass>,
+    pub(crate) index: u32,
 }
 
 #[derive(Debug, Default)]
@@ -124,7 +124,7 @@ impl RenderPass {
     ) -> impl Iterator<Item = Subpass> + ExactSizeIterator + 'a {
         (0..self.subpasses.len()).map(move |index| Subpass {
             pass: Arc::clone(self),
-            index,
+            index: index as u32,
         })
     }
 
@@ -133,7 +133,7 @@ impl RenderPass {
         assert!(index < self.subpasses.len());
         Subpass {
             pass: Arc::clone(self),
-            index,
+            index: index as u32,
         }
     }
 
@@ -154,7 +154,7 @@ impl Subpass {
     }
 
     fn state(&self) -> &SubpassState {
-        &self.pass().subpasses[self.index]
+        &self.pass().subpasses[self.index as usize]
     }
 
     #[inline]

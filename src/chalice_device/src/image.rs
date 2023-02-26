@@ -120,6 +120,8 @@ impl Drop for Image {
 }
 
 impl Image {
+    // TODO: Almost certainly want a separate allocation option for
+    // framebuffer images.
     pub fn new(heap: &ImageHeap, def: Arc<ImageDef>) -> Self {
         trace!("Image::new(def: {:?})", fmt_named(&*def));
 

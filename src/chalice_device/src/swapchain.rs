@@ -24,6 +24,7 @@ pub struct Swapchain {
     pub(crate) inner: vk::SwapchainKHR,
     pub(crate) extent: Extent2D,
     pub(crate) images: Vec<vk::Image>,
+    views: Vec<Arc<SwapchainView>>,
     token: Token,
     name: Option<String>,
 }
@@ -79,6 +80,7 @@ impl Swapchain {
             inner: vk::null(),
             extent: Default::default(),
             images: Vec::new(),
+            views: Vec::new(),
             token: Default::default(),
             name: None,
         };
@@ -211,15 +213,21 @@ impl Swapchain {
         self.destroy();
         self.inner = new;
         self.images = vk::enumerate2!(dt, get_swapchain_images_khr, self.inner)?;
+        self.create_views();
 
         Ok(())
     }
 
     #[inline]
-    pub fn create_views(&self) -> Vec<Arc<SwapchainView>> {
-        (0..self.images.len())
+    fn create_views(&mut self) {
+        self.views = (0..self.images.len())
             .map(|index| Arc::new(SwapchainView::new(&self, index as _)))
-            .collect()
+            .collect();
+    }
+
+    #[inline]
+    pub fn views(&self) -> &'_ [Arc<SwapchainView>] {
+        &self.views
     }
 
     #[inline]
@@ -407,7 +415,6 @@ mod tests {
 
     #[test]
     fn view_test() {
-        let vars = TestVars::new();
-        let _attchs = vars.swapchain.create_views();
+        let _ = TestVars::new();
     }
 }
