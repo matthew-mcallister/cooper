@@ -290,6 +290,10 @@ impl CmdBuffer {
         self.inner
     }
 
+    pub fn into_inner(self) -> vk::CommandBuffer {
+        self.inner
+    }
+
     fn state(&self) -> CmdBufferState {
         self.state
     }
@@ -627,6 +631,7 @@ impl CmdBuffer {
             self.begin();
         }
 
+        // TODO: Validate framebuffer is compatible
         assert_eq!(self.level(), CmdBufferLevel::Primary);
         self.cur_subpass = 0;
         self.cur_contents = contents;

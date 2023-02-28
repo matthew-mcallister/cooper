@@ -29,10 +29,6 @@ pub enum Attachment {
 #[derive(Clone, Copy, Debug, Derivative)]
 #[derivative(Default)]
 pub struct AttachmentDescription {
-    // TODO: It's unfortunate that this has a default value. Maybe
-    // default() should just panic?
-    #[derivative(Default(value = "Attachment::Backbuffer"))]
-    pub name: Attachment,
     #[derivative(Default(value = "Format::R8"))]
     pub format: Format,
     pub samples: SampleCount,
@@ -69,6 +65,7 @@ pub struct Subpass {
 #[derive(Debug, Default)]
 pub struct SubpassDesc {
     // TODO: Name subpasses?
+    // TODO: Shouldn't require specifiying a layout
     pub layouts: Vec<vk::ImageLayout>,
     pub input_attchs: Vec<u32>,
     pub color_attchs: Vec<u32>,
@@ -89,6 +86,9 @@ impl Drop for RenderPass {
 impl_device_derived!(RenderPass);
 
 impl RenderPass {
+    // TODO: There is probably a less miserable way to specify subpass
+    // dependencies but it probably involves extensive precomputing of
+    // usage and dependencies using render graphs.
     pub unsafe fn new(
         device: Arc<Device>,
         attachments: Vec<AttachmentDescription>,
@@ -409,7 +409,6 @@ pub fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
             vec![
                 // Screen
                 AttachmentDescription {
-                    name: Attachment::Backbuffer,
                     format: Format::BGRA8_SRGB,
                     // TODO: Not sure if it's a better practice to set
                     // initial_layout or not.
@@ -418,14 +417,12 @@ pub fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
                 },
                 // HDR lighting buffer
                 AttachmentDescription {
-                    name: Attachment::Hdr,
                     format: Format::RGBA16F,
                     final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                     ..Default::default()
                 },
                 // Depth/stencil
                 AttachmentDescription {
-                    name: Attachment::DepthStencil,
                     format: Format::D32F_S8,
                     load_op: vk::AttachmentLoadOp::CLEAR,
                     final_layout: Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
@@ -433,14 +430,12 @@ pub fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
                 },
                 // Normals
                 AttachmentDescription {
-                    name: Attachment::Normal,
                     format: Format::RGBA8,
                     final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                     ..Default::default()
                 },
                 // Albedo
                 AttachmentDescription {
-                    name: Attachment::Albedo,
                     format: Format::RGBA8,
                     final_layout: Il::SHADER_READ_ONLY_OPTIMAL,
                     ..Default::default()

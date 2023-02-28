@@ -10,8 +10,8 @@ use crate::*;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Surface {
-    // TODO: Technically requires ownership/Arc of window. Maybe make
-    // a generic type?
+    // TODO: Should this require ownership/Arc of window? Maybe via a
+    // type parameter?
     #[derivative(Debug = "ignore")]
     pub(crate) instance: Arc<Instance>,
     pub(crate) inner: vk::SurfaceKHR,
@@ -391,6 +391,8 @@ pub unsafe fn device_for_surface(surface: &Surface) -> DeviceResult<vk::Physical
 
 /// Helper function which creates a logical device capable of rendering
 /// to a window.
+// TODO: Should make instance init and device/swapchain separate steps
+// purely to allow control over queue allocation.
 pub fn init_device_and_swapchain(
     app_info: AppInfo,
     window: &impl Window,

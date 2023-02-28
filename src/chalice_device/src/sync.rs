@@ -25,6 +25,14 @@ impl TryFrom<vk::Result> for WaitResult {
     }
 }
 
+impl WaitResult {
+    pub fn unwrap(self) {
+        if self != Self::Success {
+            panic!("Semaphore wait timed out");
+        }
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct SemaphoreInner {
@@ -105,6 +113,11 @@ impl BinarySemaphore {
     #[inline]
     pub fn raw(&self) -> vk::Semaphore {
         self.inner.raw()
+    }
+
+    #[inline]
+    pub fn inner(&self) -> &SemaphoreInner {
+        &self.inner
     }
 
     #[inline]

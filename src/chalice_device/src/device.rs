@@ -71,6 +71,7 @@ impl Device {
         };
         add_to_pnext!(p_next, features12);
 
+        // TODO: Why is this even hardcoded?
         let queue_infos = [vk::DeviceQueueCreateInfo {
             queue_family_index: 0,
             queue_count: 1,

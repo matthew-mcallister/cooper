@@ -22,6 +22,7 @@ pub struct Instance {
     debug_handler: Arc<DefaultDebugMessageHandler>,
 }
 
+/// N.B. Always construct this with `..Default::default()`.
 #[derive(Clone, Debug, Default)]
 pub struct AppInfo {
     pub name: String,

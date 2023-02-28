@@ -250,6 +250,7 @@ impl Queue {
     }
 
     pub(super) unsafe fn get_device_queues(device: &Arc<Device>) -> Vec<Vec<Arc<Queue>>> {
+        // TODO: Ughhh... queues are actually hard
         let mut inner = vk::null();
         device.table().get_device_queue(0, 0, &mut inner);
 

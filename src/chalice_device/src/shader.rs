@@ -3,6 +3,7 @@ use std::ffi::CStr;
 use std::ptr;
 use std::sync::Arc;
 
+use derivative::Derivative;
 use enum_map::Enum;
 
 use crate::*;
@@ -21,14 +22,18 @@ pub struct Shader {
 }
 
 /// A choice of shader plus specialization constant values.
-// TODO: How to properly hash this? Especially considering all consts
-// have defaults defined in the shader.
-#[derive(Debug, Eq, Hash, PartialEq)]
+// TODO: for truly correct comparisons, have to sort spec_map.
+// Also, spec constants can have defaults, so it is possible to break
+// caching by setting a spec const to its default value.
+#[derive(Debug, Derivative, Eq)]
+#[derivative(Hash, PartialEq)]
 pub struct ShaderSpec {
     shader: Arc<Shader>,
-    spec_info: vk::SpecializationInfo,
     spec_map: Vec<vk::SpecializationMapEntry>,
     data: Vec<u8>,
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    spec_info: vk::SpecializationInfo,
 }
 
 // Probably should know the type and dimension too...

@@ -16,6 +16,7 @@ wrap_vk_enum! {
     }
 }
 
+// TODO: Kill with fire
 primitive_enum! {
     @[try_from: u8, u16, u32, u64, usize]
     @[try_from_error: &'static str = "not a valid vertex attribute"]

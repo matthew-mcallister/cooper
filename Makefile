@@ -8,16 +8,11 @@ SHADER_SRC_DIR := shaders
 SHADER_OBJ_DIR := generated/shaders
 
 SHADER_SRC_FILES := \
-    trivial_vert.glsl \
-    trivial_frag.glsl \
-    static_vert.glsl \
-    minimal_vert.glsl \
-    geom_vis_frag.glsl \
-    tex_vis_frag.glsl
+    triangle_vert.glsl \
+    triangle_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
 
-SHADER_HDR_FILES := \
-	common_inc.glsl
+SHADER_HDR_FILES :=
 SHADER_HDRS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_HDR_FILES))
 
 SHADER_OBJS := $(patsubst %.glsl,$(SHADER_OBJ_DIR)/%.spv,$(SHADER_SRC_FILES))

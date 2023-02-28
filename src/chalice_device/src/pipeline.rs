@@ -11,6 +11,18 @@ use more_asserts::assert_lt;
 
 use crate::*;
 
+/// Returns a vk::PipelineColorBlendAttachmentState with a default
+/// color write mask set.
+pub fn default_color_blend_state() -> vk::PipelineColorBlendAttachmentState {
+    vk::PipelineColorBlendAttachmentState {
+        color_write_mask: vk::ColorComponentFlags::R_BIT
+            | vk::ColorComponentFlags::G_BIT
+            | vk::ColorComponentFlags::B_BIT
+            | vk::ColorComponentFlags::A_BIT,
+        ..Default::default()
+    }
+}
+
 #[derive(Debug)]
 pub struct PipelineLayout {
     device: Arc<Device>,
@@ -21,7 +33,6 @@ pub struct PipelineLayout {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct PipelineLayoutDesc {
     pub set_layouts: SmallVec<Arc<DescriptorSetLayout>, 4>,
-    push_constants: Option<()>,
 }
 
 pub type ShaderStageMap = PartialEnumMap<ShaderStage, Arc<ShaderSpec>>;
@@ -77,10 +88,6 @@ impl Drop for PipelineLayout {
 
 impl PipelineLayout {
     pub fn new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
-        unsafe { Self::unsafe_new(device, desc) }
-    }
-
-    unsafe fn unsafe_new(device: Arc<Device>, desc: PipelineLayoutDesc) -> Self {
         let dt = &*device.table;
         let set_layouts = desc.set_layouts;
         let cap = device.limits().max_bound_descriptor_sets as usize;
@@ -94,9 +101,11 @@ impl PipelineLayout {
             ..Default::default()
         };
         let mut inner = vk::null();
-        dt.create_pipeline_layout(&create_info, ptr::null(), &mut inner)
-            .check()
-            .unwrap();
+        unsafe {
+            dt.create_pipeline_layout(&create_info, ptr::null(), &mut inner)
+                .check()
+                .unwrap();
+        }
 
         PipelineLayout {
             device,
@@ -491,7 +500,7 @@ impl PipelineLayoutCache {
         })
     }
 
-    pub unsafe fn get_or_create(&self, desc: &PipelineLayoutDesc) -> Cow<Arc<PipelineLayout>> {
+    pub fn get_or_create(&self, desc: &PipelineLayoutDesc) -> Cow<Arc<PipelineLayout>> {
         let device = &self.device;
         self.inner.get_or_insert_with(desc, || {
             Arc::new(PipelineLayout::new(Arc::clone(&device), desc.clone()))
@@ -535,10 +544,7 @@ impl PipelineCache {
         self.gfx.get_or_create_committed(&layout, desc)
     }
 
-    pub unsafe fn get_or_create_layout(
-        &self,
-        desc: &PipelineLayoutDesc,
-    ) -> Cow<Arc<PipelineLayout>> {
+    pub fn get_or_create_layout(&self, desc: &PipelineLayoutDesc) -> Cow<Arc<PipelineLayout>> {
         self.layouts.get_or_create(desc)
     }
 

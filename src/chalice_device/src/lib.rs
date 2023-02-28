@@ -108,6 +108,7 @@ impl<'a> From<&'a str> for Error {
     }
 }
 
+// TODO: This should kind of just be std::result::Result<T, vk::Result>
 pub type DeviceResult<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
