@@ -277,9 +277,9 @@ mod tests {
     fn timeline_semaphore_queue_signal() {
         let vars = TestVars::new();
         let queue = vars.gfx_queue();
-        let pool = Box::new(CmdPool::new_transient(queue.family()));
+        let mut pool = CmdPool::new_transient(queue.family());
 
-        let make_cmds = |pool| {
+        let make_cmds = |pool: &mut CmdPool| {
             let mut cmds = CmdBuffer::new(pool);
             cmds.begin();
             cmds.end()
@@ -288,7 +288,7 @@ mod tests {
 
         // Test wait
         unsafe {
-            let (cmds, pool) = make_cmds(pool);
+            let cmds = make_cmds(&mut pool);
             let value = 1;
             queue.submit(&[SubmitInfo {
                 sig_sems: &[SignalInfo {
@@ -301,7 +301,7 @@ mod tests {
             let _ = semaphore.wait(value, u64::MAX);
 
             // Test get
-            let (cmds, _pool) = make_cmds(pool);
+            let cmds = make_cmds(&mut pool);
             let value = 2;
             queue.submit(&[SubmitInfo {
                 sig_sems: &[SignalInfo {

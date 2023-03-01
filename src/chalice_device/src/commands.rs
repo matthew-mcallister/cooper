@@ -4,7 +4,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use derivative::Derivative;
-use log::trace;
+use log::{trace, warn};
 
 use crate::*;
 
@@ -28,12 +28,12 @@ pub struct CmdPool {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct CmdBuffer {
+pub struct CmdBuffer<'pool> {
     device: Arc<Device>,
     inner: vk::CommandBuffer,
     level: CmdBufferLevel,
     #[derivative(Debug(format_with = "write_named::<CmdPool>"))]
-    pool: Box<CmdPool>,
+    pool: &'pool mut CmdPool,
     state: CmdBufferState,
     framebuffer: Option<Arc<Framebuffer>>,
     cur_subpass: u32,
@@ -221,29 +221,29 @@ impl Named for CmdPool {
     }
 }
 
-impl Drop for CmdBuffer {
+impl<'pool> Drop for CmdBuffer<'pool> {
     fn drop(&mut self) {
-        if !std::thread::panicking() {
-            panic!("unused command buffer");
+        if self.state != CmdBufferState::Executable {
+            warn!("dropped unfinished command buffer");
         }
     }
 }
 
-impl CmdBuffer {
-    pub fn new(mut pool: Box<CmdPool>) -> Self {
+impl<'pool> CmdBuffer<'pool> {
+    pub fn new(pool: &'pool mut CmdPool) -> Self {
         let level = CmdBufferLevel::Primary;
         let inner = pool.alloc(level);
         unsafe { Self::from_initial(pool, inner, level) }
     }
 
-    pub fn new_secondary(mut pool: Box<CmdPool>) -> Self {
+    pub fn new_secondary(pool: &'pool mut CmdPool) -> Self {
         let level = CmdBufferLevel::Secondary;
         let inner = pool.alloc(level);
         unsafe { Self::from_initial(pool, inner, level) }
     }
 
     pub fn new_subpass(
-        mut pool: Box<CmdPool>,
+        pool: &'pool mut CmdPool,
         framebuffer: Arc<Framebuffer>,
         subpass: u32,
     ) -> Self {
@@ -259,7 +259,7 @@ impl CmdBuffer {
     /// handle. The underlying command buffer object *must* be in the
     /// initial state.
     pub unsafe fn from_initial(
-        pool: Box<CmdPool>,
+        pool: &'pool mut CmdPool,
         cmds: vk::CommandBuffer,
         level: CmdBufferLevel,
     ) -> Self {
@@ -424,18 +424,13 @@ impl CmdBuffer {
     }
 
     // TODO: Create a proper abstraction around finished command buffers
-    pub fn end(mut self) -> (vk::CommandBuffer, Box<CmdPool>) {
+    pub fn end(mut self) -> vk::CommandBuffer {
         unsafe {
             if self.framebuffer.is_some() && self.level == CmdBufferLevel::Primary {
                 self.end_render_pass();
             }
             self.do_end();
-            // Sadly, we must do this
-            let _ = ptr::read(&self.device);
-            let inner = self.inner;
-            let pool = ptr::read(&self.pool);
-            std::mem::forget(self);
-            (inner, pool)
+            self.inner
         }
     }
 
@@ -864,11 +859,11 @@ mod tests {
     fn record_subpass() {
         unsafe {
             let vars = TestVars::new();
-            let (_res, pipelines, trivial, _pass, framebuffers, pool) = test_common(&vars);
+            let (_res, pipelines, trivial, _pass, framebuffers, mut pool) = test_common(&vars);
             let framebuffer = Arc::clone(&framebuffers[0]);
-            let mut cmds = CmdBuffer::new_subpass(pool, framebuffer, 0);
+            let mut cmds = CmdBuffer::new_subpass(&mut pool, framebuffer, 0);
             trivial.render(&pipelines, &mut cmds);
-            let (_, _) = cmds.end();
+            let _ = cmds.end();
         }
     }
 
@@ -876,12 +871,12 @@ mod tests {
     fn record_render_pass() {
         unsafe {
             let vars = TestVars::new();
-            let (_res, pipelines, trivial, _, framebuffers, pool) = test_common(&vars);
-            let mut cmds = CmdBuffer::new(pool);
+            let (_res, pipelines, trivial, _, framebuffers, mut pool) = test_common(&vars);
+            let mut cmds = CmdBuffer::new(&mut pool);
             let framebuffer = Arc::clone(&framebuffers[0]);
             cmds.begin_render_pass(framebuffer, &[], SubpassContents::Inline);
             trivial.render(&pipelines, &mut cmds);
-            let (_, _) = cmds.end();
+            let _ = cmds.end();
         }
     }
 
@@ -890,11 +885,12 @@ mod tests {
     fn subpass_out_of_bounds() {
         unsafe {
             let vars = TestVars::new();
-            let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
-            let mut cmds = CmdBuffer::new(pool);
+            let (_res, _, _, _, framebuffers, mut pool) = test_common(&vars);
+            let mut cmds = CmdBuffer::new(&mut pool);
             let framebuffer = Arc::clone(&framebuffers[0]);
             cmds.begin_render_pass(framebuffer, &[], SubpassContents::Inline);
             cmds.next_subpass(SubpassContents::Inline);
+            cmds.end();
         }
     }
 
@@ -903,28 +899,29 @@ mod tests {
     fn exec_in_inline_subpass() {
         unsafe {
             let vars = TestVars::new();
-            let (_res, _, _, _, framebuffers, pool) = test_common(&vars);
+            let (_res, _, _, _, framebuffers, mut pool) = test_common(&vars);
             let framebuffer = Arc::clone(&framebuffers[0]);
-            let mut cmds = CmdBuffer::new_subpass(pool, framebuffer, 0);
+            let mut cmds = CmdBuffer::new_subpass(&mut pool, framebuffer, 0);
             cmds.execute_cmds(&[vk::null()]);
+            cmds.end();
         }
     }
 
-    fn copy_common(vars: &testing::TestVars) -> (TestResources, CmdBuffer) {
+    fn copy_common(vars: &testing::TestVars) -> (TestResources, CmdPool) {
         let resources = TestResources::new(vars.device());
-        let pool = Box::new(CmdPool::new(
+        let pool = CmdPool::new(
             vars.gfx_queue().family(),
             vk::CommandPoolCreateFlags::TRANSIENT_BIT,
-        ));
-        let cmds = CmdBuffer::new(pool);
-        (resources, cmds)
+        );
+        (resources, pool)
     }
 
     #[test]
     fn copy_buffer() {
         unsafe {
             let vars = TestVars::new();
-            let (resources, mut cmds) = copy_common(&vars);
+            let (resources, mut pool) = copy_common(&vars);
+            let mut cmds = CmdBuffer::new(&mut pool);
             let src = resources.buffer_heap.alloc(
                 BufferBinding::Storage,
                 Lifetime::Frame,
@@ -963,7 +960,8 @@ mod tests {
     fn copy_intra_buffer() {
         unsafe {
             let vars = TestVars::new();
-            let (resources, mut cmds) = copy_common(&vars);
+            let (resources, mut pool) = copy_common(&vars);
+            let mut cmds = CmdBuffer::new(&mut pool);
             let buf = resources.buffer_heap.alloc(
                 BufferBinding::Storage,
                 Lifetime::Frame,
@@ -995,7 +993,8 @@ mod tests {
     fn copy_image() {
         unsafe {
             let vars = TestVars::new();
-            let (resources, mut cmds) = copy_common(&vars);
+            let (resources, mut pool) = copy_common(&vars);
+            let mut cmds = CmdBuffer::new(&mut pool);
             let format = Format::RGBA8;
             let src = resources.buffer_heap.alloc(
                 BufferBinding::Storage,

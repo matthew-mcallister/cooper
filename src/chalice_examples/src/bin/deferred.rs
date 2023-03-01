@@ -125,11 +125,15 @@ fn record(state: &mut State) -> vk::CommandBuffer {
         state.cmd_buffer = cmd_pool.alloc(device::CmdBufferLevel::Primary);
     }
     let mut cmds = unsafe {
-        device::CmdBuffer::from_initial(cmd_pool, state.cmd_buffer, device::CmdBufferLevel::Primary)
+        device::CmdBuffer::from_initial(
+            &mut cmd_pool,
+            state.cmd_buffer,
+            device::CmdBufferLevel::Primary,
+        )
     };
     draw_triangle(state, &mut cmds);
-    let (cmds, pool) = cmds.end();
-    state.cmd_pool = Some(pool);
+    let cmds = cmds.end();
+    state.cmd_pool = Some(cmd_pool);
     cmds
 }
 

@@ -8,6 +8,9 @@ SHADER_SRC_DIR := shaders
 SHADER_OBJ_DIR := generated/shaders
 
 SHADER_SRC_FILES := \
+    trivial_vert.glsl \
+    trivial_frag.glsl \
+    static_vert.glsl \
     triangle_vert.glsl \
     triangle_frag.glsl
 SHADER_SRCS := $(patsubst %,$(SHADER_SRC_DIR)/%,$(SHADER_SRC_FILES))
