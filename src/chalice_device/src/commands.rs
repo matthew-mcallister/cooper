@@ -291,20 +291,16 @@ impl<'pool> CmdBuffer<'pool> {
 
     #[inline]
     pub fn subpass(&self) -> Option<Subpass> {
-        Some(Subpass {
-            pass: Arc::clone(self.render_pass().as_ref()?),
-            index: self.cur_subpass,
-        })
-    }
-
-    #[inline]
-    pub fn cur_subpass(&self) -> Option<Subpass> {
         Some(
             self.framebuffer
                 .as_ref()?
                 .render_pass()
                 .subpass(self.cur_subpass as _),
         )
+    }
+
+    pub fn subpass_index(&self) -> u32 {
+        self.cur_subpass
     }
 
     fn ensure_recording(&self) {

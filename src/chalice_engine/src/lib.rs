@@ -1,3 +1,4 @@
+mod commands;
 mod engine;
 mod framebuffer;
 mod utils;

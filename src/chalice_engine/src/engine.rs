@@ -6,6 +6,7 @@ use std::sync::Arc;
 use device::DeviceResult;
 use log::{debug, info};
 
+use crate::commands::with_command_buffer;
 use crate::*;
 
 #[allow(dead_code)]
@@ -18,6 +19,7 @@ pub struct Engine {
     framebuffers: FramebufferCache,
     shaders: HashMap<String, Arc<device::Shader>>,
     pipelines: device::PipelineCache,
+    pub(crate) cache_key: u64,
     // TODO: Staging buffer and (optional) upload queue
     // TODO?: image/(vertex) buffer caching system with garbage
     // collection. Possibly out of scope but solves a basic problem
@@ -38,6 +40,7 @@ impl Engine {
             framebuffers: Default::default(),
             shaders: Default::default(),
             pipelines: device::PipelineCache::new(device),
+            cache_key: 0,
             swapchain,
         })
     }
@@ -89,6 +92,10 @@ impl Engine {
         self.pipelines.commit();
     }
 
+    pub unsafe fn reclaim_transient_resources(&mut self) {
+        self.cache_key += 1;
+    }
+
     /// Begins a render pass but creates the framebuffer for you lazily.
     pub fn begin_render_pass(
         &self,
@@ -138,11 +145,12 @@ impl Engine {
         self.shaders.get(name)
     }
 
-    pub fn create_command_pool(
+    pub fn with_command_buffer<R>(
         &self,
+        level: vk::CommandBufferLevel,
         queue_family: u32,
-        flags: vk::CommandPoolCreateFlags,
-    ) -> device::CmdPool {
-        device::CmdPool::new(self.device().queue_family(queue_family), flags)
+        f: impl FnOnce(device::CmdBuffer<'_>) -> R,
+    ) -> R {
+        with_command_buffer(self, level, queue_family, f)
     }
 }

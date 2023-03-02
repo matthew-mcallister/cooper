@@ -8,6 +8,7 @@ publish = false
 [lib]
 
 [dependencies]
+base = { path = "../chalice_base", package = "chalice-base" }
 bitflags = "1.2.1"
 derive_more = "0.99.7"
 derivative = "2.1.1"

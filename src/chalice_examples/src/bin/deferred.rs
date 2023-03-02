@@ -22,9 +22,6 @@ struct State {
     backbuffer_semaphore: device::BinarySemaphore,
     // Single semaphore for keeping track of rendering completion
     frame_semaphore: device::TimelineSemaphore,
-    // TODO: Thread-local command pools
-    cmd_pool: Option<Box<device::CmdPool>>,
-    cmd_buffer: vk::CommandBuffer,
 }
 
 impl State {
@@ -37,10 +34,6 @@ impl State {
             render_passes: create_render_passes(&engine),
             attachments: create_attachments(&engine),
             sw_index: 0,
-            cmd_pool: Some(Box::new(
-                engine.create_command_pool(0, vk::CommandPoolCreateFlags::TRANSIENT_BIT),
-            )),
-            cmd_buffer: vk::null(),
             backbuffer_semaphore: device::BinarySemaphore::new(engine.device_ref()),
             frame_semaphore: device::TimelineSemaphore::new(engine.device_ref(), 0),
             engine,
@@ -119,34 +112,25 @@ fn create_render_passes(engine: &Engine) -> HashMap<String, Arc<device::RenderPa
     map
 }
 
-fn record(state: &mut State) -> vk::CommandBuffer {
-    let mut cmd_pool = state.cmd_pool.take().unwrap();
-    if state.cmd_buffer == vk::null() {
-        state.cmd_buffer = cmd_pool.alloc(device::CmdBufferLevel::Primary);
-    }
-    let mut cmds = unsafe {
-        device::CmdBuffer::from_initial(
-            &mut cmd_pool,
-            state.cmd_buffer,
-            device::CmdBufferLevel::Primary,
-        )
-    };
-    draw_triangle(state, &mut cmds);
-    let cmds = cmds.end();
-    state.cmd_pool = Some(cmd_pool);
-    cmds
+fn record(state: &State) -> vk::CommandBuffer {
+    let level = vk::CommandBufferLevel::PRIMARY;
+    let family = state.graphics_queue.family().index();
+    state.engine.with_command_buffer(level, family, |mut cmds| {
+        cmds.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT_BIT, None);
+        begin_render_pass(state, &mut cmds);
+        draw_triangle(state, &mut cmds);
+        cmds.end()
+    })
 }
 
-fn draw_triangle(state: &State, cmds: &mut device::CmdBuffer) {
-    let engine = &state.engine;
-
+fn begin_render_pass(state: &State, cmds: &mut device::CmdBuffer) {
     let render_pass = &state.render_pass("main");
     let attachments: [device::AttachmentImage; 1] = [
         Arc::clone(state.swapchain_image()).into(),
         //Arc::clone(&state.attachments[0]).into(),
         //Arc::clone(&state.attachments[1]).into(),
     ];
-    engine.begin_render_pass(
+    state.engine.begin_render_pass(
         cmds,
         render_pass,
         &attachments,
@@ -157,15 +141,18 @@ fn draw_triangle(state: &State, cmds: &mut device::CmdBuffer) {
             },
         }],
     );
+}
 
-    // TODO: Actually draw the triangle
+fn draw_triangle(state: &State, cmds: &mut device::CmdBuffer) {
+    let engine = &state.engine;
+
     let vert_shader = Arc::clone(engine.get_shader("triangle_vert").unwrap());
     let frag_shader = Arc::clone(engine.get_shader("triangle_frag").unwrap());
 
     let pipelines = engine.pipelines();
     unsafe {
         let pipeline = pipelines.get_or_create_gfx(&device::GraphicsPipelineDesc {
-            subpass: render_pass.subpass(0),
+            subpass: cmds.subpass().unwrap(),
             layout: device::PipelineLayoutDesc {
                 set_layouts: smallvec![],
             },
@@ -224,9 +211,7 @@ fn main_loop(mut state: State, receiver: Receiver<Message>) {
         state.frame_semaphore.wait(state.tick, 32_000_000).unwrap();
         state.tick += 1;
         state.engine.new_frame();
-        unsafe {
-            state.cmd_pool.as_mut().unwrap().reset();
-        }
+        unsafe { state.engine.reclaim_transient_resources() };
         state.sw_index = state.engine.acquire_next_image().unwrap();
 
         let cmds = record(&mut state);
