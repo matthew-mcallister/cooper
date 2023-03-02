@@ -9,10 +9,11 @@ use log::{trace, warn};
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
-enum CmdBufferState {
+pub enum CmdBufferState {
     Initial,
     Recording,
     Executable,
+    Pending,
 }
 
 // TODO: Keep track of how many live command buffer objects there are;
@@ -34,21 +35,21 @@ pub struct CmdBuffer<'pool> {
     level: CmdBufferLevel,
     #[derivative(Debug(format_with = "write_named::<CmdPool>"))]
     pool: &'pool mut CmdPool,
+    // All remaining fields are part of state
     state: CmdBufferState,
+    flags: vk::CommandBufferUsageFlags,
     framebuffer: Option<Arc<Framebuffer>>,
     cur_subpass: u32,
     cur_contents: SubpassContents,
     gfx_pipe: Option<Arc<GraphicsPipeline>>,
 }
 
-#[derive(Clone, Copy, Debug, Derivative, Eq, Hash, PartialEq)]
-#[derivative(Default)]
-pub enum CmdBufferLevel {
-    #[derivative(Default)]
-    Primary,
-    Secondary,
-    /// Equivalent to secondary + RENDER_PASS_CONTINUE_BIT.
-    SubpassContinue,
+pub(crate) type CmdBufferLevel = vk::CommandBufferLevel;
+
+#[derive(Debug)]
+pub struct CommandBufferInheritanceInfo {
+    pub framebuffer: Arc<Framebuffer>,
+    pub subpass: u32,
 }
 
 wrap_vk_enum! {
@@ -58,36 +59,6 @@ wrap_vk_enum! {
         #[derivative(Default)]
         Inline = INLINE,
         Secondary = SECONDARY_COMMAND_BUFFERS,
-    }
-}
-
-impl CmdBufferLevel {
-    #[inline]
-    pub fn is_secondary(self) -> bool {
-        use CmdBufferLevel::*;
-        match self {
-            Primary => false,
-            Secondary | SubpassContinue => true,
-        }
-    }
-
-    #[inline]
-    pub fn required_usage_flags(self) -> vk::CommandBufferUsageFlags {
-        if self == Self::SubpassContinue {
-            vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT
-        } else {
-            Default::default()
-        }
-    }
-}
-
-impl From<CmdBufferLevel> for vk::CommandBufferLevel {
-    fn from(level: CmdBufferLevel) -> Self {
-        if level.is_secondary() {
-            Self::SECONDARY
-        } else {
-            Self::PRIMARY
-        }
     }
 }
 
@@ -230,29 +201,9 @@ impl<'pool> Drop for CmdBuffer<'pool> {
 }
 
 impl<'pool> CmdBuffer<'pool> {
-    pub fn new(pool: &'pool mut CmdPool) -> Self {
-        let level = CmdBufferLevel::Primary;
+    pub fn new(pool: &'pool mut CmdPool, level: CmdBufferLevel) -> Self {
         let inner = pool.alloc(level);
         unsafe { Self::from_initial(pool, inner, level) }
-    }
-
-    pub fn new_secondary(pool: &'pool mut CmdPool) -> Self {
-        let level = CmdBufferLevel::Secondary;
-        let inner = pool.alloc(level);
-        unsafe { Self::from_initial(pool, inner, level) }
-    }
-
-    pub fn new_subpass(
-        pool: &'pool mut CmdPool,
-        framebuffer: Arc<Framebuffer>,
-        subpass: u32,
-    ) -> Self {
-        let level = CmdBufferLevel::SubpassContinue;
-        let inner = pool.alloc(level);
-        let mut cmds = unsafe { Self::from_initial(pool, inner, level) };
-        cmds.framebuffer = Some(framebuffer);
-        cmds.cur_subpass = subpass;
-        cmds
     }
 
     /// Creates a command buffer from a raw Vulkan command buffer
@@ -269,6 +220,7 @@ impl<'pool> CmdBuffer<'pool> {
             pool,
             level,
             state: CmdBufferState::Initial,
+            flags: Default::default(),
             framebuffer: Default::default(),
             cur_subpass: 0,
             cur_contents: Default::default(),
@@ -294,7 +246,7 @@ impl<'pool> CmdBuffer<'pool> {
         self.inner
     }
 
-    fn state(&self) -> CmdBufferState {
+    pub fn state(&self) -> CmdBufferState {
         self.state
     }
 
@@ -306,6 +258,10 @@ impl<'pool> CmdBuffer<'pool> {
     #[inline]
     pub fn level(&self) -> CmdBufferLevel {
         self.level
+    }
+
+    pub fn flags(&self) -> vk::CommandBufferUsageFlags {
+        self.flags
     }
 
     #[inline]
@@ -342,11 +298,6 @@ impl<'pool> CmdBuffer<'pool> {
     }
 
     #[inline]
-    pub fn is_inline(&self) -> bool {
-        self.level != CmdBufferLevel::SubpassContinue
-    }
-
-    #[inline]
     pub fn cur_subpass(&self) -> Option<Subpass> {
         Some(
             self.framebuffer
@@ -371,11 +322,8 @@ impl<'pool> CmdBuffer<'pool> {
 
         assert_eq!(self.state, CmdBufferState::Initial);
 
-        // TODO (eventually): reusable buffers
-        let flags =
-            self.level.required_usage_flags() | vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT_BIT;
         let begin_info = vk::CommandBufferBeginInfo {
-            flags,
+            flags: self.flags,
             p_inheritance_info: inheritance_info.as_ptr(),
             ..Default::default()
         };
@@ -385,29 +333,34 @@ impl<'pool> CmdBuffer<'pool> {
         self.state = CmdBufferState::Recording;
     }
 
-    fn begin_subpass_continue(&mut self) {
-        assert_eq!(self.level(), CmdBufferLevel::SubpassContinue);
-        assert_eq!(self.state(), CmdBufferState::Initial);
-        assert!(self.framebuffer().unwrap().is_swapchain_valid());
-        let render_pass = self.render_pass().unwrap();
-        let inheritance_info = vk::CommandBufferInheritanceInfo {
-            render_pass: render_pass.inner(),
-            subpass: self.cur_subpass,
-            framebuffer: self.framebuffer.as_ref().unwrap().inner(),
-            ..Default::default()
-        };
-        unsafe {
-            self.begin_inner(Some(&inheritance_info));
-        }
-        self.reset_dynamic_state();
-    }
-
-    pub fn begin(&mut self) {
-        if self.state != CmdBufferState::Initial {
-            return;
-        }
-        if self.level() == CmdBufferLevel::SubpassContinue {
-            self.begin_subpass_continue();
+    pub fn begin(
+        &mut self,
+        flags: vk::CommandBufferUsageFlags,
+        inheritance_info: Option<CommandBufferInheritanceInfo>,
+    ) {
+        assert_eq!(self.state, CmdBufferState::Initial);
+        self.flags = flags;
+        if flags.contains(vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT) {
+            assert_eq!(self.level(), CmdBufferLevel::SECONDARY);
+            let CommandBufferInheritanceInfo {
+                framebuffer,
+                subpass,
+            } = inheritance_info.unwrap();
+            let vk_render_pass = framebuffer.render_pass().inner();
+            let vk_framebuffer = framebuffer.inner();
+            self.cur_subpass = subpass;
+            self.framebuffer = Some(framebuffer);
+            let vk_inheritance_info = vk::CommandBufferInheritanceInfo {
+                render_pass: vk_render_pass,
+                subpass: self.cur_subpass,
+                framebuffer: vk_framebuffer,
+                ..Default::default()
+            };
+            unsafe {
+                self.begin_inner(Some(&vk_inheritance_info));
+            }
+            // TODO: Should this even be implicit?
+            self.reset_dynamic_state();
         } else {
             unsafe {
                 self.begin_inner(None);
@@ -426,7 +379,7 @@ impl<'pool> CmdBuffer<'pool> {
     // TODO: Create a proper abstraction around finished command buffers
     pub fn end(mut self) -> vk::CommandBuffer {
         unsafe {
-            if self.framebuffer.is_some() && self.level == CmdBufferLevel::Primary {
+            if self.framebuffer.is_some() && self.level == CmdBufferLevel::PRIMARY {
                 self.end_render_pass();
             }
             self.do_end();
@@ -611,7 +564,7 @@ impl<'pool> CmdBuffer<'pool> {
             let subpass_count = render_pass.subpasses().len();
             assert!((self.cur_subpass as usize) < subpass_count);
         }
-        if self.level() == CmdBufferLevel::Primary {
+        if self.level() == CmdBufferLevel::PRIMARY {
             assert_eq!(self.cur_contents, SubpassContents::Inline);
         }
     }
@@ -622,19 +575,13 @@ impl<'pool> CmdBuffer<'pool> {
         clear_values: &[vk::ClearValue],
         contents: SubpassContents,
     ) {
-        if !self.is_recording() {
-            self.begin();
-        }
-
         // TODO: Validate framebuffer is compatible
-        assert_eq!(self.level(), CmdBufferLevel::Primary);
+        assert_eq!(self.state(), CmdBufferState::Recording);
+        assert_eq!(self.level(), CmdBufferLevel::PRIMARY);
         self.cur_subpass = 0;
         self.cur_contents = contents;
         self.check_state();
 
-        if !self.is_recording() {
-            self.begin();
-        }
         assert!(framebuffer.is_swapchain_valid());
 
         // TODO: Clear color
@@ -656,7 +603,7 @@ impl<'pool> CmdBuffer<'pool> {
     }
 
     pub fn next_subpass(&mut self, contents: SubpassContents) {
-        assert_eq!(self.level(), CmdBufferLevel::Primary);
+        assert_eq!(self.level(), CmdBufferLevel::PRIMARY);
         self.ensure_recording();
         self.cur_subpass += 1;
         self.cur_contents = contents;
@@ -667,7 +614,7 @@ impl<'pool> CmdBuffer<'pool> {
     }
 
     pub unsafe fn execute_cmds(&mut self, cmds: &[vk::CommandBuffer]) {
-        assert_eq!(self.level(), CmdBufferLevel::Primary);
+        assert_eq!(self.level(), CmdBufferLevel::PRIMARY);
         assert_eq!(self.cur_contents, SubpassContents::Secondary);
         self.dt()
             .cmd_execute_commands(self.raw(), cmds.len() as _, cmds.as_ptr());
@@ -861,7 +808,15 @@ mod tests {
             let vars = TestVars::new();
             let (_res, pipelines, trivial, _pass, framebuffers, mut pool) = test_common(&vars);
             let framebuffer = Arc::clone(&framebuffers[0]);
-            let mut cmds = CmdBuffer::new_subpass(&mut pool, framebuffer, 0);
+            let mut cmds = CmdBuffer::new(&mut pool, vk::CommandBufferLevel::SECONDARY);
+            let inheritance = CommandBufferInheritanceInfo {
+                framebuffer,
+                subpass: 0,
+            };
+            cmds.begin(
+                vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT,
+                Some(inheritance),
+            );
             trivial.render(&pipelines, &mut cmds);
             let _ = cmds.end();
         }
@@ -872,8 +827,9 @@ mod tests {
         unsafe {
             let vars = TestVars::new();
             let (_res, pipelines, trivial, _, framebuffers, mut pool) = test_common(&vars);
-            let mut cmds = CmdBuffer::new(&mut pool);
+            let mut cmds = CmdBuffer::new(&mut pool, vk::CommandBufferLevel::PRIMARY);
             let framebuffer = Arc::clone(&framebuffers[0]);
+            cmds.begin(Default::default(), None);
             cmds.begin_render_pass(framebuffer, &[], SubpassContents::Inline);
             trivial.render(&pipelines, &mut cmds);
             let _ = cmds.end();
@@ -886,8 +842,9 @@ mod tests {
         unsafe {
             let vars = TestVars::new();
             let (_res, _, _, _, framebuffers, mut pool) = test_common(&vars);
-            let mut cmds = CmdBuffer::new(&mut pool);
+            let mut cmds = CmdBuffer::new(&mut pool, vk::CommandBufferLevel::PRIMARY);
             let framebuffer = Arc::clone(&framebuffers[0]);
+            cmds.begin(Default::default(), None);
             cmds.begin_render_pass(framebuffer, &[], SubpassContents::Inline);
             cmds.next_subpass(SubpassContents::Inline);
             cmds.end();
@@ -901,7 +858,15 @@ mod tests {
             let vars = TestVars::new();
             let (_res, _, _, _, framebuffers, mut pool) = test_common(&vars);
             let framebuffer = Arc::clone(&framebuffers[0]);
-            let mut cmds = CmdBuffer::new_subpass(&mut pool, framebuffer, 0);
+            let mut cmds = CmdBuffer::new(&mut pool, vk::CommandBufferLevel::SECONDARY);
+            let inheritance = CommandBufferInheritanceInfo {
+                framebuffer,
+                subpass: 0,
+            };
+            cmds.begin(
+                vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE_BIT,
+                Some(inheritance),
+            );
             cmds.execute_cmds(&[vk::null()]);
             cmds.end();
         }
@@ -921,7 +886,7 @@ mod tests {
         unsafe {
             let vars = TestVars::new();
             let (resources, mut pool) = copy_common(&vars);
-            let mut cmds = CmdBuffer::new(&mut pool);
+            let mut cmds = CmdBuffer::new(&mut pool, CmdBufferLevel::PRIMARY);
             let src = resources.buffer_heap.alloc(
                 BufferBinding::Storage,
                 Lifetime::Frame,
@@ -934,7 +899,7 @@ mod tests {
                 MemoryMapping::DeviceLocal,
                 1024,
             );
-            cmds.begin();
+            cmds.begin(Default::default(), None);
             cmds.copy_buffer(
                 src.buffer(),
                 dst.buffer(),
@@ -961,14 +926,14 @@ mod tests {
         unsafe {
             let vars = TestVars::new();
             let (resources, mut pool) = copy_common(&vars);
-            let mut cmds = CmdBuffer::new(&mut pool);
+            let mut cmds = CmdBuffer::new(&mut pool, CmdBufferLevel::PRIMARY);
             let buf = resources.buffer_heap.alloc(
                 BufferBinding::Storage,
                 Lifetime::Frame,
                 MemoryMapping::Mapped,
                 1024,
             );
-            cmds.begin();
+            cmds.begin(Default::default(), None);
             cmds.copy_buffer(
                 buf.buffer(),
                 buf.buffer(),
@@ -994,7 +959,7 @@ mod tests {
         unsafe {
             let vars = TestVars::new();
             let (resources, mut pool) = copy_common(&vars);
-            let mut cmds = CmdBuffer::new(&mut pool);
+            let mut cmds = CmdBuffer::new(&mut pool, CmdBufferLevel::PRIMARY);
             let format = Format::RGBA8;
             let src = resources.buffer_heap.alloc(
                 BufferBinding::Storage,
@@ -1012,7 +977,7 @@ mod tests {
                 1,
                 1,
             ));
-            cmds.begin();
+            cmds.begin(Default::default(), None);
             cmds.copy_buffer_to_image(
                 src.buffer(),
                 &dst,

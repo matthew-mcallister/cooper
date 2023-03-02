@@ -223,6 +223,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitflags",
+ "chalice-base",
  "chalice-device",
  "chalice-spirv",
  "derivative",

@@ -280,8 +280,8 @@ mod tests {
         let mut pool = CmdPool::new_transient(queue.family());
 
         let make_cmds = |pool: &mut CmdPool| {
-            let mut cmds = CmdBuffer::new(pool);
-            cmds.begin();
+            let mut cmds = CmdBuffer::new(pool, vk::CommandBufferLevel::PRIMARY);
+            cmds.begin(Default::default(), None);
             cmds.end()
         };
         let mut semaphore = TimelineSemaphore::new(Arc::clone(vars.device()), 0);

@@ -347,7 +347,7 @@ impl TrivialRenderer {
     }
 
     pub(crate) fn render(&self, pipelines: &PipelineCache, cmds: &mut CmdBuffer) {
-        cmds.begin();
+        assert_eq!(cmds.state(), CmdBufferState::Recording);
 
         let mut desc = GraphicsPipelineDesc::new(cmds.subpass().unwrap().clone());
         self.init_pipe_desc(&mut desc);
