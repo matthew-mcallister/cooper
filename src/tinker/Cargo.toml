@@ -1,5 +1,5 @@
 [package]
-name = "chalice-examples"
+name = "tinker"
 version = "0.1.0"
 authors = ["Matthew McAllister <matthew.mcallister.0@gmail.com>"]
 edition = "2018"
@@ -11,12 +11,8 @@ device = { path = "../chalice_device", package = "chalice-device" }
 engine = { path = "../chalice_engine", package = "chalice-engine" }
 env_logger = "0.10.0"
 smallvec = "1.10.0"
-tinker = { path = "../tinker" }
 winit = "0.28.1"
 
 [dependencies.vk]
 git = "https://github.com/matthew-mcallister/vk-ffi"
 package = "vulkan-headers"
-
-[[bin]]
-name = "triangle"

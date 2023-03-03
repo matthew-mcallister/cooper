@@ -4,6 +4,7 @@ members = [
     "src/chalice_device",
     "src/chalice_examples",
     "src/chalice_spirv",
+    "src/tinker",
     "src/tinker_math",
 ]
 

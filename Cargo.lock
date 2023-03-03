@@ -249,6 +249,7 @@ dependencies = [
  "chalice-engine",
  "env_logger 0.10.0",
  "smallvec 1.10.0",
+ "tinker",
  "vulkan-headers",
  "winit",
 ]
@@ -1288,6 +1289,19 @@ dependencies = [
  "proc-macro2 1.0.51",
  "quote 1.0.23",
  "syn 1.0.107",
+]
+
+[[package]]
+name = "tinker"
+version = "0.1.0"
+dependencies = [
+ "chalice-base",
+ "chalice-device",
+ "chalice-engine",
+ "env_logger 0.10.0",
+ "smallvec 1.10.0",
+ "vulkan-headers",
+ "winit",
 ]
 
 [[package]]
