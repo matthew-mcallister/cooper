@@ -22,7 +22,6 @@ pub struct Tinker {
     tick: u64,
     graphics_queue: Arc<device::Queue>,
     transfer_queue: Arc<device::Queue>,
-    sw_index: u32,
     // Semaphore which presentation waits on
     backbuffer_semaphore: device::BinarySemaphore,
     // Single semaphore for keeping track of rendering completion
@@ -45,7 +44,6 @@ impl Tinker {
             tick: 0,
             graphics_queue: Arc::clone(&queue),
             transfer_queue: queue,
-            sw_index: 0,
             backbuffer_semaphore: device::BinarySemaphore::new(engine.device_ref()),
             frame_semaphore: device::TimelineSemaphore::new(engine.device_ref(), 0),
             engine,
@@ -64,16 +62,12 @@ impl Tinker {
         &mut self.engine
     }
 
-    pub fn swapchain_image(&self) -> &Arc<device::SwapchainView> {
-        &self.engine.swapchain().views()[self.sw_index as usize]
-    }
-
     pub fn graphics_queue(&self) -> &Arc<device::Queue> {
         &self.graphics_queue
     }
 
     pub fn transfer_queue(&self) -> &Arc<device::Queue> {
-        &&self.transfer_queue
+        &self.transfer_queue
     }
 
     pub fn poll(&self) -> Option<Event> {
@@ -89,17 +83,11 @@ impl Tinker {
         self.tick += 1;
         self.engine.new_frame();
         unsafe { self.engine.reclaim_transient_resources() };
-        self.sw_index = self.engine.acquire_next_image().unwrap();
+        self.engine.acquire_next_image().unwrap();
     }
 
-    pub unsafe fn present(&mut self) {
-        unsafe {
-            self.graphics_queue.present(
-                &[&mut self.backbuffer_semaphore],
-                self.engine.swapchain_mut(),
-                self.sw_index,
-            );
-        }
+    pub fn present(&mut self) {
+        self.engine.present(&[&mut self.backbuffer_semaphore]);
     }
 
     pub fn submit_commands(&mut self, commands: &[vk::CommandBuffer]) {
@@ -149,7 +137,7 @@ pub fn run_app<A: App>(shader_dir: &Path) {
         unsafe { tinker.new_frame() };
         let cmds = app.frame(&mut tinker);
         tinker.submit_commands(&cmds[..]);
-        unsafe { tinker.present() };
+        tinker.present();
         if let Some(Event::Close) = tinker.poll() {
             tinker.device().wait_idle();
             break;

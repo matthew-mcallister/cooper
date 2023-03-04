@@ -95,7 +95,7 @@ fn begin_render_pass(
     cmds: &mut device::CmdBuffer,
 ) {
     let attachments: [device::AttachmentImage; 1] = [
-        Arc::clone(tinker.swapchain_image()).into(),
+        Arc::clone(tinker.engine().swapchain_image()).into(),
         //Arc::clone(&state.attachments[0]).into(),
         //Arc::clone(&state.attachments[1]).into(),
     ];

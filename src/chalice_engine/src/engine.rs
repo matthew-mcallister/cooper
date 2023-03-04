@@ -6,14 +6,15 @@ use std::sync::Arc;
 use device::DeviceResult;
 use log::{debug, info};
 
-use crate::commands::with_command_buffer;
 use crate::*;
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Engine {
     queues: Vec<Vec<Arc<device::Queue>>>,
+    graphics_queue: Arc<device::Queue>,
     swapchain: device::Swapchain,
+    swapchain_index: u32,
     acquire_semaphore: device::BinarySemaphore,
     image_heap: device::ImageHeap,
     framebuffers: FramebufferCache,
@@ -34,8 +35,10 @@ impl Engine {
         let (swapchain, queues) = device::init_device_and_swapchain(app_info, window)?;
         let device = swapchain.device();
         Ok(Self {
+            graphics_queue: Arc::clone(&queues[0][0]),
             queues,
             image_heap: device::ImageHeap::new(Arc::clone(device)),
+            swapchain_index: 0,
             acquire_semaphore: device::BinarySemaphore::new(Arc::clone(device)),
             framebuffers: Default::default(),
             shaders: Default::default(),
@@ -57,10 +60,27 @@ impl Engine {
         &mut self.swapchain
     }
 
+    pub fn swapchain_index(&self) -> u32 {
+        self.swapchain_index
+    }
+
+    pub fn swapchain_image(&self) -> &Arc<device::SwapchainView> {
+        &self.swapchain().views()[self.swapchain_index as usize]
+    }
+
     pub fn acquire_next_image(&mut self) -> DeviceResult<u32> {
-        Ok(self
+        let index = self
             .swapchain
-            .acquire_next_image(&mut self.acquire_semaphore)?)
+            .acquire_next_image(&mut self.acquire_semaphore)?;
+        self.swapchain_index = index;
+        Ok(index)
+    }
+
+    pub fn present(&mut self, wait_semaphores: &[&mut device::BinarySemaphore]) {
+        unsafe {
+            self.graphics_queue
+                .present(wait_semaphores, &mut self.swapchain, self.swapchain_index);
+        }
     }
 
     pub fn acquire_semaphore_mut(&mut self) -> &mut device::BinarySemaphore {
@@ -151,6 +171,6 @@ impl Engine {
         queue_family: u32,
         f: impl FnOnce(device::CmdBuffer<'_>) -> R,
     ) -> R {
-        with_command_buffer(self, level, queue_family, f)
+        commands::with_command_buffer(self, level, queue_family, f)
     }
 }
