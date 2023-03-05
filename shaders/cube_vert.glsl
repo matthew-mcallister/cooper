@@ -3,7 +3,6 @@
 
 layout(set = 0, binding = 0) uniform blk_uniforms {
     mat4 u_mvp;
-    float u_time;
 };
 
 layout(location = 0) in vec3 in_pos;

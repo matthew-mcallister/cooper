@@ -83,7 +83,6 @@ const VERTEX_DATA: &'static [[f32; 3]] = &[
 #[derive(Clone, Copy, Debug, Default)]
 struct Uniforms {
     projection: math::Matrix4,
-    time: f32,
 }
 
 // Creates a memory mapped(!) index and vertex buffer, as well as a
@@ -113,7 +112,7 @@ fn create_buffers(
         device::BufferBinding::Uniform,
         device::Lifetime::Static,
         device::MemoryMapping::Mapped,
-        (VERTEX_DATA.len() * std::mem::size_of::<[f32; 3]>()) as vk::DeviceSize,
+        std::mem::size_of::<Uniforms>() as vk::DeviceSize,
     );
     let uniform_buffer = device::BufferBox::from_val(uniform_alloc, Default::default());
     (index_buffer, vertex_buffer, uniform_buffer)
@@ -123,19 +122,14 @@ fn create_descriptor_set(
     engine: &Engine,
     uniforms: &device::BufferBox<Uniforms>,
 ) -> device::DescriptorSet {
-    let desc = device::DescriptorSetLayoutDesc {
-        bindings: smallvec![device::DescriptorSetLayoutBinding {
-            binding: 0,
-            ty: device::DescriptorType::UniformBuffer,
-            ..Default::default()
-        }],
-    };
-    let layout = Arc::new(device::DescriptorSetLayout::new(engine.device_ref(), desc));
-    let mut set = engine
-        .descriptor_heap()
-        .alloc(device::Lifetime::Static, &layout);
-    set.write_buffer(0, device::BufferBox::range(uniforms));
-    set
+    engine.create_descriptor_set(
+        device::Lifetime::Static,
+        Some("globals"),
+        &[engine::DescriptorResource::UniformBuffer(
+            device::BufferBox::range(uniforms),
+            vk::ShaderStageFlags::ALL,
+        )],
+    )
 }
 
 fn update_uniforms(tinker: &Tinker, uniforms: &mut device::BufferBox<Uniforms>) {
@@ -151,7 +145,6 @@ fn update_uniforms(tinker: &Tinker, uniforms: &mut device::BufferBox<Uniforms>) 
     let view = view.translate(-pos);
     let proj = tinker.perspective(0.01, 100.0, 45.0);
     uniforms.projection = proj * view * model;
-    uniforms.time = tinker.elapsed_time();
 }
 
 fn record(app: &CubeApp, tinker: &Tinker) -> vk::CommandBuffer {

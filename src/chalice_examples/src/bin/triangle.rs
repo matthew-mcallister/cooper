@@ -1,6 +1,5 @@
 //! An extremely minimal Vulkan application
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use base::partial_map;
@@ -10,41 +9,11 @@ use tinker::Tinker;
 
 #[derive(Debug)]
 struct TriangleApp {
-    render_passes: HashMap<String, Arc<device::RenderPass>>,
-    attachments: HashMap<String, Arc<device::ImageView>>,
+    render_pass: Arc<device::RenderPass>,
 }
 
-fn create_attachments(engine: &Engine) -> HashMap<String, Arc<device::ImageView>> {
-    let images = engine::create_framebuffer_images(
-        engine,
-        &[
-            engine::FramebufferImageInfo {
-                flags: device::ImageFlags::COLOR_ATTACHMENT | device::ImageFlags::INPUT_ATTACHMENT,
-                format: device::Format::RGBA8,
-                samples: device::SampleCount::One,
-                name: Some("gbuffer"),
-            },
-            engine::FramebufferImageInfo {
-                flags: device::ImageFlags::DEPTH_STENCIL_ATTACHMENT
-                    | device::ImageFlags::INPUT_ATTACHMENT,
-                format: device::Format::D24_S8,
-                samples: device::SampleCount::One,
-                name: Some("depth_stencil"),
-            },
-        ],
-    );
-    let images: Vec<_> = images
-        .into_iter()
-        .map(|img| img.create_full_view())
-        .collect();
-    HashMap::from([
-        ("gbuffer".to_owned(), Arc::clone(&images[0])),
-        ("depth_stencil".to_owned(), Arc::clone(&images[1])),
-    ])
-}
-
-fn create_render_passes(engine: &Engine) -> HashMap<String, Arc<device::RenderPass>> {
-    let main = unsafe {
+fn create_render_pass(engine: &Engine) -> Arc<device::RenderPass> {
+    unsafe {
         device::RenderPass::new(
             engine.device_ref(),
             vec![device::AttachmentDescription {
@@ -74,12 +43,11 @@ fn create_render_passes(engine: &Engine) -> HashMap<String, Arc<device::RenderPa
                 ..Default::default()
             }],
         )
-    };
-    HashMap::from([("main".to_owned(), main)])
+    }
 }
 
 fn record(app: &TriangleApp, tinker: &Tinker) -> vk::CommandBuffer {
-    let render_pass = &app.render_passes["main"];
+    let render_pass = &app.render_pass;
     let level = vk::CommandBufferLevel::PRIMARY;
     let family = tinker.graphics_queue().family().index();
     tinker
@@ -97,11 +65,8 @@ fn begin_render_pass(
     render_pass: &Arc<device::RenderPass>,
     cmds: &mut device::CmdBuffer,
 ) {
-    let attachments: [device::AttachmentImage; 1] = [
-        Arc::clone(tinker.engine().swapchain_image()).into(),
-        //Arc::clone(&state.attachments[0]).into(),
-        //Arc::clone(&state.attachments[1]).into(),
-    ];
+    let attachments: [device::AttachmentImage; 1] =
+        [Arc::clone(tinker.engine().swapchain_image()).into()];
     tinker.engine().begin_render_pass(
         cmds,
         render_pass,
@@ -157,8 +122,7 @@ impl tinker::App for TriangleApp {
 
     fn init(tinker: &mut Tinker) -> Self {
         TriangleApp {
-            render_passes: create_render_passes(tinker.engine()),
-            attachments: create_attachments(tinker.engine()),
+            render_pass: create_render_pass(tinker.engine()),
         }
     }
 

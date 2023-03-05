@@ -194,4 +194,19 @@ impl Engine {
     pub fn descriptor_heap(&self) -> &Arc<device::DescriptorHeap> {
         &self.descriptor_heap
     }
+
+    pub fn create_descriptor_set<'r>(
+        &self,
+        lifetime: device::Lifetime,
+        name: Option<impl Into<String>>,
+        resources: &[DescriptorResource<'r>],
+    ) -> device::DescriptorSet {
+        create_descriptor_set(
+            &self.set_layouts,
+            &self.descriptor_heap,
+            lifetime,
+            name.map(Into::into),
+            resources,
+        )
+    }
 }
