@@ -25,7 +25,7 @@ pub struct DescriptorSetLayoutDesc {
     pub bindings: SmallVec<SetLayoutBinding, 4>,
 }
 
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DescriptorSetLayoutBinding {
     pub binding: u32,
     pub ty: DescriptorType,
@@ -39,6 +39,18 @@ impl Drop for Layout {
         let dt = &*self.device.table;
         unsafe {
             dt.destroy_descriptor_set_layout(self.inner, ptr::null());
+        }
+    }
+}
+
+impl Default for DescriptorSetLayoutBinding {
+    fn default() -> Self {
+        Self {
+            binding: 0,
+            ty: Default::default(),
+            count: 1,
+            stage_flags: vk::ShaderStageFlags::ALL,
+            samplers: None,
         }
     }
 }

@@ -250,6 +250,7 @@ dependencies = [
  "env_logger 0.10.0",
  "smallvec 1.10.0",
  "tinker",
+ "tinker-math",
  "vulkan-headers",
  "winit",
 ]
@@ -1300,6 +1301,7 @@ dependencies = [
  "chalice-engine",
  "env_logger 0.10.0",
  "smallvec 1.10.0",
+ "tinker-math",
  "vulkan-headers",
  "winit",
 ]

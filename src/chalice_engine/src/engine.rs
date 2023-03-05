@@ -16,13 +16,16 @@ pub struct Engine {
     swapchain: device::Swapchain,
     swapchain_index: u32,
     acquire_semaphore: device::BinarySemaphore,
+    buffer_heap: Arc<device::BufferHeap>,
     image_heap: device::ImageHeap,
     framebuffers: FramebufferCache,
     shaders: HashMap<String, Arc<device::Shader>>,
-    pipelines: device::PipelineCache,
     pub(crate) cache_key: u64,
+    pipelines: device::PipelineCache,
+    set_layouts: device::DescriptorSetLayoutCache,
+    descriptor_heap: Arc<device::DescriptorHeap>,
     // TODO: Staging buffer and (optional) upload queue
-    // TODO?: image/(vertex) buffer caching system with garbage
+    // TODO?: image/(vertex) buffer memory management with garbage
     // collection. Possibly out of scope but solves a basic problem
     // while also ensuring images aren't deleted before frame is over.
 }
@@ -37,13 +40,16 @@ impl Engine {
         Ok(Self {
             graphics_queue: Arc::clone(&queues[0][0]),
             queues,
+            buffer_heap: device::BufferHeap::new(Arc::clone(device)),
             image_heap: device::ImageHeap::new(Arc::clone(device)),
             swapchain_index: 0,
             acquire_semaphore: device::BinarySemaphore::new(Arc::clone(device)),
             framebuffers: Default::default(),
             shaders: Default::default(),
-            pipelines: device::PipelineCache::new(device),
             cache_key: 0,
+            pipelines: device::PipelineCache::new(device),
+            set_layouts: device::DescriptorSetLayoutCache::new(Arc::clone(device)),
+            descriptor_heap: Arc::new(device::DescriptorHeap::new(device)),
             swapchain,
         })
     }
@@ -110,10 +116,13 @@ impl Engine {
     /// Does top-of-frame housekeeping.
     pub fn new_frame(&mut self) {
         self.pipelines.commit();
+        self.set_layouts.commit();
     }
 
     pub unsafe fn reclaim_transient_resources(&mut self) {
         self.cache_key += 1;
+        self.buffer_heap.clear_frame();
+        self.descriptor_heap.clear_frame();
     }
 
     /// Begins a render pass but creates the framebuffer for you lazily.
@@ -172,5 +181,17 @@ impl Engine {
         f: impl FnOnce(device::CmdBuffer<'_>) -> R,
     ) -> R {
         commands::with_command_buffer(self, level, queue_family, f)
+    }
+
+    pub fn buffer_heap(&self) -> &Arc<device::BufferHeap> {
+        &self.buffer_heap
+    }
+
+    pub fn descriptor_set_layouts(&self) -> &device::DescriptorSetLayoutCache {
+        &self.set_layouts
+    }
+
+    pub fn descriptor_heap(&self) -> &Arc<device::DescriptorHeap> {
+        &self.descriptor_heap
     }
 }

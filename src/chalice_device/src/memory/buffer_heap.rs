@@ -9,6 +9,7 @@ use super::*;
 #[derive(Debug)]
 pub struct BufferHeap {
     // TODO: Mutex individual pools instead of the whole heap.
+    // TODO: Probably move this to the engine crate.
     inner: Mutex<BufferHeapInner>,
 }
 
@@ -185,7 +186,7 @@ impl<A: Allocator> BufferHeapEntry<A> {
         // We must call GetBufferMemoryRequirements to find out which
         // memory type index we will use. Thus, we pre-allocate a chunk
         // of memory to infer if we're on UMA.
-        // TODO: Free memory afterward?
+        // TODO: Delete buffer instead of allocating?
         mapped_pool.add_chunk(1);
         let flags = mapped_pool.chunks.first().unwrap().memory().flags();
         let device_local = vk::MemoryPropertyFlags::DEVICE_LOCAL_BIT;

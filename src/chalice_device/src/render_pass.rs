@@ -64,14 +64,11 @@ pub struct Subpass {
 
 #[derive(Debug, Default)]
 pub struct SubpassDesc {
-    // TODO: Name subpasses?
-    // TODO: Shouldn't require specifiying a layout
-    pub layouts: Vec<vk::ImageLayout>,
-    pub input_attchs: Vec<u32>,
-    pub color_attchs: Vec<u32>,
-    pub resolve_attchs: Vec<u32>,
+    pub input_attchs: Vec<vk::AttachmentReference>,
+    pub color_attchs: Vec<vk::AttachmentReference>,
+    pub resolve_attchs: Vec<vk::AttachmentReference>,
     pub preserve_attchs: Vec<u32>,
-    pub depth_stencil_attch: Option<u32>,
+    pub depth_stencil_attch: Option<vk::AttachmentReference>,
 }
 
 impl Drop for RenderPass {
@@ -210,117 +207,89 @@ impl From<AttachmentDescription> for vk::AttachmentDescription {
     }
 }
 
+impl SubpassDesc {
+    /// Compact helper for shortening subpass descriptions.
+    pub fn new(
+        layouts: Vec<vk::ImageLayout>,
+        input_attchs: Vec<u32>,
+        color_attchs: Vec<u32>,
+        resolve_attchs: Vec<u32>,
+        preserve_attchs: Vec<u32>,
+        depth_stencil_attch: Option<u32>,
+    ) -> Self {
+        let attch = |idx| vk::AttachmentReference {
+            layout: layouts[idx as usize],
+            attachment: idx,
+        };
+        let to_refs = |attchs: Vec<u32>| attchs.into_iter().map(attch).collect();
+        Self {
+            input_attchs: to_refs(input_attchs),
+            color_attchs: to_refs(color_attchs),
+            resolve_attchs: to_refs(resolve_attchs),
+            preserve_attchs: preserve_attchs,
+            depth_stencil_attch: depth_stencil_attch.map(attch),
+        }
+    }
+}
+
 fn subpass_samples(attachments: &[AttachmentDescription], desc: &SubpassDesc) -> SampleCount {
-    let idx = desc
+    let attch = desc
         .color_attchs
         .first()
         .or(desc.input_attchs.first())
         .or(desc.depth_stencil_attch.as_ref());
-    tryopt! { return attachments[*idx? as usize].samples; };
-    SampleCount::One
+    if let Some(attch) = attch {
+        attachments[attch.attachment as usize].samples
+    } else {
+        SampleCount::One
+    }
 }
 
 fn subpass_state(attachments: &[AttachmentDescription], desc: SubpassDesc) -> SubpassState {
-    let attch = |idx: u32| vk::AttachmentReference {
-        attachment: idx,
-        layout: desc.layouts[idx as usize],
-    };
-    macro_rules! attchs {
-        ($iter:expr) => {
-            $iter.map(|&idx| attch(idx))
-        };
-    }
-
-    validate_subpass(attachments, &desc);
-
     let samples = subpass_samples(attachments, &desc);
-
-    let input_attchs: Vec<_> = attchs!(desc.input_attchs.iter()).collect();
-    let color_attchs: Vec<_> = attchs!(desc.color_attchs.iter()).collect();
-    let depth_stencil_attch = desc.depth_stencil_attch.map(attch);
-    let resolve_attchs: Vec<_> = attchs!(desc.resolve_attchs.iter()).collect();
-
     SubpassState {
-        input_attchs,
-        color_attchs,
-        resolve_attchs,
+        input_attchs: desc.input_attchs,
+        color_attchs: desc.color_attchs,
+        resolve_attchs: desc.resolve_attchs,
         preserve_attchs: desc.preserve_attchs,
-        depth_stencil_attch,
+        depth_stencil_attch: desc.depth_stencil_attch,
         samples,
     }
 }
 
-fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassDesc) {
+fn validate_subpass(attachments: &[AttachmentDescription], desc: &SubpassState) {
     let get = |idx: u32| &attachments[idx as usize];
 
-    assert_eq!(desc.layouts.len(), attachments.len());
-
-    // Sample count
-    let samples = subpass_samples(attachments, desc);
-    for &idx in desc
+    // Attachments must have the same sample count
+    for attch in desc
         .color_attchs
         .iter()
         .chain(desc.input_attchs.iter())
         .chain(desc.depth_stencil_attch.iter())
     {
-        assert_eq!(get(idx).samples, samples);
+        assert_eq!(get(attch.attachment).samples, desc.samples);
     }
 
-    // Disallow unused references except as resolve attachments
-    for &idx in desc
-        .color_attchs
-        .iter()
-        .chain(desc.input_attchs.iter())
-        .chain(desc.preserve_attchs.iter())
-        .chain(desc.depth_stencil_attch.iter())
-    {
-        assert_ne!(idx, vk::ATTACHMENT_UNUSED);
-    }
-
-    // Disallow multiple attachment use. This is sometimes allowed
-    // (e.g. input feedback) but not really desired.
-    let mut counts = vec![0u32; attachments.len()];
-    for &idx in desc
-        .color_attchs
-        .iter()
-        .chain(desc.input_attchs.iter())
-        .chain(desc.preserve_attchs.iter())
-        .chain(desc.depth_stencil_attch.iter())
-        .chain(desc.resolve_attchs.iter())
-        .filter(|&&idx| idx != vk::ATTACHMENT_UNUSED)
-    {
-        counts[idx as usize] += 1;
-    }
-    for (i, count) in counts.into_iter().enumerate() {
-        assert!(count <= 1, "[{}] = {}", i, count);
-    }
-
-    // Validate sample counts
-    let samples = subpass_samples(attachments, desc);
-    for &idx in desc
-        .color_attchs
-        .iter()
-        .chain(desc.input_attchs.iter())
-        .chain(desc.depth_stencil_attch.iter())
-    {
-        assert_eq!(get(idx).samples, samples);
-    }
-
-    // Resolve attachments
+    // Resolve attachments have one sample and correct format
     if !desc.resolve_attchs.is_empty() {
         assert_eq!(desc.color_attchs.len(), desc.resolve_attchs.len());
-        for (src, &dst) in desc.resolve_attchs.iter().enumerate() {
-            assert_eq!(get(dst).samples, SampleCount::One);
-            assert_eq!(get(src as _).format, get(dst).format)
+        for (src, &dst) in desc
+            .resolve_attchs
+            .iter()
+            .filter(|attch| attch.attachment != vk::ATTACHMENT_UNUSED)
+            .enumerate()
+        {
+            assert_eq!(get(dst.attachment).samples, SampleCount::One);
+            assert_eq!(get(src as _).format, get(dst.attachment).format)
         }
     }
 
-    // Formats
-    for &idx in desc.color_attchs.iter() {
-        assert!(!get(idx).format.is_depth_stencil());
+    // Formats are compatible with usage
+    for attch in desc.color_attchs.iter() {
+        assert!(!get(attch.attachment).format.is_depth_stencil());
     }
-    if let Some(idx) = desc.depth_stencil_attch {
-        assert!(get(idx).format.is_depth_stencil());
+    if let Some(attch) = desc.depth_stencil_attch {
+        assert!(get(attch.attachment).format.is_depth_stencil());
     }
 }
 
@@ -353,6 +322,9 @@ unsafe fn create_render_pass(
         .into_iter()
         .map(|desc| subpass_state(&attachments, desc))
         .collect();
+    for sub in subpasses.iter() {
+        validate_subpass(&attachments, sub);
+    }
     let vk_subpasses: Vec<_> = subpasses
         .iter()
         .map(|subpass| vk::SubpassDescription {
@@ -443,44 +415,50 @@ pub fn create_test_pass(device: &Arc<Device>) -> Arc<RenderPass> {
             ],
             vec![
                 // G-buffer pass
-                SubpassDesc {
-                    layouts: vec![
+                SubpassDesc::new(
+                    vec![
                         Il::UNDEFINED,
                         Il::UNDEFINED,
                         Il::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                         Il::COLOR_ATTACHMENT_OPTIMAL,
                         Il::COLOR_ATTACHMENT_OPTIMAL,
                     ],
-                    color_attchs: vec![3, 4],
-                    depth_stencil_attch: Some(2),
-                    ..Default::default()
-                },
+                    vec![],
+                    vec![3, 4],
+                    vec![],
+                    vec![],
+                    Some(2),
+                ),
                 // Lighting pass
-                SubpassDesc {
-                    layouts: vec![
+                SubpassDesc::new(
+                    vec![
                         Il::UNDEFINED,
                         Il::COLOR_ATTACHMENT_OPTIMAL,
                         Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
                         Il::SHADER_READ_ONLY_OPTIMAL,
                         Il::SHADER_READ_ONLY_OPTIMAL,
                     ],
-                    color_attchs: vec![1],
-                    input_attchs: vec![2, 3, 4],
-                    ..Default::default()
-                },
+                    vec![2, 3, 4],
+                    vec![1],
+                    vec![],
+                    vec![],
+                    None,
+                ),
                 // Tonemapping
-                SubpassDesc {
-                    layouts: vec![
+                SubpassDesc::new(
+                    vec![
                         Il::COLOR_ATTACHMENT_OPTIMAL,
                         Il::SHADER_READ_ONLY_OPTIMAL,
                         Il::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
                         Il::SHADER_READ_ONLY_OPTIMAL,
                         Il::SHADER_READ_ONLY_OPTIMAL,
                     ],
-                    color_attchs: vec![0],
-                    input_attchs: vec![1],
-                    ..Default::default()
-                },
+                    vec![1],
+                    vec![0],
+                    vec![],
+                    vec![],
+                    None,
+                ),
             ],
             vec![
                 // Image layout transition barrier; see Vulkan

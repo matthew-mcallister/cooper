@@ -7,6 +7,7 @@ use std::thread;
 
 use device::{AppInfo, Device};
 use engine::Engine;
+use winit::window::Window;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Event {
@@ -17,8 +18,10 @@ pub enum Event {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Tinker {
+    window: Window,
     engine: Engine,
     receiver: Receiver<Event>,
+    start_time: std::time::Instant,
     tick: u64,
     graphics_queue: Arc<device::Queue>,
     transfer_queue: Arc<device::Queue>,
@@ -37,10 +40,12 @@ pub trait App: Send + 'static {
 }
 
 impl Tinker {
-    fn new(engine: Engine, receiver: Receiver<Event>) -> Self {
+    fn new(window: Window, engine: Engine, receiver: Receiver<Event>) -> Self {
         let queue = Arc::clone(&engine.queues()[0][0]);
         Self {
+            window,
             receiver,
+            start_time: std::time::Instant::now(),
             tick: 0,
             graphics_queue: Arc::clone(&queue),
             transfer_queue: queue,
@@ -112,6 +117,25 @@ impl Tinker {
             }]);
         }
     }
+
+    pub fn start_time(&self) -> std::time::Instant {
+        self.start_time
+    }
+
+    pub fn elapsed_time(&self) -> f32 {
+        (std::time::Instant::now() - self.start_time).as_secs_f32()
+    }
+
+    pub fn aspect_ratio(&self) -> f32 {
+        let winit::dpi::PhysicalSize { width, height } = self.window.inner_size();
+        width as f32 / height as f32
+    }
+
+    pub fn perspective(&self, z_near: f32, z_far: f32, fov_y_deg: f32) -> math::Matrix4 {
+        let tan_y = fov_y_deg.to_radians().tan();
+        let tan_x = tan_y * self.aspect_ratio();
+        math::Matrix4::perspective(z_near, z_far, tan_x, tan_y)
+    }
 }
 
 pub fn run_app<A: App>(shader_dir: &Path) {
@@ -131,7 +155,7 @@ pub fn run_app<A: App>(shader_dir: &Path) {
     engine.load_shaders_from_dir(shader_dir).unwrap();
 
     let (sender, receiver) = channel();
-    let mut tinker = Tinker::new(engine, receiver);
+    let mut tinker = Tinker::new(window, engine, receiver);
     let mut app = A::init(&mut tinker);
     let mut j = Some(thread::spawn(move || loop {
         unsafe { tinker.new_frame() };
@@ -140,12 +164,18 @@ pub fn run_app<A: App>(shader_dir: &Path) {
         tinker.present();
         if let Some(Event::Close) = tinker.poll() {
             tinker.device().wait_idle();
+            std::mem::drop(app);
             break;
         }
     }));
 
     event_loop.run(move |event, _, control_flow| {
-        control_flow.set_poll();
+        // Basically only need to poll in case the other thread dies.
+        control_flow.set_wait_timeout(std::time::Duration::from_millis(20));
+        if j.as_ref().map_or(true, |j| j.is_finished()) {
+            control_flow.set_exit();
+            return;
+        }
         match event {
             winit::event::Event::WindowEvent {
                 event: winit::event::WindowEvent::CloseRequested,

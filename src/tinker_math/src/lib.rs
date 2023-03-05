@@ -1,7 +1,4 @@
-#![feature(
-    maybe_uninit_uninit_array,
-    trait_alias,
-)]
+#![feature(maybe_uninit_uninit_array, trait_alias)]
 #![allow(incomplete_features)]
 
 use std::ops::*;
@@ -30,11 +27,14 @@ pub enum InfSupResult<T> {
 
 pub trait InfSup<A = Self>: Sized {
     fn inf<I>(iter: I) -> Option<Self>
-        where I: Iterator<Item = A>;
+    where
+        I: Iterator<Item = A>;
     fn sup<I>(iter: I) -> Option<Self>
-        where I: Iterator<Item = A>;
+    where
+        I: Iterator<Item = A>;
     fn inf_sup<I>(iter: I) -> InfSupResult<Self>
-        where I: Iterator<Item = A>;
+    where
+        I: Iterator<Item = A>;
 }
 
 pub trait MathItertools: Iterator {
@@ -57,8 +57,7 @@ impl<I: Iterator> MathItertools for I {
     }
 }
 
-pub trait VectorOps<F>
-    = Sized
+pub trait VectorOps<F> = Sized
     + Neg<Output = Self>
     + Add<Self, Output = Self>
     + AddAssign<Self>
@@ -71,5 +70,4 @@ pub trait VectorOps<F>
     + Div<Self, Output = Self>
     + DivAssign<Self>
     + Div<F, Output = Self>
-    + DivAssign<F>
-    ;
+    + DivAssign<F>;

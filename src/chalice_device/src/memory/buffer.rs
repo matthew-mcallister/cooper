@@ -5,8 +5,8 @@ use std::sync::{Arc, Weak};
 use bitflags::bitflags;
 use enum_map::Enum;
 
-use crate::util::as_uninit_slice;
 use super::*;
+use crate::util::as_uninit_slice;
 
 #[derive(Clone, Debug)]
 pub struct DeviceBuffer {
@@ -91,7 +91,9 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
 impl Drop for DeviceBuffer {
     fn drop(&mut self) {
         let dt = self.device().table();
-        unsafe { dt.destroy_buffer(self.inner, ptr::null()); }
+        unsafe {
+            dt.destroy_buffer(self.inner, ptr::null());
+        }
     }
 }
 
@@ -102,8 +104,14 @@ fn create_buffer(
     mapping: MemoryMapping,
     lifetime: Lifetime,
 ) -> DeviceBuffer {
-    trace!("create_buffer({:?}, {:?}, {:?}, {:?}, {:?})",
-        device, size, usage, mapping, lifetime);
+    trace!(
+        "create_buffer({:?}, {:?}, {:?}, {:?}, {:?})",
+        device,
+        size,
+        usage,
+        mapping,
+        lifetime
+    );
 
     let dt = device.table();
 
@@ -115,21 +123,15 @@ fn create_buffer(
     let mut buffer = vk::null();
     unsafe {
         dt.create_buffer(&create_info, ptr::null(), &mut buffer)
-            .check().unwrap();
+            .check()
+            .unwrap();
     }
 
-    let (reqs, dedicated_reqs) = unsafe {
-        get_buffer_memory_reqs(&device, buffer)
-    };
+    let (reqs, dedicated_reqs) = unsafe { get_buffer_memory_reqs(&device, buffer) };
     let content = (dedicated_reqs.prefers_dedicated_allocation == vk::TRUE)
         .then_some(DedicatedAllocContent::Buffer(buffer));
-    let mut memory = unsafe { alloc_resource_memory(
-        device,
-        mapping,
-        &reqs,
-        content,
-        Tiling::Linear,
-    ) };
+    let mut memory =
+        unsafe { alloc_resource_memory(device, mapping, &reqs, content, Tiling::Linear) };
     memory.lifetime = lifetime;
 
     let mut buffer = DeviceBuffer {
@@ -140,7 +142,9 @@ fn create_buffer(
         heap: Weak::new(),
         name: None,
     };
-    unsafe { buffer.bind(); }
+    unsafe {
+        buffer.bind();
+    }
 
     buffer
 }
@@ -212,7 +216,9 @@ impl DeviceBuffer {
     pub fn set_name(&mut self, name: impl Into<String>) {
         let name: String = name.into();
         self.name = Some(name.clone());
-        unsafe { self.device().set_name(self.inner(), name); }
+        unsafe {
+            self.device().set_name(self.inner(), name);
+        }
     }
 }
 
@@ -239,7 +245,9 @@ impl<'a> MemoryRegion for BufferRange<'a> {
 impl Drop for BufferAlloc {
     fn drop(&mut self) {
         if self.buffer.lifetime() == Lifetime::Static {
-            unsafe { Weak::upgrade(&self.buffer.heap).unwrap().free(self); }
+            if let Some(heap) = Weak::upgrade(&self.buffer.heap) {
+                unsafe { heap.free(self) };
+            }
         }
     }
 }
@@ -335,25 +343,34 @@ impl<T: ?Sized> AsRef<BufferAlloc> for BufferBox<T> {
 
 impl<T> BufferBox<MaybeUninit<T>> {
     pub fn new(alloc: BufferAlloc) -> Self {
-        Self { ptr: unsafe { alloc.as_ptr().unwrap() }, alloc }
+        Self {
+            ptr: unsafe { alloc.as_ptr().unwrap() },
+            alloc,
+        }
     }
 
     pub unsafe fn assume_init(self) -> BufferBox<T> {
         BufferBox::<T>::ASSERT;
-        BufferBox { ptr: self.ptr.cast(), alloc: self.alloc }
+        BufferBox {
+            ptr: self.ptr.cast(),
+            alloc: self.alloc,
+        }
     }
 }
 
 impl<T> BufferBox<[MaybeUninit<T>]> {
     pub fn new_slice(alloc: BufferAlloc, len: usize) -> Self {
-        Self { ptr: unsafe { alloc.as_slice_ptr(len).unwrap() }, alloc }
+        Self {
+            ptr: unsafe { alloc.as_slice_ptr(len).unwrap() },
+            alloc,
+        }
     }
 
     pub unsafe fn assume_init_slice(self) -> BufferBox<[T]> {
         BufferBox::<[T]>::ASSERT;
         BufferBox {
             ptr: std::mem::transmute(self.ptr),
-            alloc: self.alloc
+            alloc: self.alloc,
         }
     }
 }
@@ -425,7 +442,6 @@ impl<T: ?Sized> std::ops::Deref for BufferBox<T> {
         unsafe { self.ptr.as_ref() }
     }
 }
-
 
 impl<T: ?Sized> std::ops::DerefMut for BufferBox<T> {
     #[inline(always)]

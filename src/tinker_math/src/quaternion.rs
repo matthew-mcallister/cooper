@@ -30,6 +30,13 @@ impl Quaternion {
         Self([x, y, z, w].into())
     }
 
+    pub fn from_axis_angle(axis: Vector3, angle: f32) -> Self {
+        let mut v = axis.xyz_();
+        v *= angle.sin();
+        v[3] = angle.cos();
+        Self(v)
+    }
+
     #[inline(always)]
     pub fn splat(scalar: f32) -> Self {
         Self(Vector::splat(scalar))

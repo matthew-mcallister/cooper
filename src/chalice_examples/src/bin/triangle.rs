@@ -1,3 +1,5 @@
+//! An extremely minimal Vulkan application
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -54,13 +56,14 @@ fn create_render_passes(engine: &Engine) -> HashMap<String, Arc<device::RenderPa
                 final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
                 ..Default::default()
             }],
-            // FIXME: Holy crap this is just a pointlessly different
-            // version of the Vulkan API that adds nothing useful.
-            vec![device::SubpassDesc {
-                layouts: vec![vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL],
-                color_attchs: vec![0],
-                ..Default::default()
-            }],
+            vec![device::SubpassDesc::new(
+                vec![vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL],
+                vec![],
+                vec![0],
+                vec![],
+                vec![],
+                None,
+            )],
             vec![vk::SubpassDependency {
                 src_subpass: vk::SUBPASS_EXTERNAL,
                 dst_subpass: 0,
@@ -123,10 +126,7 @@ fn draw_triangle(engine: &Engine, cmds: &mut device::CmdBuffer) {
             layout: device::PipelineLayoutDesc {
                 set_layouts: smallvec![],
             },
-            vertex_layout: device::VertexInputLayout {
-                topology: device::PrimitiveTopology::TriangleList,
-                attributes: smallvec![],
-            },
+            vertex_layout: Default::default(),
             stages: partial_map! {
                 device::ShaderStage::Vertex => Arc::new(vert_shader.into()),
                 device::ShaderStage::Fragment => Arc::new(frag_shader.into()),

@@ -423,7 +423,10 @@ impl<'pool> CmdBuffer<'pool> {
     pub fn bind_gfx_descs(&mut self, index: u32, set: &DescriptorSet) {
         self.ensure_recording();
         let bind_point = vk::PipelineBindPoint::GRAPHICS;
-        let pipeline = self.gfx_pipe.as_ref().unwrap();
+        let pipeline = self
+            .gfx_pipe
+            .as_ref()
+            .expect("Must bind pipeline before descriptors");
         let layout = &pipeline.layout();
         assert!(Arc::ptr_eq(
             set.layout(),

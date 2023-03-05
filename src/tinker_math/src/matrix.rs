@@ -195,6 +195,20 @@ where
     }
 }
 
+impl<const M: usize> One for Matrix<M, M>
+where
+    f32: SimdArray<M>,
+{
+    #[inline(always)]
+    fn one() -> Self {
+        let mut m = Self::zero();
+        for i in 0..M {
+            m[i][i] = 1.0;
+        }
+        m
+    }
+}
+
 impl<I, const M: usize, const N: usize> Index<I> for Matrix<M, N>
 where
     f32: SimdArray<M>,
@@ -414,6 +428,21 @@ impl Matrix3 {
         ]
         .into()
     }
+
+    /// Constructs an orientation matrix. The last column will point in
+    /// the given direction. The "down" vector is used to construct the
+    /// other two columns; imagining it as the direction of gravity, the
+    /// first column will point to the right and the second column will
+    /// point towards the down vector.
+    ///
+    /// Both `dir` and `down` must be unit vectors and cannot be
+    /// parallel.
+    #[inline(always)]
+    pub fn orientation(dir: Vector3, down: Vector3) -> Self {
+        let below = (down - dir * dir.dot(down)).normalized();
+        let right = below.cross(dir);
+        Self::new([right, below, dir])
+    }
 }
 
 impl Matrix4 {
@@ -426,6 +455,21 @@ impl Matrix4 {
     #[inline(always)]
     pub fn translation(&self) -> Vector3 {
         self[3].xyz()
+    }
+
+    /// Returns a perspective (frustum) projection matrix with z ranging
+    /// from 0 (near) to +1 (far).
+    #[inline(always)]
+    pub fn perspective(z_near: f32, z_far: f32, tan_x: f32, tan_y: f32) -> Self {
+        let z_r = 1.0 / (z_far - z_near);
+        let z_0 = z_near * z_r;
+        let (t_x, t_y) = (1.0 / tan_x, 1.0 / tan_y);
+        Self::from([
+            [t_x, 0.0, 0.0, 0.0],
+            [0.0, t_y, 0.0, 0.0],
+            [0.0, 0.0, z_r, 1.0],
+            [0.0, 0.0, z_0, 0.0],
+        ])
     }
 }
 

@@ -289,14 +289,11 @@ unsafe fn create_graphics_pipeline(
             .any(|attr| attr.location == location));
     }
 
-    let bindings = vertex_layout.vk_bindings();
-    let attrs = &vertex_layout.vk_attrs();
-
     let vertex_input = vk::PipelineVertexInputStateCreateInfo {
-        vertex_binding_description_count: bindings.len() as _,
-        p_vertex_binding_descriptions: bindings.as_ptr(),
-        vertex_attribute_description_count: attrs.len() as _,
-        p_vertex_attribute_descriptions: attrs.as_ptr(),
+        vertex_binding_description_count: vertex_layout.bindings.len() as _,
+        p_vertex_binding_descriptions: vertex_layout.bindings.as_ptr(),
+        vertex_attribute_description_count: vertex_layout.attributes.len() as _,
+        p_vertex_attribute_descriptions: vertex_layout.attributes.as_ptr(),
         ..Default::default()
     };
 
