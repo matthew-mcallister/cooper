@@ -151,7 +151,7 @@ pub fn run_app<A: App>(shader_dir: &Path) {
         .build(&event_loop)
         .unwrap();
 
-    let mut engine = Engine::from_window(A::app_info(), &window).unwrap();
+    let mut engine = Engine::from_window(A::app_info(), &window, Default::default()).unwrap();
     engine.load_shaders_from_dir(shader_dir).unwrap();
 
     let (sender, receiver) = channel();

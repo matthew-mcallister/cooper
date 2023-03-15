@@ -8,6 +8,8 @@ SHADER_SRC_DIR := shaders
 SHADER_OBJ_DIR := generated/shaders
 
 SHADER_SRC_FILES := \
+    texture_vert.glsl \
+    texture_frag.glsl \
     cube_vert.glsl \
     cube_frag.glsl \
     trivial_vert.glsl \

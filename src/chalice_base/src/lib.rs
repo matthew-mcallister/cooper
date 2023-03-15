@@ -16,3 +16,12 @@ mod partial_enum_map;
 pub use by_ptr::*;
 pub use enum_vec::*;
 pub use partial_enum_map::*;
+
+pub fn slice_to_bytes<T: Copy>(slice: &[T]) -> &[u8] {
+    unsafe {
+        std::slice::from_raw_parts(
+            slice.as_ptr() as *const u8,
+            std::mem::size_of::<T>() * slice.len(),
+        )
+    }
+}

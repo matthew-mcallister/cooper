@@ -263,6 +263,22 @@ impl Image {
         self.def.all_subresources()
     }
 
+    /// Shortcut for defining subresource layers with the aspect
+    /// determined from the image type.
+    #[inline]
+    pub fn subresource_layers(
+        &self,
+        mip_level: u32,
+        base_array_layer: u32,
+        layer_count: u32,
+    ) -> ImageSubresources {
+        ImageSubresources {
+            aspects: self.def.format().aspects(),
+            mip_levels: [mip_level, mip_level + 1],
+            layers: [base_array_layer, base_array_layer + layer_count],
+        }
+    }
+
     #[inline]
     pub fn all_layers_for_mip_level(&self, mip_level: u32) -> ImageSubresources {
         self.def.all_layers_for_mip_level(mip_level)
@@ -392,6 +408,7 @@ impl ImageDef {
 
     #[inline]
     pub fn all_layers_for_mip_level(&self, mip_level: u32) -> ImageSubresources {
+        assert_lt!(mip_level, self.mip_levels);
         ImageSubresources {
             aspects: self.format.aspects(),
             mip_levels: [mip_level, mip_level + 1],
@@ -614,6 +631,18 @@ impl From<ImageSubresources> for vk::ImageSubresourceRange {
             level_count: sub.mip_level_count(),
             base_array_layer: sub.layers[0],
             layer_count: sub.layer_count(),
+        }
+    }
+}
+
+impl From<ImageSubresources> for vk::ImageSubresourceLayers {
+    fn from(sub: ImageSubresources) -> Self {
+        assert_eq!(sub.mip_level_count(), 1);
+        Self {
+            aspect_mask: sub.aspects,
+            mip_level: sub.mip_levels[0],
+            base_array_layer: sub.layers[0],
+            layer_count: sub.layers[1],
         }
     }
 }

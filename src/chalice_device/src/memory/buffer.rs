@@ -42,6 +42,7 @@ pub enum BufferBinding {
     Index,
 }
 
+// TODO: Need BufferRangeMut (ugh)
 // A slice of a VkBuffer.
 #[derive(Clone, Copy, Debug)]
 pub struct BufferRange<'buf> {
@@ -150,7 +151,7 @@ fn create_buffer(
 }
 
 impl DeviceBuffer {
-    pub(super) fn new(
+    pub fn new(
         device: Arc<Device>,
         size: vk::DeviceSize,
         usage: BufferUsage,
@@ -225,6 +226,20 @@ impl DeviceBuffer {
 impl Named for DeviceBuffer {
     fn name(&self) -> Option<&str> {
         Some(&self.name.as_ref()?)
+    }
+}
+
+impl MemoryRegion for DeviceBuffer {
+    fn memory(&self) -> &Arc<DeviceMemory> {
+        &self.memory
+    }
+
+    fn offset(&self) -> vk::DeviceSize {
+        0
+    }
+
+    fn size(&self) -> vk::DeviceSize {
+        self.memory.size
     }
 }
 

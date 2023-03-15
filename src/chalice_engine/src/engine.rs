@@ -1,16 +1,29 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use device::DeviceResult;
 use log::{debug, info};
 
 use crate::*;
 
-#[allow(dead_code)]
+#[derive(Debug)]
+pub struct Settings {
+    staging_buffer_size: vk::DeviceSize,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            staging_buffer_size: 8 * 1024 * 1024,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Engine {
+    settings: Settings,
     queues: Vec<Vec<Arc<device::Queue>>>,
     graphics_queue: Arc<device::Queue>,
     swapchain: device::Swapchain,
@@ -24,7 +37,11 @@ pub struct Engine {
     pipelines: device::PipelineCache,
     set_layouts: device::DescriptorSetLayoutCache,
     descriptor_heap: Arc<device::DescriptorHeap>,
-    // TODO: Staging buffer and (optional) upload queue
+    samplers: device::SamplerCache,
+    // TODO: Not a huge fan of mutexing this. A side effect of shoving
+    // everything on one big struct.
+    staging: Mutex<StagingBuffer>,
+    // TODO: (optional) staging upload queue
     // TODO?: image/(vertex) buffer memory management with garbage
     // collection. Possibly out of scope but solves a basic problem
     // while also ensuring images aren't deleted before frame is over.
@@ -34,11 +51,12 @@ impl Engine {
     pub fn from_window(
         app_info: device::AppInfo,
         window: &impl device::Window,
+        settings: Settings,
     ) -> DeviceResult<Self> {
         let (swapchain, queues) = device::init_device_and_swapchain(app_info, window)?;
         let device = swapchain.device();
+        let graphics_queue = Arc::clone(&queues[0][0]);
         Ok(Self {
-            graphics_queue: Arc::clone(&queues[0][0]),
             queues,
             buffer_heap: device::BufferHeap::new(Arc::clone(device)),
             image_heap: device::ImageHeap::new(Arc::clone(device)),
@@ -50,8 +68,20 @@ impl Engine {
             pipelines: device::PipelineCache::new(device),
             set_layouts: device::DescriptorSetLayoutCache::new(Arc::clone(device)),
             descriptor_heap: Arc::new(device::DescriptorHeap::new(device)),
+            samplers: device::SamplerCache::new(Arc::clone(device)),
+            staging: Mutex::new(StagingBuffer::new(
+                Arc::clone(&graphics_queue),
+                Arc::clone(&graphics_queue),
+                settings.staging_buffer_size,
+            )),
+            graphics_queue,
             swapchain,
+            settings,
         })
+    }
+
+    pub fn settings(&self) -> &Settings {
+        &self.settings
     }
 
     pub fn queues(&self) -> &[Vec<Arc<device::Queue>>] {
@@ -117,6 +147,7 @@ impl Engine {
     pub fn new_frame(&mut self) {
         self.pipelines.commit();
         self.set_layouts.commit();
+        self.samplers.commit();
     }
 
     pub unsafe fn reclaim_transient_resources(&mut self) {
@@ -208,5 +239,21 @@ impl Engine {
             name.map(Into::into),
             resources,
         )
+    }
+
+    pub fn samplers(&self) -> &device::SamplerCache {
+        &self.samplers
+    }
+
+    pub fn samplers_mut(&mut self) -> &device::SamplerCache {
+        &mut self.samplers
+    }
+
+    pub fn staging(&self) -> &Mutex<StagingBuffer> {
+        &self.staging
+    }
+
+    pub fn staging_mut(&mut self) -> &mut StagingBuffer {
+        self.staging.get_mut().unwrap()
     }
 }

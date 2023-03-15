@@ -113,7 +113,7 @@ fn draw_triangle(engine: &Engine, cmds: &mut device::CmdBuffer) {
 impl tinker::App for TriangleApp {
     fn app_info() -> device::AppInfo {
         device::AppInfo {
-            name: "deferred demo".into(),
+            name: "triangle demo".into(),
             version: [0, 1, 0],
             debug: true,
             ..Default::default()

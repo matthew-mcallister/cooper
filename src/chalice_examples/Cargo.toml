@@ -10,6 +10,7 @@ base = { path = "../chalice_base", package = "chalice-base" }
 device = { path = "../chalice_device", package = "chalice-device" }
 engine = { path = "../chalice_engine", package = "chalice-engine" }
 env_logger = "0.10.0"
+image = "0.24.5"
 math = { path = "../tinker_math", package = "tinker-math" }
 smallvec = "1.10.0"
 tinker = { path = "../tinker" }

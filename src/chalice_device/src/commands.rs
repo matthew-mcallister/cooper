@@ -670,15 +670,22 @@ impl<'pool> CmdBuffer<'pool> {
     // TODO: Could take an iterator over BufferRange pairs
     pub unsafe fn copy_buffer(
         &mut self,
-        src: &Arc<DeviceBuffer>,
-        dst: &Arc<DeviceBuffer>,
+        src: &DeviceBuffer,
+        dst: &DeviceBuffer,
         regions: &[vk::BufferCopy],
     ) {
+        trace!(
+            "CmdBuffer::copy_buffer(src: {:?}, dst: {:?}, regions: {:?})",
+            src,
+            dst,
+            regions,
+        );
         self.ensure_recording();
         // This check is good for catching unnecessary copies on UMA.
-        // However, there are use cases that may need to be allowed.
-        assert!(
-            !Arc::ptr_eq(src, dst),
+        // TODO: Downgrade to a warning?
+        assert_ne!(
+            src.inner(),
+            dst.inner(),
             "copy to same buffer (likely unintended)"
         );
         for region in regions.iter() {
@@ -697,7 +704,7 @@ impl<'pool> CmdBuffer<'pool> {
     pub unsafe fn copy_buffer_to_image(
         &mut self,
         src: &DeviceBuffer,
-        dst: &Arc<Image>,
+        dst: &Image,
         layout: vk::ImageLayout,
         regions: &[vk::BufferImageCopy],
     ) {
@@ -708,7 +715,7 @@ impl<'pool> CmdBuffer<'pool> {
                 "layout: {:?}, regions: {:?})",
             ),
             fmt_named(&*src),
-            fmt_named(&**dst),
+            fmt_named(&*dst),
             layout,
             regions
         );

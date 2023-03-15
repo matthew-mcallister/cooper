@@ -87,9 +87,8 @@ impl Layout {
 
         validate_layout(&desc);
 
-        // TODO: I think this could be made simpler with a staticvec
-        let mut samplers: SmallVec<_, 4> = SmallVec::new();
-        let bindings: SmallVec<_, 4> = desc
+        let mut samplers: Vec<_> = Vec::new();
+        let bindings: Vec<_> = desc
             .bindings
             .iter()
             .map(|binding| {
@@ -100,7 +99,7 @@ impl Layout {
                         "incorrect sampler count"
                     );
                 }
-                let vk_samplers: SmallVec<_, 2> = binding
+                let vk_samplers: Vec<_> = binding
                     .samplers
                     .iter()
                     .flat_map(|samplers| samplers.iter())
